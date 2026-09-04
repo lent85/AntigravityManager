@@ -3,10 +3,8 @@ import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
-  CardTitle,
 } from '@/components/ui/card';
 import {
   DropdownMenu,
@@ -33,6 +31,9 @@ import {
   Repeat2,
   Terminal,
   TriangleAlert,
+  CalendarDays,
+  Clock3,
+  FlaskConical,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -64,6 +65,12 @@ import { WeeklyQuotaDisplay } from '@/modules/cloud-account/components/WeeklyQuo
 import { DetailedQuotaDisplay } from '@/modules/cloud-account/components/DetailedQuotaDisplay';
 import { QUOTA_TEXT_COLOR_CLASS_BY_STATUS, QUOTA_BAR_COLOR_CLASS_BY_STATUS } from './quota-colors';
 import { isWeeklyQuotaBucket } from '@/modules/cloud-account/utils/quota-groups';
+import {
+  maskEmail,
+  maskInitial,
+  maskName,
+} from '@/modules/cloud-account/utils/identity-masking';
+import { QuotaIndicatorTooltip } from '@/modules/cloud-account/components/QuotaIndicatorTooltip';
 
 type ModelQuotaEntry = [string, CloudQuotaModelInfo];
 type LiveModelAvailability = Awaited<
@@ -210,6 +217,10 @@ export function CloudAccountCard({
 }: CloudAccountCardProps) {
   const { t } = useTranslation();
   const { config, saveConfig } = useAppConfig();
+  const isMasked = Boolean(config?.mask_account_info);
+  const displayName = maskName(account.name, isMasked, t('cloud.card.unknown'));
+  const displayEmail = maskEmail(account.email, isMasked);
+  const avatarInitial = maskInitial(account.name, account.email, isMasked);
   const {
     enabled: providerGroupingsEnabled,
     getAccountStats,
@@ -248,7 +259,7 @@ export function CloudAccountCard({
     return `${percentage}%`;
   };
 
-  const formatResetTimeLabelText = (resetTime?: string) => {
+  const _formatResetTimeLabelText = (resetTime?: string) => {
     return formatResetTimeLabel(resetTime, {
       prefix: t('cloud.card.resetPrefix'),
       unknown: t('cloud.card.resetUnknown'),
@@ -283,6 +294,17 @@ export function CloudAccountCard({
 
   const renderQuotaModelGroup = (title: string, models: ModelQuotaEntry[]) => {
     if (models.length === 0) return null;
+
+    const gridStyle =
+      models.length === 1
+        ? undefined
+        : { gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' };
+
+    const gridColsClass =
+      models.length === 1
+        ? 'grid-cols-1'
+        : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';
+
     return (
       <div key={title} className="space-y-1">
         <div className="flex items-center gap-1.5 px-2 py-1">
@@ -291,7 +313,8 @@ export function CloudAccountCard({
           </span>
           <div className="bg-border/50 h-px flex-1" />
         </div>
-        {models.map(([modelName, info]) => {
+        <div className={cn('grid gap-x-4 gap-y-1.5', gridColsClass)} style={gridStyle}>
+          {models.map(([modelName, info]) => {
           const availability = findModelAvailability(modelAvailability, account.id, modelName);
           const now = Date.now();
           const isLiveLimitActive = !!availability && availability.unavailableUntil > now;
@@ -339,11 +362,13 @@ export function CloudAccountCard({
                 .filter(Boolean)
                 .join(' ')
             : modelName;
+          const rawTimeLabel = formatResetTimeLabel(info.resetTime, { prefix: '', unknown: '' }).trim();
+
           return (
             <div
               key={modelName}
               className={cn(
-                'group/item hover:bg-muted/60 hover:border-border/60 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-lg border border-transparent px-2 py-1.5 text-sm transition-all',
+                'group/item hover:bg-muted/60 hover:border-border/60 flex flex-col justify-center gap-1 rounded-lg border border-transparent p-2 transition-all',
                 availability &&
                   'border-amber-400/60 bg-amber-50/70 ring-1 ring-amber-400/20 dark:border-amber-500/60 dark:bg-amber-950/25',
                 isLiveLimitActive &&
@@ -351,14 +376,9 @@ export function CloudAccountCard({
               )}
               title={availabilityTitle}
             >
-              <div className="min-w-0">
-                <span
-                  className={cn(
-                    'text-muted-foreground group-hover/item:text-foreground flex min-w-0 items-center gap-1 truncate font-semibold',
-                    availability && 'text-amber-700 dark:text-amber-300',
-                    isLiveLimitActive && 'text-rose-700 dark:text-rose-300',
-                  )}
-                >
+              {/* Row 1: Model Name (left) & Percentage (right) */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-1">
                   {availability && (
                     <TriangleAlert
                       className={cn(
@@ -368,27 +388,18 @@ export function CloudAccountCard({
                       aria-hidden="true"
                     />
                   )}
-                  <span className="truncate">{formatModelDisplayName(modelName)}</span>
-                </span>
-                {availability && liveLimitTimingLabel && (
                   <span
                     className={cn(
-                      'mt-0.5 block truncate text-[9px] leading-tight text-amber-700/80 dark:text-amber-300/80',
-                      isLiveLimitActive && 'text-rose-700/80 dark:text-rose-300/80',
+                      'text-muted-foreground group-hover/item:text-foreground truncate text-xs font-semibold',
+                      availability && 'text-amber-700 dark:text-amber-300',
+                      isLiveLimitActive && 'text-rose-700 dark:text-rose-300',
                     )}
                   >
-                    {reasonLabel} · {liveLimitTimingLabel}
+                    {formatModelDisplayName(modelName)}
                   </span>
-                )}
-              </div>
-              <div className="flex flex-col items-end gap-0.5">
-                <span
-                  className="text-muted-foreground text-[9px] leading-none opacity-80"
-                  title={formatResetTimeTitleText(info.resetTime)}
-                >
-                  {formatResetTimeLabelText(info.resetTime)}
-                </span>
-                <div className="flex items-baseline gap-1">
+                </div>
+
+                <div className="flex shrink-0 items-center gap-1.5">
                   {availability && (
                     <span
                       className={cn(
@@ -401,7 +412,7 @@ export function CloudAccountCard({
                   )}
                   <span
                     className={cn(
-                      'font-mono text-xs leading-none font-bold',
+                      'font-mono text-xs font-bold leading-none',
                       availability
                         ? isLiveLimitActive
                           ? 'text-rose-700 dark:text-rose-300'
@@ -411,17 +422,44 @@ export function CloudAccountCard({
                   >
                     {info.percentage}%
                   </span>
-                  <div className="bg-muted/70 border-border/20 h-1.5 w-16 overflow-hidden rounded-full border shadow-inner">
-                    <div
-                      className={`h-full rounded-full transition-all duration-300 ${getQuotaBarColorClass(info.percentage)}`}
-                      style={{ width: `${clampQuotaPercentage(info.percentage)}%` }}
-                    />
-                  </div>
                 </div>
               </div>
+
+              {/* Row 2: Slim Progress Indicator (flex-1) & Countdown Time */}
+              <div className="flex items-center gap-2">
+                <div className="bg-muted/70 border-border/20 h-1.5 flex-1 overflow-hidden rounded-full border shadow-inner">
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all duration-300',
+                      getQuotaBarColorClass(info.percentage),
+                    )}
+                    style={{ width: `${clampQuotaPercentage(info.percentage)}%` }}
+                  />
+                </div>
+                {rawTimeLabel ? (
+                  <span
+                    className="text-muted-foreground/80 font-mono text-[10px] shrink-0 leading-none"
+                    title={formatResetTimeTitleText(info.resetTime)}
+                  >
+                    {rawTimeLabel}
+                  </span>
+                ) : null}
+              </div>
+
+              {availability && liveLimitTimingLabel && (
+                <span
+                  className={cn(
+                    'block truncate text-[9px] leading-tight text-amber-700/80 dark:text-amber-300/80',
+                    isLiveLimitActive && 'text-rose-700/80 dark:text-rose-300/80',
+                  )}
+                >
+                  {reasonLabel} · {liveLimitTimingLabel}
+                </span>
+              )}
             </div>
           );
         })}
+        </div>
       </div>
     );
   };
@@ -466,8 +504,6 @@ export function CloudAccountCard({
               getQuotaTextColorClass={getQuotaTextColorClass}
               getQuotaBarColorClass={getQuotaBarColorClass}
               formatQuotaLabel={formatQuotaLabel}
-              formatResetTimeLabel={formatResetTimeLabelText}
-              formatResetTimeTitle={formatResetTimeTitleText}
               leftLabel={t('cloud.card.left')}
             />
           ))}
@@ -489,167 +525,129 @@ export function CloudAccountCard({
 
   return (
     <Card
-      className={`group bg-card hover:border-primary/30 border-border/80 relative flex h-full flex-col overflow-hidden rounded-xl border transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-4px_rgba(0,0,0,0.06),0_4px_12px_-2px_rgba(0,0,0,0.03)] ${isSelected ? 'ring-primary border-primary/50 ring-2' : ''}`}
+      className={`group bg-card hover:border-primary/30 border-border/80 @container relative flex h-full flex-col overflow-hidden rounded-xl border transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-4px_rgba(0,0,0,0.06),0_4px_12px_-2px_rgba(0,0,0,0.03)] ${isSelected ? 'ring-primary border-primary/50 ring-2' : ''}`}
     >
-      <CardHeader className="relative flex flex-row items-center gap-4 space-y-0 pb-2">
+      <CardHeader className="relative flex flex-row items-start gap-2.5 space-y-0 p-4 pb-3">
         {onToggleSelection && (
           <div
-            className={`absolute top-2 left-2 z-10 ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} bg-background/90 rounded-full p-2 transition-opacity`}
+            className={cn(
+              'flex items-center justify-center shrink-0 self-center transition-opacity duration-150',
+              isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+            )}
           >
             <Checkbox
               checked={isSelected}
               onCheckedChange={(checked) => onToggleSelection(account.id, checked as boolean)}
-              className="h-5 w-5 border-2"
+              className="h-4 w-4 border-2 cursor-pointer"
             />
           </div>
         )}
 
-        {account.avatar_url ? (
+        {account.avatar_url && !isMasked ? (
           <img
             src={account.avatar_url}
-            alt={account.name || ''}
-            className="bg-muted h-10 w-10 rounded-full border"
+            alt={displayName}
+            className="bg-muted h-9 w-9 shrink-0 rounded-full border mt-0.5"
           />
         ) : (
-          <div className="bg-primary/10 text-primary flex h-10 w-10 items-center justify-center rounded-full border font-bold">
-            {account.name?.[0]?.toUpperCase() || 'A'}
+          <div
+            className={cn(
+              'bg-primary/10 text-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-full border font-bold mt-0.5',
+              isMasked && 'bg-muted text-muted-foreground',
+            )}
+          >
+            {avatarInitial}
           </div>
         )}
-        <div className="flex-1 overflow-hidden">
-          <CardTitle className="truncate text-base font-semibold">
-            {account.name || t('cloud.card.unknown')}
-          </CardTitle>
-          <CardDescription className="text-muted-foreground truncate text-xs">
-            {account.email}
-          </CardDescription>
-
-          {(account.is_active_classic || account.is_active_ide || account.is_active_agy) && (
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {account.is_active_classic && (
-                <span className="flex items-center gap-1 rounded border border-green-500/20 bg-green-500/10 px-1.5 py-0.5 text-[9px] font-bold text-green-600 dark:text-green-400">
-                  <span className="relative flex h-1 w-1">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex h-1 w-1 rounded-full bg-green-500"></span>
-                  </span>
-                  {t('cloud.card.appLabel', 'Antigravity App')}
-                </span>
-              )}
-              {account.is_active_ide && (
-                <span className="flex items-center gap-1 rounded border border-indigo-500/20 bg-indigo-500/10 px-1.5 py-0.5 text-[9px] font-bold text-indigo-600 dark:text-indigo-400">
-                  <span className="relative flex h-1 w-1">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75"></span>
-                    <span className="relative inline-flex h-1 w-1 rounded-full bg-indigo-500"></span>
-                  </span>
-                  {t('cloud.card.ideLabel', 'Antigravity IDE')}
-                </span>
-              )}
-              {account.is_active_agy && (
-                <span className="flex items-center gap-1 rounded border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-600 dark:text-emerald-400">
-                  <span className="relative flex h-1 w-1">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex h-1 w-1 rounded-full bg-emerald-500"></span>
-                  </span>
-                  {t('cloud.card.agyLabel', 'Antigravity CLI')}
-                </span>
-              )}
-            </div>
-          )}
-
-          {shouldShowAiCredits && aiCredits && (
-            <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-blue-500">
-              <span>
-                {t('cloud.card.aiCreditsValue', {
-                  amount: formatAiCreditsAmount(aiCredits.credits),
-                })}
-              </span>
-              {aiCredits.expiryDate && (
-                <span className="text-muted-foreground opacity-70">
-                  ·{' '}
-                  {t('cloud.card.creditsExpiry', {
-                    date: formatCreditsExpiry(aiCredits.expiryDate),
-                  })}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-
-        {allModelEntries.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="hover:bg-muted h-8 w-8 cursor-pointer rounded-full"
-              >
-                {(() => {
-                  const hiddenCount = allModelEntries.filter(
-                    ([modelName]) => config?.model_visibility?.[modelName] === false,
-                  ).length;
-                  return hiddenCount > 0 ? (
-                    <EyeOff className="text-muted-foreground h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  );
-                })()}
-                <span className="sr-only">{t('cloud.card.modelVisibility')}</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-64" align="end">
-              <DropdownMenuLabel>{t('cloud.card.modelVisibility')}</DropdownMenuLabel>
-              <div className="max-h-64 overflow-auto px-2 py-1">
-                {allModelEntries.map(([modelName]) => {
-                  const isVisible = config?.model_visibility?.[modelName] !== false;
-                  return (
-                    <DropdownMenuItem
-                      key={modelName}
-                      onSelect={(e) => e.preventDefault()}
-                      className="flex cursor-pointer items-center gap-2"
-                    >
-                      <Checkbox
-                        checked={isVisible}
-                        onCheckedChange={(checked) => {
-                          if (config) {
-                            const newVisibility = { ...config.model_visibility };
-                            newVisibility[modelName] = checked as boolean;
-                            saveConfig({ ...config, model_visibility: newVisibility });
-                          }
-                        }}
-                      />
-                      <span className="truncate text-xs" title={modelName}>
-                        {formatModelDisplayName(modelName)}
-                      </span>
-                    </DropdownMenuItem>
-                  );
-                })}
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </CardHeader>
-
-      <CardContent className="flex-1 pb-4">
-        <div className="mb-3.5 flex items-center justify-between">
-          <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center" style={{ gap: '5px' }}>
+            <span className="truncate text-sm font-semibold text-foreground">
+              {displayName}
+            </span>
+            <span className="text-muted-foreground truncate text-xs">
+              {displayEmail}
+            </span>
             <Badge
               variant={
                 account.status === 'rate_limited' || account.status === 'expired'
                   ? 'destructive'
                   : 'outline'
               }
-              className="px-2 py-0.5 text-[10px] font-bold tracking-wide"
+              className="px-1.5 py-0 text-[10px] font-bold tracking-wide h-5"
             >
               {account.provider.toUpperCase()}
             </Badge>
             <AccountTierBadge account={account} unknownLabel={t('cloud.tierFilter.unknown')} />
+            {account.is_emulated && (
+              <span
+                className="flex items-center gap-1 rounded border border-purple-500/30 bg-purple-500/15 px-1.5 py-0 text-[10px] font-bold text-purple-400 h-5"
+                title={
+                  account.emulation_strategy
+                    ? `Strategy: ${account.emulation_strategy.type}`
+                    : 'Emulated Account'
+                }
+              >
+                <FlaskConical className="h-3 w-3" />
+                {t('cloud.emulation.badgeShort', 'Emulated')}
+              </span>
+            )}
 
             {validationBlockedStatusLabel && (
-              <span className="text-destructive bg-destructive/10 border-destructive/20 rounded border px-1.5 py-0.5 text-[11px] font-semibold">
+              <span className="text-destructive bg-destructive/10 border-destructive/20 rounded border px-1.5 py-0 text-[10px] font-semibold h-5 flex items-center">
                 {validationBlockedStatusLabel}
               </span>
             )}
-          </div>
 
+            {account.is_active_classic && (
+              <span className="flex items-center gap-1 rounded border border-green-500/20 bg-green-500/10 px-1.5 py-0 text-[9px] font-bold text-green-600 dark:text-green-400">
+                <span className="relative flex h-1 w-1">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex h-1 w-1 rounded-full bg-green-500"></span>
+                </span>
+                {t('cloud.card.appLabel', 'Antigravity App')}
+              </span>
+            )}
+            {account.is_active_ide && (
+              <span className="flex items-center gap-1 rounded border border-indigo-500/20 bg-indigo-500/10 px-1.5 py-0 text-[9px] font-bold text-indigo-600 dark:text-indigo-400">
+                <span className="relative flex h-1 w-1">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75"></span>
+                  <span className="relative inline-flex h-1 w-1 rounded-full bg-indigo-500"></span>
+                </span>
+                {t('cloud.card.ideLabel', 'Antigravity IDE')}
+              </span>
+            )}
+            {account.is_active_agy && (
+              <span className="flex items-center gap-1 rounded border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0 text-[9px] font-bold text-emerald-600 dark:text-emerald-400">
+                <span className="relative flex h-1 w-1">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex h-1 w-1 rounded-full bg-emerald-500"></span>
+                </span>
+                {t('cloud.card.agyLabel', 'Antigravity CLI')}
+              </span>
+            )}
+
+            {shouldShowAiCredits && aiCredits && (
+              <span className="flex items-center gap-1 text-[10px] font-medium text-blue-500">
+                <span>
+                  {t('cloud.card.aiCreditsValue', {
+                    amount: formatAiCreditsAmount(aiCredits.credits),
+                  })}
+                </span>
+                {aiCredits.expiryDate && (
+                  <span className="text-muted-foreground opacity-70">
+                    ·{' '}
+                    {t('cloud.card.creditsExpiry', {
+                      date: formatCreditsExpiry(aiCredits.expiryDate),
+                    })}
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Right Actions: Active Status Button + Visibility Dropdown */}
+        <div className="flex items-center gap-1.5 shrink-0">
           <div
             onMouseEnter={() => setMenuOpen(true)}
             onMouseLeave={() => setMenuOpen(false)}
@@ -699,7 +697,7 @@ export function CloudAccountCard({
                   </span>
                   {account.is_active_classic && (
                     <Badge className="h-4 border-none bg-green-500/20 px-1 text-[9px] font-semibold text-green-600 hover:bg-green-500/20">
-                      Active
+                      {t('account.active', 'Active')}
                     </Badge>
                   )}
                 </DropdownMenuItem>
@@ -709,12 +707,12 @@ export function CloudAccountCard({
                   className="flex cursor-pointer items-center justify-between py-2 text-xs"
                 >
                   <span className="flex items-center gap-2">
-                    <Repeat2 className="text-primary h-3.5 w-3.5" />
-                    <span>{t('account.switchToIde', 'Switch to Antigravity IDE')}</span>
+                    <Power className="text-primary h-3.5 w-3.5" />
+                    <span>{t('account.switchToAntigravityIde', 'Switch to Antigravity IDE')}</span>
                   </span>
                   {account.is_active_ide && (
-                    <Badge className="h-4 border-none bg-indigo-500/20 px-1 text-[9px] font-semibold text-indigo-600 hover:bg-indigo-500/20">
-                      Active
+                    <Badge className="h-4 border-none bg-green-500/20 px-1 text-[9px] font-semibold text-green-600 hover:bg-green-500/20">
+                      {t('account.active', 'Active')}
                     </Badge>
                   )}
                 </DropdownMenuItem>
@@ -724,20 +722,75 @@ export function CloudAccountCard({
                   className="flex cursor-pointer items-center justify-between py-2 text-xs"
                 >
                   <span className="flex items-center gap-2">
-                    <Terminal className="text-primary h-3.5 w-3.5" />
+                    <Power className="text-primary h-3.5 w-3.5" />
                     <span>{t('account.switchToAgy', 'Switch to Antigravity CLI')}</span>
                   </span>
                   {account.is_active_agy && (
-                    <Badge className="h-4 border-none bg-emerald-500/20 px-1 text-[9px] font-semibold text-emerald-600 hover:bg-emerald-500/20">
-                      Active
+                    <Badge className="h-4 border-none bg-green-500/20 px-1 text-[9px] font-semibold text-green-600 hover:bg-green-500/20">
+                      {t('account.active', 'Active')}
                     </Badge>
                   )}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-        </div>
 
+          {allModelEntries.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="hover:bg-muted h-7 w-7 cursor-pointer rounded-full"
+                >
+                  {(() => {
+                    const hiddenCount = allModelEntries.filter(
+                      ([modelName]) => config?.model_visibility?.[modelName] === false,
+                    ).length;
+                    return hiddenCount > 0 ? (
+                      <EyeOff className="text-muted-foreground h-3.5 w-3.5" />
+                    ) : (
+                      <Eye className="h-3.5 w-3.5" />
+                    );
+                  })()}
+                  <span className="sr-only">{t('cloud.card.modelVisibility')}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-64" align="end">
+                <DropdownMenuLabel>{t('cloud.card.modelVisibility')}</DropdownMenuLabel>
+                <div className="max-h-64 overflow-auto px-2 py-1">
+                  {allModelEntries.map(([modelName]) => {
+                    const isVisible = config?.model_visibility?.[modelName] !== false;
+                    return (
+                      <DropdownMenuItem
+                        key={modelName}
+                        onSelect={(e) => e.preventDefault()}
+                        className="flex cursor-pointer items-center gap-2"
+                      >
+                        <Checkbox
+                          checked={isVisible}
+                          onCheckedChange={(checked) => {
+                            if (config) {
+                              const newVisibility = { ...config.model_visibility };
+                              newVisibility[modelName] = checked as boolean;
+                              saveConfig({ ...config, model_visibility: newVisibility });
+                            }
+                          }}
+                        />
+                        <span className="truncate text-xs" title={modelName}>
+                          {formatModelDisplayName(modelName)}
+                        </span>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+      </CardHeader>
+
+      <CardContent className="flex-1 px-4 pt-2 pb-4">
         <div className="space-y-2">
           {quotaWindow === 'weekly' ? (
             <WeeklyQuotaDisplay
@@ -758,7 +811,9 @@ export function CloudAccountCard({
           ) : hasDetailedQuota ? null : (
             emptyQuotaState
           )}
-          {quotaWindow === '5h' && <DetailedQuotaDisplay groups={detailedGroups} />}
+          {(quotaWindow === '5h' || quotaWindow === 'dual') && (
+            <DetailedQuotaDisplay groups={detailedGroups} quotaWindow={quotaWindow} />
+          )}
         </div>
       </CardContent>
 
@@ -781,6 +836,75 @@ export function CloudAccountCard({
           {/* Action Icons group with Tooltips */}
           <div className="flex shrink-0 items-center gap-1">
             <TooltipProvider>
+              {/* Switch Target Dropdown */}
+              <DropdownMenu>
+                <Tooltip delayDuration={300}>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="hover:bg-accent border-border/50 h-7 w-7 cursor-pointer rounded-md text-primary"
+                        disabled={isSwitching}
+                      >
+                        <Power className="h-3.5 w-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs">{t('cloud.card.switchTarget', 'Switch Environment')}</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuLabel className="text-muted-foreground px-2 py-1.5 text-[10px] uppercase tracking-wider">
+                    {t('cloud.card.switchTarget', 'Switch Environment')}
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={() => onSwitch(account.id)}
+                    disabled={isSwitching || account.is_active_classic}
+                    className="flex cursor-pointer items-center justify-between py-2 text-xs"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Power className="text-green-500 h-3.5 w-3.5" />
+                      <span>{t('account.switchToAntigravity', 'Switch to Antigravity')}</span>
+                    </span>
+                    {account.is_active_classic && (
+                      <Badge className="h-4 border-none bg-green-500/20 px-1 text-[9px] font-semibold text-green-600">
+                        Active
+                      </Badge>
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => onSwitch(account.id, 'ide')}
+                    disabled={isSwitching || account.is_active_ide}
+                    className="flex cursor-pointer items-center justify-between py-2 text-xs"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Repeat2 className="text-indigo-500 h-3.5 w-3.5" />
+                      <span>{t('account.switchToIde', 'Switch to Antigravity IDE')}</span>
+                    </span>
+                    {account.is_active_ide && (
+                      <Badge className="h-4 border-none bg-indigo-500/20 px-1 text-[9px] font-semibold text-indigo-600">
+                        Active
+                      </Badge>
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => onSwitch(account.id, 'agy')}
+                    disabled={isSwitching || account.is_active_agy}
+                    className="flex cursor-pointer items-center justify-between py-2 text-xs"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Terminal className="text-emerald-500 h-3.5 w-3.5" />
+                      <span>{t('account.switchToAgy', 'Switch to Antigravity CLI')}</span>
+                    </span>
+                    {account.is_active_agy && (
+                      <Badge className="h-4 border-none bg-emerald-500/20 px-1 text-[9px] font-semibold text-emerald-600">
+                        Active
+                      </Badge>
+                    )}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
               {/* Refresh Button */}
               <Tooltip delayDuration={300}>
                 <TooltipTrigger asChild>
@@ -902,13 +1026,17 @@ export function CompactCloudAccountCard({
   const { t } = useTranslation();
   const { config } = useAppConfig();
   const [menuOpen, setMenuOpen] = useState(false);
+  const isMasked = Boolean(config?.mask_account_info);
+  const displayName = maskName(account.name, isMasked, t('cloud.card.unknown'));
+  const displayEmail = maskEmail(account.email, isMasked);
+  const avatarInitial = maskInitial(account.name, account.email, isMasked);
   const isActiveAnywhere = !!(
     account.is_active_classic ||
     account.is_active_ide ||
     account.is_active_agy
   );
 
-  const getQuotaBarColorClass = (percentage: number) => {
+  const _getQuotaBarColorClass = (percentage: number) => {
     const quotaStatus = getQuotaStatus(percentage);
     return QUOTA_BAR_COLOR_CLASS_BY_STATUS[quotaStatus];
   };
@@ -932,25 +1060,50 @@ export function CompactCloudAccountCard({
     account.status_reason,
     t,
   );
+  const gemini5hModels = compactModels.filter(([name]) => !name.toLowerCase().includes('claude'));
+  const claude5hModels = compactModels.filter(([name]) => name.toLowerCase().includes('claude'));
+
+  const geminiWeeklyItems = weeklyQuotaItems.filter(
+    (item) => !item.groupName.toLowerCase().includes('claude'),
+  );
+  const claudeWeeklyItems = weeklyQuotaItems.filter((item) =>
+    item.groupName.toLowerCase().includes('claude'),
+  );
+
+  const shouldBreakClaude5h =
+    claude5hModels.length > 0 &&
+    (gemini5hModels.length > 2 || gemini5hModels.length + claude5hModels.length > 4);
+
+  const shouldBreakClaudeWeekly =
+    claudeWeeklyItems.length > 0 &&
+    (geminiWeeklyItems.length > 2 || geminiWeeklyItems.length + claudeWeeklyItems.length > 4);
 
   return (
     <div className="group bg-card hover:border-primary/40 flex items-center gap-3 rounded-lg border px-3 py-2 transition-all duration-200">
-      {account.avatar_url ? (
+      {account.avatar_url && !isMasked ? (
         <img
           src={account.avatar_url}
-          alt={account.name || ''}
-          className="bg-muted h-7 w-7 rounded-full border"
+          alt={displayName}
+          className="bg-muted h-7 w-7 shrink-0 rounded-full border"
         />
       ) : (
-        <div className="bg-primary/10 text-primary flex h-7 w-7 items-center justify-center rounded-full border text-xs font-semibold">
-          {account.name?.[0]?.toUpperCase() || 'A'}
+        <div
+          className={cn(
+            'bg-primary/10 text-primary flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold',
+            isMasked && 'bg-muted text-muted-foreground',
+          )}
+        >
+          {avatarInitial}
         </div>
       )}
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-semibold">
-            {account.name || t('cloud.card.unknown')}
+        <div className="flex flex-wrap items-center text-xs" style={{ gap: '5px' }}>
+          <span className="truncate text-sm font-semibold text-foreground">
+            {displayName}
+          </span>
+          <span className="text-muted-foreground truncate text-xs">
+            {displayEmail}
           </span>
           <Badge
             variant={
@@ -958,7 +1111,7 @@ export function CompactCloudAccountCard({
                 ? 'destructive'
                 : 'outline'
             }
-            className="shrink-0 text-[10px]"
+            className="shrink-0 text-[10px] px-1.5 py-0"
           >
             {account.provider.toUpperCase()}
           </Badge>
@@ -967,10 +1120,19 @@ export function CompactCloudAccountCard({
             unknownLabel={t('cloud.tierFilter.unknown')}
             className="h-4 max-w-24 px-1 text-[9px]"
           />
-        </div>
-
-        <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
-          <span className="truncate">{account.email}</span>
+          {account.is_emulated && (
+            <span
+              className="rounded border border-purple-500/30 bg-purple-500/15 px-1 text-[9px] font-bold text-purple-400 flex items-center gap-0.5"
+              title={
+                account.emulation_strategy
+                  ? `Strategy: ${account.emulation_strategy.type}`
+                  : 'Emulated Account'
+              }
+            >
+              <FlaskConical className="h-2.5 w-2.5" />
+              {t('cloud.emulation.badgeShort', 'Emulated')}
+            </span>
+          )}
           {account.is_active_classic && (
             <span className="rounded border border-green-500/20 bg-green-500/10 px-1 text-[9px] font-bold text-green-600 dark:text-green-400">
               App
@@ -987,18 +1149,18 @@ export function CompactCloudAccountCard({
             </span>
           )}
           {validationBlockedStatusLabel && (
-            <span className="text-destructive shrink-0 font-medium">
+            <span className="text-destructive shrink-0 font-medium text-[10px]">
               {validationBlockedStatusLabel}
             </span>
           )}
 
           {shouldShowAiCredits && aiCredits && (
-            <span className="shrink-0 text-blue-500">
+            <span className="shrink-0 text-blue-500 text-[11px]">
               {t('cloud.card.aiCreditsValue', {
                 amount: formatAiCreditsAmount(aiCredits.credits),
               })}
               {aiCredits.expiryDate && (
-                <span className="text-muted-foreground">
+                <span className="text-muted-foreground text-[10px]">
                   {' '}
                   ·{' '}
                   {t('cloud.card.creditsExpiry', {
@@ -1010,33 +1172,194 @@ export function CompactCloudAccountCard({
           )}
         </div>
 
-        {quotaWindow === 'weekly' ? (
+        {quotaWindow === 'dual' ? (
+          <div className="mt-1 flex flex-wrap items-center gap-3">
+            <div
+              className={cn(
+                'border-border/40 bg-muted/40 flex rounded-md border px-2 py-0.5',
+                shouldBreakClaude5h ? 'items-start py-1 gap-1.5' : 'items-center gap-1.5',
+              )}
+            >
+              <span
+                className={cn(
+                  'text-muted-foreground flex items-center gap-0.5 text-[10px] font-semibold shrink-0',
+                  shouldBreakClaude5h && 'pt-0.5',
+                )}
+              >
+                <Clock3 className="h-2.5 w-2.5" />
+                5h
+              </span>
+              <div
+                className={cn(
+                  'ml-0.5 flex',
+                  shouldBreakClaude5h ? 'flex-col gap-1' : 'flex-wrap items-center gap-2',
+                )}
+              >
+                {gemini5hModels.length > 0 && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground/60 text-[9px] font-bold uppercase shrink-0 w-2.5 text-center">
+                      G
+                    </span>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {gemini5hModels.map(([modelName, info]) => (
+                        <QuotaIndicatorTooltip
+                          key={modelName}
+                          name={modelName}
+                          percentage={info.percentage}
+                          periodType="5h"
+                          resetTime={info.resetTime}
+                          barWidth="w-7 sm:w-8"
+                          barHeight="h-1.5"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {claude5hModels.length > 0 && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground/60 text-[9px] font-bold uppercase shrink-0 w-2.5 text-center">
+                      C
+                    </span>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {claude5hModels.map(([modelName, info]) => (
+                        <QuotaIndicatorTooltip
+                          key={modelName}
+                          name={modelName}
+                          percentage={info.percentage}
+                          periodType="5h"
+                          resetTime={info.resetTime}
+                          barWidth="w-7 sm:w-8"
+                          barHeight="h-1.5"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div
+              className={cn(
+                'border-border/40 bg-muted/40 flex rounded-md border px-2 py-0.5',
+                shouldBreakClaudeWeekly ? 'items-start py-1 gap-1.5' : 'items-center gap-1.5',
+              )}
+            >
+              <span
+                className={cn(
+                  'text-muted-foreground flex items-center gap-0.5 text-[10px] font-semibold shrink-0',
+                  shouldBreakClaudeWeekly && 'pt-0.5',
+                )}
+              >
+                <CalendarDays className="h-2.5 w-2.5" />
+                Week
+              </span>
+              <div
+                className={cn(
+                  'ml-0.5 flex',
+                  shouldBreakClaudeWeekly ? 'flex-col gap-1' : 'flex-wrap items-center gap-2',
+                )}
+              >
+                {geminiWeeklyItems.length > 0 && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground/60 text-[9px] font-bold uppercase shrink-0 w-2.5 text-center">
+                      G
+                    </span>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {geminiWeeklyItems.map((item) => (
+                        <QuotaIndicatorTooltip
+                          key={item.id}
+                          name={item.groupName}
+                          label={item.bucketLabel}
+                          percentage={item.percentage}
+                          periodType="weekly"
+                          resetTime={item.resetTime}
+                          barWidth="w-7 sm:w-8"
+                          barHeight="h-1.5"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {claudeWeeklyItems.length > 0 && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground/60 text-[9px] font-bold uppercase shrink-0 w-2.5 text-center">
+                      C
+                    </span>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {claudeWeeklyItems.map((item) => (
+                        <QuotaIndicatorTooltip
+                          key={item.id}
+                          name={item.groupName}
+                          label={item.bucketLabel}
+                          percentage={item.percentage}
+                          periodType="weekly"
+                          resetTime={item.resetTime}
+                          barWidth="w-7 sm:w-8"
+                          barHeight="h-1.5"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {weeklyQuotaItems.length === 0 && (
+                  <span className="text-muted-foreground text-[10px] italic">N/A</span>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : quotaWindow === 'weekly' ? (
           <WeeklyQuotaDisplay
             items={weeklyQuotaItems}
             hasQuotaSummary={account.quota?.quota_groups !== undefined}
             variant="compact"
           />
         ) : compactModels.length > 0 ? (
-          <div className="mt-1 flex items-center gap-1">
-            {compactModels.map(([modelName, info]) => (
-              <TooltipProvider key={modelName}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="bg-muted h-1.5 w-12 overflow-hidden rounded-full">
-                      <div
-                        className={`h-full rounded-full transition-all duration-300 ${getQuotaBarColorClass(info.percentage)}`}
-                        style={{ width: `${clampQuotaPercentage(info.percentage)}%` }}
-                      />
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="text-xs">
-                      {formatModelDisplayName(modelName)}: {info.percentage}%
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            ))}
+          <div
+            className={cn(
+              'mt-1 flex',
+              shouldBreakClaude5h ? 'flex-col gap-1' : 'flex-wrap items-center gap-2',
+            )}
+          >
+            {gemini5hModels.length > 0 && (
+              <div className="flex items-center gap-1">
+                <span className="text-muted-foreground/60 text-[9px] font-bold uppercase shrink-0 w-2.5 text-center">
+                  G
+                </span>
+                <div className="flex flex-wrap items-center gap-1">
+                  {gemini5hModels.map(([modelName, info]) => (
+                    <QuotaIndicatorTooltip
+                      key={modelName}
+                      name={modelName}
+                      percentage={info.percentage}
+                      periodType="5h"
+                      resetTime={info.resetTime}
+                      barWidth="w-7 sm:w-8"
+                      barHeight="h-1.5"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            {claude5hModels.length > 0 && (
+              <div className="flex items-center gap-1">
+                <span className="text-muted-foreground/60 text-[9px] font-bold uppercase shrink-0 w-2.5 text-center">
+                  C
+                </span>
+                <div className="flex flex-wrap items-center gap-1">
+                  {claude5hModels.map(([modelName, info]) => (
+                    <QuotaIndicatorTooltip
+                      key={modelName}
+                      name={modelName}
+                      percentage={info.percentage}
+                      periodType="5h"
+                      resetTime={info.resetTime}
+                      barWidth="w-7 sm:w-8"
+                      barHeight="h-1.5"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : null}
       </div>
@@ -1136,21 +1459,71 @@ export function CompactCloudAccountCard({
               <span className="sr-only">Menu</span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>{t('cloud.card.actions')}</DropdownMenuLabel>
-            <DropdownMenuItem onClick={() => onRefresh(account.id)} disabled={isRefreshing}>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel className="text-muted-foreground px-2 py-1.5 text-[10px] uppercase tracking-wider">
+              {t('cloud.card.switchTarget', 'Switch Environment')}
+            </DropdownMenuLabel>
+            <DropdownMenuItem
+              onClick={() => onSwitch(account.id)}
+              disabled={isSwitching || account.is_active_classic}
+              className="flex cursor-pointer items-center justify-between py-2 text-xs"
+            >
+              <span className="flex items-center gap-2">
+                <Power className="text-green-500 h-3.5 w-3.5" />
+                <span>{t('account.switchToAntigravity', 'Switch to Antigravity')}</span>
+              </span>
+              {account.is_active_classic && (
+                <Badge className="h-4 border-none bg-green-500/20 px-1 text-[9px] font-semibold text-green-600">
+                  Active
+                </Badge>
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => onSwitch(account.id, 'ide')}
+              disabled={isSwitching || account.is_active_ide}
+              className="flex cursor-pointer items-center justify-between py-2 text-xs"
+            >
+              <span className="flex items-center gap-2">
+                <Repeat2 className="text-indigo-500 h-3.5 w-3.5" />
+                <span>{t('account.switchToIde', 'Switch to Antigravity IDE')}</span>
+              </span>
+              {account.is_active_ide && (
+                <Badge className="h-4 border-none bg-indigo-500/20 px-1 text-[9px] font-semibold text-indigo-600">
+                  Active
+                </Badge>
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => onSwitch(account.id, 'agy')}
+              disabled={isSwitching || account.is_active_agy}
+              className="flex cursor-pointer items-center justify-between py-2 text-xs"
+            >
+              <span className="flex items-center gap-2">
+                <Terminal className="text-emerald-500 h-3.5 w-3.5" />
+                <span>{t('account.switchToAgy', 'Switch to Antigravity CLI')}</span>
+              </span>
+              {account.is_active_agy && (
+                <Badge className="h-4 border-none bg-emerald-500/20 px-1 text-[9px] font-semibold text-emerald-600">
+                  Active
+                </Badge>
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-muted-foreground px-2 py-1 text-[10px] uppercase tracking-wider">
+              {t('cloud.card.actions', 'Actions')}
+            </DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => onRefresh(account.id)} disabled={isRefreshing} className="cursor-pointer">
               <RefreshCw className="mr-2 h-4 w-4" />
               {t('cloud.card.refresh')}
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onManageIdentity(account.id)}>
+            <DropdownMenuItem onClick={() => onManageIdentity(account.id)} className="cursor-pointer">
               <Fingerprint className="mr-2 h-4 w-4" />
               {t('cloud.card.identityProfile')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => onDelete(account.id)}
-              className="text-destructive focus:text-destructive"
+              className="text-destructive focus:text-destructive cursor-pointer"
               disabled={isDeleting}
             >
               <Trash className="mr-2 h-4 w-4" />

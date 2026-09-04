@@ -1,6 +1,6 @@
 import type { AccountSortKey, QuotaStatus } from '@/modules/cloud-account/utils/quota-display';
 
-export type GridLayout = 'auto' | '2-col' | '3-col' | 'list' | 'compact';
+export type GridLayout = 'auto' | '2-col' | '3-col' | 'list' | 'compact' | 'compact-dual';
 
 export const GRID_LAYOUT_CLASSES: Record<GridLayout, string> = {
   auto: 'grid gap-4 md:grid-cols-2 xl:grid-cols-3',
@@ -8,6 +8,7 @@ export const GRID_LAYOUT_CLASSES: Record<GridLayout, string> = {
   '3-col': 'grid gap-4 grid-cols-3',
   list: 'grid gap-4 grid-cols-1',
   compact: 'flex flex-col gap-2',
+  'compact-dual': 'flex flex-col gap-2',
 };
 
 export const GLOBAL_QUOTA_BAR_COLOR_CLASS_BY_STATUS: Record<QuotaStatus, string> = {

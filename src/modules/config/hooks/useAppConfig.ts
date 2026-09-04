@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +8,43 @@ import { ipc } from '@/ipc/manager';
 import { AppConfig } from '@/modules/config/types';
 
 const SAVE_DEBOUNCE_MS = 400;
+
+export type ConfigSaveState = 'idle' | 'saving' | 'saved' | 'error';
+
+export interface AppConfigSaveStatus {
+  status: ConfigSaveState;
+  lastSavedAt: number | null;
+  errorMessage?: string | null;
+}
+
+let currentSaveStatus: AppConfigSaveStatus = {
+  status: 'saved',
+  lastSavedAt: null,
+};
+
+const saveStatusListeners = new Set<() => void>();
+
+export function setAppConfigSaveStatus(
+  updater: (prev: AppConfigSaveStatus) => AppConfigSaveStatus,
+): void {
+  currentSaveStatus = updater(currentSaveStatus);
+  for (const listener of saveStatusListeners) {
+    listener();
+  }
+}
+
+export function useAppConfigSaveStatus(): AppConfigSaveStatus {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      saveStatusListeners.add(onStoreChange);
+      return () => {
+        saveStatusListeners.delete(onStoreChange);
+      };
+    },
+    () => currentSaveStatus,
+    () => currentSaveStatus,
+  );
+}
 
 export function useAppConfig() {
   const { t } = useTranslation();
@@ -25,6 +62,7 @@ export function useAppConfig() {
   });
 
   const updateConfig = useMutation({
+    mutationKey: ['appConfig', 'save'],
     mutationFn: async (newConfig: AppConfig) => {
       await ipc.client.config.save(newConfig);
       return newConfig;
@@ -58,10 +96,10 @@ export function useAppConfig() {
       const savedConfig = await updateConfig.mutateAsync(nextConfig);
       queryClient.setQueryData(['appConfig'], savedConfig);
       lastStableConfigRef.current = savedConfig;
-      toast({
-        title: t('settings.toast.saved.title'),
-        description: t('settings.toast.saved.description'),
-      });
+      setAppConfigSaveStatus(() => ({
+        status: 'saved',
+        lastSavedAt: Date.now(),
+      }));
       for (const item of pendingBatch) {
         item.resolve();
       }
@@ -73,6 +111,11 @@ export function useAppConfig() {
       } else {
         queryClient.invalidateQueries({ queryKey: ['appConfig'] });
       }
+      setAppConfigSaveStatus((prev) => ({
+        status: 'error',
+        lastSavedAt: prev.lastSavedAt,
+        errorMessage: error.message,
+      }));
       toast({
         title: t('settings.toast.saveFailed.title'),
         description: error.message,
@@ -88,6 +131,10 @@ export function useAppConfig() {
     (newConfig: AppConfig) => {
       latestConfigRef.current = newConfig;
       queryClient.setQueryData(['appConfig'], newConfig);
+      setAppConfigSaveStatus((prev) => ({
+        status: 'saving',
+        lastSavedAt: prev.lastSavedAt,
+      }));
 
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);

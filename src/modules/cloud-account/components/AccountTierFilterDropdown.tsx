@@ -38,10 +38,12 @@ export function AccountTierFilterDropdown({
           <Button
             variant={hasActiveFilter ? 'secondary' : 'ghost'}
             size="sm"
+            title={triggerLabel}
+            aria-label={triggerLabel}
             className="h-7 max-w-36 cursor-pointer gap-1.5 px-2 text-xs"
           >
             <FilterIcon className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">{triggerLabel}</span>
+            <span className="hidden @sm:inline truncate">{triggerLabel}</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64" side="bottom" sideOffset={8}>

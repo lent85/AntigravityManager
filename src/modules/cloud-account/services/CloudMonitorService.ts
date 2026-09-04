@@ -119,13 +119,33 @@ function mergeRefreshedToken(
 
 export class CloudMonitorService {
   private static intervalId: NodeJS.Timeout | null = null;
-  private static POLL_INTERVAL = 1000 * 60 * 5; // 5 minutes
+  static readonly DEFAULT_POLL_INTERVAL_MINUTES = 5;
+  private static readonly POLL_INTERVAL_SETTING_KEY = 'metrics_poll_interval_minutes';
   private static DEBOUNCE_TIME = 10000; // 10 seconds
   private static lastFocusTime: number = 0;
   private static activePollPromise: Promise<void> | null = null;
   private static weeklyWarmupExecutor: WeeklyWarmupExecutor | null = null;
   private static stopped = false;
   private static stopEpoch = 0;
+
+  static getPollIntervalMinutes(): number {
+    return CloudAccountSettingsStore.getSetting<number>(
+      this.POLL_INTERVAL_SETTING_KEY,
+      this.DEFAULT_POLL_INTERVAL_MINUTES,
+    );
+  }
+
+  static setPollIntervalMinutes(minutes: number): void {
+    const validMinutes = Math.max(0, minutes);
+    CloudAccountSettingsStore.setSetting(this.POLL_INTERVAL_SETTING_KEY, validMinutes);
+    if (validMinutes === 0) {
+      this.stop();
+      return;
+    }
+    if (this.intervalId) {
+      this.startInterval();
+    }
+  }
 
   private static isAutoSwitchEnabled(): boolean {
     return CloudAccountSettingsStore.getSetting<boolean>('auto_switch_enabled', false);
@@ -136,6 +156,9 @@ export class CloudMonitorService {
   }
 
   static isContinuousPollingEnabled(): boolean {
+    if (this.getPollIntervalMinutes() === 0) {
+      return false;
+    }
     return this.isAutoSwitchEnabled() || WeeklyWarmupService.isEnabled();
   }
 
@@ -214,13 +237,14 @@ export class CloudMonitorService {
     if (this.intervalId) {
       clearInterval(this.intervalId);
     }
+    const intervalMs = Math.max(1, this.getPollIntervalMinutes()) * 60 * 1000;
     this.intervalId = setInterval(() => {
       if (!this.isContinuousPollingEnabled()) {
         this.stop();
         return;
       }
       this.poll().catch((e) => logger.error('Scheduled poll failed', e));
-    }, this.POLL_INTERVAL);
+    }, intervalMs);
   }
 
   private static resetInterval() {

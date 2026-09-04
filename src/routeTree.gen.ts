@@ -9,13 +9,19 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as ProxyRouteImport } from './routes/proxy'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as EmulationRouteImport } from './routes/emulation'
+import { Route as ProxyRouteImport } from './routes/proxy'
+import { Route as SettingsRouteImport } from './routes/settings'
 
-const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EmulationRoute = EmulationRouteImport.update({
+  id: '/emulation',
+  path: '/emulation',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProxyRoute = ProxyRouteImport.update({
@@ -23,49 +29,60 @@ const ProxyRoute = ProxyRouteImport.update({
   path: '/proxy',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/emulation': typeof EmulationRoute
   '/proxy': typeof ProxyRoute
   '/settings': typeof SettingsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/emulation': typeof EmulationRoute
   '/proxy': typeof ProxyRoute
   '/settings': typeof SettingsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/emulation': typeof EmulationRoute
   '/proxy': typeof ProxyRoute
   '/settings': typeof SettingsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/proxy' | '/settings'
+  fullPaths: '/' | '/emulation' | '/proxy' | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/proxy' | '/settings'
-  id: '__root__' | '/' | '/proxy' | '/settings'
+  to: '/' | '/emulation' | '/proxy' | '/settings'
+  id: '__root__' | '/' | '/emulation' | '/proxy' | '/settings'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  EmulationRoute: typeof EmulationRoute
   ProxyRoute: typeof ProxyRoute
   SettingsRoute: typeof SettingsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/emulation': {
+      id: '/emulation'
+      path: '/emulation'
+      fullPath: '/emulation'
+      preLoaderRoute: typeof EmulationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/proxy': {
@@ -75,11 +92,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProxyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  EmulationRoute: EmulationRoute,
   ProxyRoute: ProxyRoute,
   SettingsRoute: SettingsRoute,
 }

@@ -18,6 +18,8 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "updater:serve-feed": "node scripts/serve-local-update-feed.mjs",
+    "install:official": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-official-windows.ps1",
+    "install:official:quick": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-official-windows.ps1 -SkipBuild",
     "audit:size:win32:x64": "node scripts/audit-windows-x64-size.mjs",
     "publish": "electron-forge publish",
     "check:agent-contracts": "npm run test:agent-contracts && node scripts/check-agent-contracts.mjs",

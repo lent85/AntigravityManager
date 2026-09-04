@@ -6,6 +6,7 @@ import {
   closeAntigravity,
 } from '@/modules/antigravity-runtime/actions/process';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
+import { useAppConfig } from '@/modules/config/hooks/useAppConfig';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/shared/ui/utils';
 import { Activity, ChevronUp, Code2, Loader2, Play, Power, Square, Workflow } from 'lucide-react';
@@ -30,13 +31,16 @@ interface ServiceStatus {
   toggle: () => void;
 }
 
-function useServiceStatus(target: AntigravityAppTarget) {
+function useServiceStatus(
+  target: AntigravityAppTarget,
+  refetchInterval: number | false = 30000,
+) {
   const queryClient = useQueryClient();
 
   const { data: isRunning, isLoading } = useQuery({
     queryKey: ['process', 'status', target],
     queryFn: () => isProcessRunning(target),
-    refetchInterval: 10000,
+    refetchInterval,
   });
 
   const startMutation = useMutation({
@@ -139,8 +143,12 @@ function ServiceRow({ service }: { service: ServiceStatus }) {
 
 export const StatusBar: React.FC<StatusBarProps> = ({ isCollapsed = false }) => {
   const { t } = useTranslation();
-  const classicStatus = useServiceStatus('classic');
-  const ideStatus = useServiceStatus('ide');
+  const { config } = useAppConfig();
+  const pollIntervalSeconds = config?.process_poll_interval ?? 30;
+  const pollIntervalMs = pollIntervalSeconds > 0 ? pollIntervalSeconds * 1000 : false;
+
+  const classicStatus = useServiceStatus('classic', pollIntervalMs);
+  const ideStatus = useServiceStatus('ide', pollIntervalMs);
   const services: ServiceStatus[] = [
     {
       target: 'classic',

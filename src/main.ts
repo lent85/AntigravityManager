@@ -1,4 +1,4 @@
-import './instrument'; // MUST be the first import to ensure Sentry initializes before app ready
+import '@/instrument'; // MUST be the first import to ensure Sentry initializes before app ready
 import { app, BrowserWindow, dialog, shell } from 'electron';
 import type { MessageBoxOptions } from 'electron';
 import path from 'path';
@@ -8,7 +8,7 @@ import { EnvHttpProxyAgent, setGlobalDispatcher } from 'undici';
 
 import { ipcMain } from 'electron/main';
 import { ipcContext } from '@/ipc/context';
-import { IPC_CHANNELS } from './shared/constants';
+import { IPC_CHANNELS } from '@/shared/constants';
 import { logger } from './shared/logging/logger';
 import {
   getExpectedInstallRoot,
@@ -51,6 +51,38 @@ import { selectWindowsUpdateResult } from '@/modules/app-shell/update/windowsUpd
 import { getQuickObservabilityConfig } from '@/shared/observability/observabilityConfig';
 import { registerPerformanceRecorderIpc } from '@/modules/app-shell/performance-recorder/ipc';
 import { configurePerformanceRecorderCommandLine } from '@/modules/app-shell/performance-recorder/main-recorder';
+
+if (!app.isPackaged) {
+  const devUserData = path.join(
+    app.getPath('appData'),
+    `${app.name || 'antigravity-manager'}-dev`,
+  );
+  if (!fs.existsSync(devUserData)) {
+    fs.mkdirSync(devUserData, { recursive: true });
+  }
+  const prodCandidates = [
+    path.join(app.getPath('appData'), 'Antigravity Manager'),
+    path.join(app.getPath('appData'), 'antigravity-manager'),
+  ];
+  for (const prodDir of prodCandidates) {
+    if (fs.existsSync(prodDir)) {
+      const keyFiles = ['.mk', 'master-key.v2.safe', 'master-key.v2.file', 'Local State'];
+      for (const file of keyFiles) {
+        const srcFile = path.join(prodDir, file);
+        const destFile = path.join(devUserData, file);
+        if (fs.existsSync(srcFile) && !fs.existsSync(destFile)) {
+          try {
+            fs.copyFileSync(srcFile, destFile);
+          } catch {
+            // Ignore copy errors
+          }
+        }
+      }
+      break;
+    }
+  }
+  app.setPath('userData', devUserData);
+}
 
 // Turn on rotating file output as early as possible, before any module-level
 // logging below runs, so the shipped app keeps logging to disk as before.

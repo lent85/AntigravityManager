@@ -15,6 +15,7 @@ import {
   startAuthFlow,
   useExportCloudAccounts,
   useImportCloudAccounts,
+  useEmulationState,
 } from '@/modules/cloud-account/hooks/useCloudAccounts';
 import { IdentityProfileDialog } from '@/modules/identity-profile/components/IdentityProfileDialog';
 import { CloudAccount } from '@/modules/cloud-account/types';
@@ -50,7 +51,8 @@ import {
 export function CloudAccountList() {
   const { t } = useTranslation();
   const { data: warmupConfig } = useWeeklyWarmupConfig();
-  // Read local snapshots after background warmups; this does not request provider quota.
+  const { data: emulationState } = useEmulationState(3000);
+  // Read local snapshots after background warmups; when emulation is enabled, poll faster (3s) to show live quota drain
   const {
     data: accounts,
     isLoading,
@@ -58,7 +60,9 @@ export function CloudAccountList() {
     error,
     errorUpdatedAt,
     refetch,
-  } = useCloudAccounts(warmupConfig?.enabled ? 60_000 : false);
+  } = useCloudAccounts(
+    emulationState?.enabled ? 3000 : warmupConfig?.enabled ? 60_000 : false,
+  );
   const { data: securityStatus } = useCloudAccountSecurityStatus();
   const { config, saveConfig } = useAppConfig();
   const refreshMutation = useRefreshQuota();
@@ -93,6 +97,7 @@ export function CloudAccountList() {
   };
 
   const currentSort: AccountSortKey = (config?.account_sort as AccountSortKey) || 'recently-used';
+  const [originFilter, setOriginFilter] = useState<'all' | 'real' | 'emulated'>('all');
 
   const {
     sortedAccounts,
@@ -107,6 +112,16 @@ export function CloudAccountList() {
     overallQuotaPercentage,
     effectiveQuotaStatus,
   } = useCloudAccountListView(accounts, config, currentSort);
+
+  const displayedAccounts = useMemo(() => {
+    if (originFilter === 'real') {
+      return sortedAccounts.filter((account) => !account.is_emulated);
+    }
+    if (originFilter === 'emulated') {
+      return sortedAccounts.filter((account) => account.is_emulated);
+    }
+    return sortedAccounts;
+  }, [originFilter, sortedAccounts]);
 
   const getTierOptionLabel = useCallback(
     (key: string, label: string) => {
@@ -773,10 +788,21 @@ export function CloudAccountList() {
           updateGridLayout(layout);
         }}
         onQuotaWindowChange={setQuotaWindow}
+        maskAccountInfo={Boolean(config?.mask_account_info)}
+        onToggleMaskAccountInfo={async () => {
+          if (config) {
+            await saveConfig({
+              ...config,
+              mask_account_info: !config.mask_account_info,
+            });
+          }
+        }}
+        originFilter={originFilter}
+        onOriginFilterChange={setOriginFilter}
       />
 
       <CloudAccountGrid
-        accounts={sortedAccounts}
+        accounts={displayedAccounts}
         sourceAccountCount={accounts?.length ?? 0}
         gridLayout={gridLayout}
         quotaWindow={quotaWindow}

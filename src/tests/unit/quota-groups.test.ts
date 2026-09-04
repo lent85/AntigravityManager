@@ -100,4 +100,11 @@ describe('quota-window preference', () => {
       ),
     ).not.toThrow();
   });
+
+  it('reads and writes dual quota-window preference', () => {
+    expect(readQuotaWindowPreference({ getItem: () => 'dual', setItem: vi.fn() })).toBe('dual');
+    const setItem = vi.fn();
+    saveQuotaWindowPreference({ getItem: () => null, setItem }, 'dual');
+    expect(setItem).toHaveBeenCalledExactlyOnceWith(QUOTA_WINDOW_STORAGE_KEY, 'dual');
+  });
 });

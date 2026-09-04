@@ -18,34 +18,46 @@ export async function getCurrentTheme(): Promise<ThemePreferences> {
 }
 
 export async function setTheme(newTheme: ThemeMode) {
-  const isDarkMode = newTheme === 'dark';
   await ipc.client.theme.setThemeMode(newTheme);
   localStorage.setItem(LOCAL_STORAGE_KEYS.THEME, newTheme);
-  updateDocumentTheme(isDarkMode);
+  updateDocumentTheme(newTheme);
 }
 
 export async function toggleTheme() {
-  const isDarkMode = await ipc.client.theme.toggleThemeMode();
-  const newTheme = isDarkMode ? 'dark' : 'light';
-
-  updateDocumentTheme(isDarkMode);
-  localStorage.setItem(LOCAL_STORAGE_KEYS.THEME, newTheme);
+  const localTheme = localStorage.getItem(LOCAL_STORAGE_KEYS.THEME) as ThemeMode | null;
+  const current = localTheme || 'system';
+  let next: ThemeMode;
+  if (current === 'system') {
+    next = 'light';
+  } else if (current === 'light') {
+    next = 'dark';
+  } else {
+    next = 'system';
+  }
+  await setTheme(next);
 }
 
 export async function syncWithLocalTheme() {
   const { local } = await getCurrentTheme();
-  if (!local) {
-    setTheme('system');
-    return;
-  }
-
-  await setTheme(local);
+  const theme = local || 'system';
+  await setTheme(theme);
 }
 
-function updateDocumentTheme(isDarkMode: boolean) {
-  if (isDarkMode) {
-    document.documentElement.classList.add('dark');
-  } else {
-    document.documentElement.classList.remove('dark');
+export function updateDocumentTheme(mode: ThemeMode) {
+  const isDarkMode =
+    mode === 'dark' ||
+    (mode === 'system' &&
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+
+  if (typeof document !== 'undefined') {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.documentElement.classList.add('light');
+    }
   }
 }
+

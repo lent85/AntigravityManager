@@ -27,11 +27,24 @@ import type { WeeklyWarmupConfig } from '@/modules/cloud-account/services/weekly
 import { syncLocalAccount } from '@/modules/cloud-account/actions/cloud';
 import { exportCloudAccounts, importCloudAccounts } from '@/modules/cloud-account/actions/cloud';
 import { startAuthFlow } from '@/modules/cloud-account/actions/cloud';
+import {
+  getMetricsPollInterval,
+  setMetricsPollInterval,
+  getEmulationState,
+  setEmulationEnabled,
+  setEmulationTickInterval,
+  generateEmulatedAccounts,
+  updateEmulatedAccountStrategy,
+  resetEmulatedQuotas,
+  clearEmulatedAccounts,
+} from '@/modules/cloud-account/actions/cloud';
+import type { EmulationState } from '@/modules/cloud-account/emulation/types';
 
 export const QUERY_KEYS = {
   cloudAccounts: ['cloudAccounts'],
   securityStatus: ['cloudAccountSecurityStatus'],
   oauthClients: ['oauthClients'],
+  emulationState: ['emulationState'],
 };
 
 export function useCloudAccounts(refetchInterval: number | false = false) {
@@ -95,6 +108,7 @@ export function useRefreshQuota() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    mutationKey: ['refreshAccountQuota'],
     mutationFn: refreshAccountQuota,
     onSuccess: (updatedAccount: CloudAccount) => {
       // Optimistically update
@@ -162,6 +176,7 @@ export function useSetAutoSwitchModelsConfig() {
 export function useForcePollCloudMonitor() {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: ['forcePollCloudMonitor'],
     mutationFn: forcePollCloudMonitor,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cloudAccounts });
@@ -192,6 +207,7 @@ export function useSetWeeklyWarmupConfig() {
 export function useSyncLocalAccount() {
   const queryClient = useQueryClient();
   return useMutation<CloudAccount | null, Error, { appTarget?: AntigravityAppTarget } | undefined>({
+    mutationKey: ['syncLocalAccount'],
     mutationFn: syncLocalAccount,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cloudAccounts });
@@ -236,3 +252,101 @@ export function useImportCloudAccounts() {
     },
   });
 }
+
+export const METRICS_POLL_INTERVAL_KEY = ['metricsPollInterval'];
+
+export function useMetricsPollInterval() {
+  return useQuery<number>({
+    queryKey: METRICS_POLL_INTERVAL_KEY,
+    queryFn: getMetricsPollInterval,
+    staleTime: 60_000,
+  });
+}
+
+export function useSetMetricsPollInterval() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: setMetricsPollInterval,
+    onSuccess: (newInterval) => {
+      queryClient.setQueryData(METRICS_POLL_INTERVAL_KEY, newInterval);
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cloudAccounts });
+      queryClient.invalidateQueries({ queryKey: ['gateway', 'modelAvailability'] });
+    },
+  });
+}
+
+export function useEmulationState(refetchInterval: number | false = false) {
+  return useQuery<EmulationState>({
+    queryKey: QUERY_KEYS.emulationState,
+    queryFn: getEmulationState,
+    staleTime: 5000,
+    refetchInterval,
+  });
+}
+
+export function useSetEmulationEnabled() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: setEmulationEnabled,
+    onSuccess: (state) => {
+      queryClient.setQueryData(QUERY_KEYS.emulationState, state);
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cloudAccounts });
+    },
+  });
+}
+
+export function useSetEmulationTickInterval() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: setEmulationTickInterval,
+    onSuccess: (state) => {
+      queryClient.setQueryData(QUERY_KEYS.emulationState, state);
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cloudAccounts });
+    },
+  });
+}
+
+export function useGenerateEmulatedAccounts() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: generateEmulatedAccounts,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.emulationState });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cloudAccounts });
+    },
+  });
+}
+
+export function useUpdateEmulatedAccountStrategy() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updateEmulatedAccountStrategy,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.emulationState });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cloudAccounts });
+    },
+  });
+}
+
+export function useResetEmulatedQuotas() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: resetEmulatedQuotas,
+    onSuccess: (state) => {
+      queryClient.setQueryData(QUERY_KEYS.emulationState, state);
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cloudAccounts });
+    },
+  });
+}
+
+export function useClearEmulatedAccounts() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: clearEmulatedAccounts,
+    onSuccess: (state) => {
+      queryClient.setQueryData(QUERY_KEYS.emulationState, state);
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cloudAccounts });
+    },
+  });
+}
+

@@ -1,6 +1,6 @@
 import type { CloudQuotaBucket, CloudQuotaGroup } from '@/modules/cloud-account/types';
 
-export type QuotaWindow = '5h' | 'weekly';
+export type QuotaWindow = '5h' | 'weekly' | 'dual';
 
 export interface WeeklyQuotaItem {
   id: string;

@@ -24,7 +24,7 @@ This document explains the cloud AI account management and switching capabilitie
 - **Background monitoring**: Built-in `CloudMonitorService` polls quota status for all accounts every 5 minutes by default.
 - **Global toggle**: Users can enable or disable this feature with one click in the UI.
 
-### 1.5 Weekly Quota and Opt-In Warmu
+### 1.5 Weekly Quota and Opt-In Warmup
 
 The account toolbar selects the five-hour or weekly quota view. The weekly view uses provider buckets whose `window` or `bucket_id` contains `week`, case-insensitively. It never substitutes model quota when weekly buckets are missing. The five-hour view retains non-weekly detailed buckets. The preference is local to the renderer; unavailable browser storage falls back to the five-hour view.
 
@@ -43,6 +43,40 @@ The cloud-account module persists validated configuration and versioned history 
 Failed requests do not create success records and may be retried after a later fresh refresh. Invalid or unreadable history, or a history write failure after acceptance, pauses warmup until application restart. Repair the underlying storage problem before restarting; otherwise the same safety check pauses it again. Invalid configuration remains an error in the settings UI instead of being silently replaced with enabled defaults. A process crash after provider acceptance but before history persistence can cause another request after restart; execution is not exactly-once.
 
 The proxy-gateway adapter uses the existing Claude mapper or the native Gemini envelope and `GeminiClient` transport. It starts with `streamGenerateContent?alt=sse`, falls back to `generateContent` on transport failure, and does not repeat an HTTP rejection as a non-streaming request. A 60-second deadline and cancellation signal bound transport work. No internal HTTP endpoint or authentication bypass is exposed.
+
+### 1.7 Identity Masking (Privacy Mode)
+
+Users can toggle identity masking via the toolbar eye icon or application settings (`mask_account_info`). When active:
+- Email addresses are obfuscated (e.g. `jo***@gmail.com`).
+- Full names are replaced with clean placeholders.
+- Avatar initials are sanitized to protect user privacy during live demonstrations, screen sharing, or recording sessions.
+
+### 1.8 Dual Quota Window & Layout Customization
+
+The toolbar supports three quota window perspectives:
+- **5-Hour (`5h`)**: Real-time 5-hour operational quota buckets for models like Gemini 2.5 and Claude 3.5.
+- **Weekly (`weekly`)**: Weekly allowance buckets for Claude and Gemini.
+- **Dual Window (`dual`)**: Side-by-side visualization showing both 5h and weekly quota levels simultaneously on each account card.
+
+Layout choices include **Auto**, **2-Column**, **3-Column**, **List**, **Compact**, and **Compact-Dual** (optimized for high-density monitoring with dual quota progress indicators and detailed model tooltips).
+
+### 1.9 Process Detection and Metrics Polling Configuration
+
+The polling cadence for background process discovery and model metrics can be tuned via settings or IPC (`process_poll_interval`, `getMetricsPollInterval`, `setMetricsPollInterval`). When set to 0, background polling is disabled in favor of manual refreshes to minimize CPU overhead on low-power devices.
+
+### 1.10 Account Emulation & Quota Simulation System
+
+The emulation system empowers developers to test UI layout edge cases, auto-switching failovers, and quota exhaustion thresholds without consuming real API quota or requiring multiple genuine OAuth accounts:
+- **Live Consumption Ticker**: Simulates realistic quota consumption in the background with customizable tick frequencies (3s, 5s, 15s).
+- **Consumption Strategies**:
+  - `linear`: Quota steadily drains by a configured percentage per tick.
+  - `bursty`: Simulates random heavy user prompt bursts with periodic quota drops.
+  - `static`: Holds quota at pre-configured fixed percentages (e.g., 3% to test low-quota warnings).
+  - `rate_limited`: Simulates HTTP 429 `RESOURCE_EXHAUSTED` conditions to test fallback routing.
+  - `auto_recover`: Drains to 0% and automatically resets back to 100% after cooldown.
+- **Pre-configured Presets**: Includes *Live Drain Demo*, *Auto-Switch Benchmark*, *Bursty Workload*, and *Balanced Pool*.
+- **Safe Sandbox Isolation**: Stored separately in application settings (`cloud_account_emulation_state`). Mock tokens never touch the IDE's SQLite database (`state.vscdb`) or the real `accounts` table.
+- **Toolbar & Filter Integration**: Users can toggle Emulation Mode ON/OFF at any time, or filter the account list between *All*, *Real only*, and *Emulated only*.
 
 ## 2. Technical Implementation
 
@@ -77,12 +111,18 @@ CREATE TABLE settings (
 The backend exposes the following oRPC interfaces via `src/ipc/cloud`:
 
 - `addGoogleAccount(authCode: string)`: Exchange token and save account.
-- `listCloudAccounts()`: Get account list.
-- `refreshAccountQuota(accountId: string)`: Refresh quota and token for a specific account.
-- `switchCloudAccount(accountId: string)`: Run the account switch workflow.
+- `listCloudAccounts()`: Get account list (merges emulated accounts when emulation mode is enabled).
+- `refreshAccountQuota(accountId: string)`: Refresh quota and token for a specific account (mocks refresh for emulated accounts).
+- `switchCloudAccount(accountId: string)`: Run the account switch workflow (safe mock switch for emulated accounts).
 - `deleteCloudAccount(accountId: string)`: Delete an account.
 - `getAutoSwitchEnabled()` / `setAutoSwitchEnabled(enabled)`: Get/set auto-switch state.
 - `forcePollCloudMonitor()`: Manually trigger background polling.
+- `getMetricsPollInterval()` / `setMetricsPollInterval(intervalMinutes)`: Query or configure background metrics polling frequency.
+- `getEmulationState()`: Retrieve active emulation configuration, running status, and mock accounts.
+- `setEmulationEnabled({ enabled: boolean })`: Toggle emulation mode on or off.
+- `generateEmulatedAccounts({ count, preset })`: Generate a batch of mock accounts with strategy presets.
+- `resetEmulatedQuotas()`: Restore all mock accounts to 100% quota.
+- `clearEmulatedAccounts()`: Remove all mock accounts from the simulation pool.
 
 ### 2.3 Token Injection Mechanism (`ProtobufUtils`)
 
@@ -117,3 +157,11 @@ We implemented `src/shared/serialization/protobuf.ts`, which can:
 - **Key management**: Use native OS credential stores (Windows Credential Manager / macOS Keychain) via `keytar` to securely store the AES-256 master key.
 - **Data encryption**: Encrypt all sensitive fields (`token_json`, `quota_json`) with `AES-256-GCM` before writing to SQLite.
 - **Auto migration**: Automatically detect and migrate legacy plaintext data at startup to ensure a smooth security upgrade.
+
+### 2.7 Emulation Sandbox Architecture
+
+All mock accounts are stored in the SQLite `settings` table under `cloud_account_emulation_state` via `CloudAccountSettingsStore`.
+- **Zero Production Pollution**: Real accounts in `accounts` table are strictly separated from emulated accounts.
+- **Safe Mock Switching**: Selecting an emulated account updates in-memory IDE active pointers without executing token injection into `state.vscdb` or terminating Antigravity OS processes.
+- **Reactive Polling**: When emulation mode is active, the renderer adjusts account polling to 3 seconds to provide fluid visual feedback as quotas drain.
+

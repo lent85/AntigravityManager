@@ -68,7 +68,7 @@ Feature-specific components, hooks, IPC routers, services, persistence and types
 - `account`: local account snapshots, Antigravity state backup/restore and account UI.
 - `antigravity-runtime`: process discovery, startup, switching and runtime patching.
 - `app-shell`: window, tray, theme, routing, updates and application-wide UI actions.
-- `cloud-account`: cloud authentication, monitoring, quota, import and persistence.
+- `cloud-account`: cloud authentication, monitoring, quota, emulation, import and persistence.
 - `config`: application configuration and its IPC/UI surfaces.
 - `identity-profile`: identity profile behavior and dialog UI.
 - `proxy-gateway`: local HTTP gateway, protocol mapping, model routing and gateway administration.

@@ -79,6 +79,8 @@ export interface CloudAccount {
   is_active_ide?: boolean;
   is_active_agy?: boolean;
   proxy_url?: string;
+  is_emulated?: boolean;
+  emulation_strategy?: import('./emulation/types').AccountEmulationStrategyConfig;
 }
 
 // Zod Schemas
@@ -154,6 +156,8 @@ export const CloudAccountSchema = z.object({
   is_active_ide: z.boolean().optional(),
   is_active_agy: z.boolean().optional(),
   proxy_url: z.string().optional(),
+  is_emulated: z.boolean().optional(),
+  emulation_strategy: z.any().optional(),
 });
 
 const ImportedProxyUrlSchema = z.string().refine(isValidProxyUrl, {

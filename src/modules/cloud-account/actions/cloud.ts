@@ -161,3 +161,49 @@ export function importCloudAccounts(input: {
   }
   return ipc.client.cloud.importCloudAccounts(input);
 }
+
+export function getMetricsPollInterval() {
+  return ipc.client.cloud.getMetricsPollInterval();
+}
+
+export function setMetricsPollInterval(input: { intervalMinutes: number }) {
+  return ipc.client.cloud.setMetricsPollInterval(input);
+}
+
+export function getEmulationState() {
+  return ipc.client.cloud.getEmulationState();
+}
+
+export function setEmulationEnabled(input: { enabled: boolean }) {
+  return ipc.client.cloud.setEmulationEnabled(input);
+}
+
+export function setEmulationTickInterval(input: { seconds: number }) {
+  return ipc.client.cloud.setEmulationTickInterval(input);
+}
+
+export function generateEmulatedAccounts(input: {
+  count: number;
+  preset?: import('@/modules/cloud-account/emulation/types').EmulationPresetType;
+  randomizeModels?: boolean;
+  minModelsPerAccount?: number;
+  maxModelsPerAccount?: number;
+}) {
+  return ipc.client.cloud.generateEmulatedAccounts(input);
+}
+
+export function updateEmulatedAccountStrategy(input: {
+  accountId: string;
+  strategy: import('@/modules/cloud-account/emulation/types').AccountEmulationStrategyConfig;
+}) {
+  return ipc.client.cloud.updateEmulatedAccountStrategy(input);
+}
+
+export function resetEmulatedQuotas() {
+  return ipc.client.cloud.resetEmulatedQuotas();
+}
+
+export function clearEmulatedAccounts() {
+  return ipc.client.cloud.clearEmulatedAccounts();
+}
+

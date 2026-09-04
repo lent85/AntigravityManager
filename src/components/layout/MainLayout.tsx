@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, Outlet, useLocation } from '@tanstack/react-router';
 import { cn } from '@/shared/ui/utils';
 import { StatusBar } from '@/components/layout/StatusBar';
+import { SidebarIndicators } from '@/components/layout/SidebarIndicators';
 import {
   LayoutDashboard,
   Settings,
@@ -10,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  FlaskConical,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -17,12 +19,16 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { ErrorBoundary } from 'react-error-boundary';
 import { useToast } from '@/components/ui/use-toast';
 import { getLocalizedErrorMessage } from '@/shared/utils/errorMessages';
+import { useEmulationState } from '@/modules/cloud-account/hooks/useCloudAccounts';
 
 export const MainLayout: React.FC = () => {
   const location = useLocation();
   const { t } = useTranslation();
   const { toast } = useToast();
   const hasShownRouteErrorToastRef = useRef(false);
+  const { data: emulationState } = useEmulationState(5000);
+  const isEmulationActive = !!emulationState?.enabled;
+  const emulatedAccountCount = emulationState?.accounts?.length ?? 0;
 
   // Initialize state from localStorage if available, default to false (expanded)
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -45,6 +51,12 @@ export const MainLayout: React.FC = () => {
       to: '/proxy',
       icon: Network,
       label: t('nav.proxy'),
+    },
+    {
+      to: '/emulation',
+      icon: FlaskConical,
+      label: t('nav.emulation', 'Emulation'),
+      badge: isEmulationActive ? emulatedAccountCount : undefined,
     },
     {
       to: '/settings',
@@ -112,17 +124,23 @@ export const MainLayout: React.FC = () => {
                         <Link
                           to={item.to}
                           className={cn(
-                            'mx-auto flex h-10 w-10 items-center justify-center rounded-md transition-all duration-200',
+                            'relative mx-auto flex h-10 w-10 items-center justify-center rounded-md transition-all duration-200',
                             isActive
                               ? 'bg-primary/10 text-primary shadow-[0_2px_8px_rgba(37,99,235,0.08)]'
                               : 'hover:bg-muted text-muted-foreground hover:text-foreground',
                           )}
                         >
                           <item.icon className="h-5 w-5" />
+                          {item.badge !== undefined && (
+                            <span className="absolute top-1.5 right-1.5 flex h-2 w-2 rounded-full bg-purple-500 ring-2 ring-background animate-pulse" />
+                          )}
                           <span className="sr-only">{item.label}</span>
                         </Link>
                       </TooltipTrigger>
-                      <TooltipContent side="right">{item.label}</TooltipContent>
+                      <TooltipContent side="right">
+                        {item.label}
+                        {item.badge !== undefined && ` (${item.badge})`}
+                      </TooltipContent>
                     </Tooltip>
                   );
                 }
@@ -132,21 +150,32 @@ export const MainLayout: React.FC = () => {
                     key={item.to}
                     to={item.to}
                     className={cn(
-                      'flex items-center gap-3 rounded-md border-l-2 px-3 py-2.5 text-sm font-medium transition-all duration-200',
+                      'flex items-center justify-between rounded-md border-l-2 px-3 py-2.5 text-sm font-medium transition-all duration-200',
                       isActive
                         ? 'bg-primary/10 text-primary border-primary rounded-l-none pl-2 font-semibold'
                         : 'hover:bg-muted text-muted-foreground hover:text-foreground border-transparent',
                     )}
                   >
-                    <item.icon className="h-4 w-4" />
-                    {item.label}
+                    <div className="flex items-center gap-3">
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.label}</span>
+                    </div>
+                    {item.badge !== undefined && (
+                      <span className="rounded-full bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-purple-400 border border-purple-500/30">
+                        {item.badge}
+                      </span>
+                    )}
                   </Link>
                 );
               })}
             </TooltipProvider>
           </nav>
 
-          <div className="border-t p-2">
+          <div className="border-border/60 border-t p-2">
+            <SidebarIndicators isCollapsed={isCollapsed} />
+          </div>
+
+          <div className="border-border/60 border-t p-2">
             <StatusBar isCollapsed={isCollapsed} />
           </div>
         </aside>

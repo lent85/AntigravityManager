@@ -215,3 +215,33 @@ export function getAccountSortValue(
       return 0;
   }
 }
+
+const MODEL_DISPLAY_REPLACEMENTS: Array<[string, string]> = [
+  ['gemini-3.1-pro-low/high', 'Gemini 3.1 Pro (Low/High)'],
+  ['gemini-3.1-pro-preview', 'Gemini 3.1 Pro Preview'],
+  ['gemini-3-pro-image', 'Gemini 3 Pro Image'],
+  ['gemini-3.1-pro', 'Gemini 3.1 Pro'],
+  ['gemini-3-pro', 'Gemini 3 Pro'],
+  ['gemini-3-flash', 'Gemini 3 Flash'],
+  ['claude-sonnet-4-6-thinking', 'Claude 4.6 Sonnet (Thinking)'],
+  ['claude-sonnet-4-6', 'Claude 4.6 Sonnet'],
+  ['claude-sonnet-4-5-thinking', 'Claude 4.5 Sonnet (Thinking)'],
+  ['claude-sonnet-4-5', 'Claude 4.5 Sonnet'],
+  ['claude-opus-4-6-thinking', 'Claude 4.6 Opus (Thinking)'],
+  ['claude-opus-4-5-thinking', 'Claude 4.5 Opus (Thinking)'],
+  ['claude-3-5-sonnet', 'Claude 3.5 Sonnet'],
+];
+
+export function formatModelDisplayName(modelName: string): string {
+  let displayName = modelName.replace('models/', '');
+  for (const [source, target] of MODEL_DISPLAY_REPLACEMENTS) {
+    displayName = displayName.replace(source, target);
+  }
+
+  return displayName
+    .replace(/-/g, ' ')
+    .split(' ')
+    .map((word) => (word.length > 2 ? word.charAt(0).toUpperCase() + word.slice(1) : word))
+    .join(' ');
+}
+

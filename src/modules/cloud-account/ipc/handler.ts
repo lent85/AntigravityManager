@@ -38,6 +38,12 @@ import {
 import { withTimingTrace } from '@/shared/observability/timingTrace';
 import { AppError } from '@/shared/errors/appError';
 import { CloudMonitorService } from '@/modules/cloud-account/services/CloudMonitorService';
+import { AccountEmulationService } from '@/modules/cloud-account/emulation/AccountEmulationService';
+import type {
+  AccountEmulationStrategyConfig,
+  EmulationPresetType,
+  GenerateEmulatedAccountsOptions,
+} from '@/modules/cloud-account/emulation/types';
 
 // Helper to update tray
 function notifyTrayUpdate(account: CloudAccount) {
@@ -404,7 +410,7 @@ export async function listCloudAccounts(): Promise<CloudAccount[]> {
     : CloudAccountSettingsStore.getActiveAccountIdForTarget('ide');
   const activeAgyAccountId = CloudAccountSettingsStore.getActiveAccountIdForTarget('agy');
 
-  return accounts.map((account) => {
+  const mappedRealAccounts = accounts.map((account) => {
     const accountEmail = normalizeAccountEmail(account.email);
     const isClassicActive =
       classicUsesCredentialStore && activeClassicAccountId
@@ -421,13 +427,27 @@ export async function listCloudAccounts(): Promise<CloudAccount[]> {
       is_active_agy: isAgyActive,
     };
   });
+
+  if (AccountEmulationService.isEnabled()) {
+    const emulatedAccounts = AccountEmulationService.getCloudAccounts();
+    return [...mappedRealAccounts, ...emulatedAccounts];
+  }
+
+  return mappedRealAccounts;
 }
 
 export async function deleteCloudAccount(accountId: string): Promise<void> {
+  if (AccountEmulationService.isEmulated(accountId)) {
+    AccountEmulationService.deleteAccount(accountId);
+    return;
+  }
   await CloudAccountRepo.removeAccount(accountId);
 }
 
 export async function refreshAccountQuota(accountId: string): Promise<CloudAccount> {
+  if (AccountEmulationService.isEmulated(accountId)) {
+    return AccountEmulationService.refreshAccountQuota(accountId);
+  }
   const account = await CloudAccountRepo.getAccount(accountId);
   if (!account) {
     throw new Error(`Account not found: ${accountId}`);
@@ -586,6 +606,11 @@ export async function switchCloudAccount(
   accountId: string,
   appTarget?: AntigravityAppTarget,
 ): Promise<void> {
+  if (AccountEmulationService.isEmulated(accountId)) {
+    AccountEmulationService.switchAccount(accountId);
+    logger.info(`Switched to emulated account: ${accountId}`);
+    return;
+  }
   await runWithSwitchGuard('cloud-account-switch', async () => {
     try {
       const account = await CloudAccountRepo.getAccount(accountId);
@@ -1000,4 +1025,50 @@ export async function importCloudAccounts(
   }
 
   return result;
+}
+
+export function getMetricsPollInterval(): number {
+  return CloudMonitorService.getPollIntervalMinutes();
+}
+
+export function setMetricsPollInterval(minutes: number): number {
+  CloudMonitorService.setPollIntervalMinutes(minutes);
+  return CloudMonitorService.getPollIntervalMinutes();
+}
+
+export function getEmulationState() {
+  return AccountEmulationService.getState();
+}
+
+export function setEmulationEnabled(enabled: boolean) {
+  return AccountEmulationService.setEnabled(enabled);
+}
+
+export function setEmulationTickInterval(seconds: number) {
+  return AccountEmulationService.setTickInterval(seconds);
+}
+
+export function generateEmulatedAccounts(
+  count: number,
+  preset?: EmulationPresetType,
+  options?: GenerateEmulatedAccountsOptions,
+) {
+  return AccountEmulationService.generateAccounts(count, preset, options);
+}
+
+export function updateEmulatedAccountStrategy(
+  accountId: string,
+  strategy: AccountEmulationStrategyConfig,
+) {
+  return AccountEmulationService.updateAccountStrategy(accountId, strategy);
+}
+
+export function resetEmulatedQuotas() {
+  AccountEmulationService.resetQuotas();
+  return AccountEmulationService.getState();
+}
+
+export function clearEmulatedAccounts() {
+  AccountEmulationService.clearAccounts();
+  return AccountEmulationService.getState();
 }

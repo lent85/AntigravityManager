@@ -19,7 +19,8 @@ import { useTranslation } from 'react-i18next';
 import { setAppLanguage } from '@/modules/app-shell/actions/language';
 import { useAppConfig } from '@/modules/config/hooks/useAppConfig';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, FolderOpen, RefreshCw, X } from 'lucide-react';
+import { Loader2, FolderOpen, RefreshCw, X, Sun, Moon, Laptop } from 'lucide-react';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { ModelVisibilitySettings } from '@/modules/config/components/ModelVisibilitySettings';
 import { AutoSwitchModelSettings } from '@/modules/cloud-account/components/AutoSwitchModelSettings';
 import { WeeklyWarmupSettings } from '@/modules/cloud-account/components/WeeklyWarmupSettings';
@@ -346,18 +347,51 @@ function SettingsPage() {
               <CardDescription>{t('settings.appearance.description')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center justify-between space-x-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1">
-                  <Label htmlFor="dark-mode">{t('settings.darkMode')}</Label>
+                  <Label htmlFor="theme-selector">{t('settings.theme.title', t('settings.appearance.title'))}</Label>
                   <p className="text-muted-foreground text-sm">
-                    {t('settings.darkModeDescription')}
+                    {t('settings.theme.description', t('settings.appearance.description'))}
                   </p>
                 </div>
-                <Switch
-                  id="dark-mode"
-                  checked={theme === 'dark'}
-                  onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
-                />
+                <ToggleGroup
+                  id="theme-selector"
+                  type="single"
+                  value={theme}
+                  onValueChange={(value) => {
+                    if (value) {
+                      setTheme(value as 'dark' | 'light' | 'system');
+                    }
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="bg-muted/30 p-0.5 rounded-lg border self-start sm:self-auto"
+                >
+                  <ToggleGroupItem
+                    value="system"
+                    aria-label={t('settings.theme.system', 'System')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-xs"
+                  >
+                    <Laptop className="h-3.5 w-3.5" />
+                    <span>{t('settings.theme.system', 'System')}</span>
+                  </ToggleGroupItem>
+                  <ToggleGroupItem
+                    value="light"
+                    aria-label={t('settings.theme.light', 'Light')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-xs"
+                  >
+                    <Sun className="h-3.5 w-3.5" />
+                    <span>{t('settings.theme.light', 'Light')}</span>
+                  </ToggleGroupItem>
+                  <ToggleGroupItem
+                    value="dark"
+                    aria-label={t('settings.theme.dark', 'Dark')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-xs"
+                  >
+                    <Moon className="h-3.5 w-3.5" />
+                    <span>{t('settings.theme.dark', 'Dark')}</span>
+                  </ToggleGroupItem>
+                </ToggleGroup>
               </div>
 
               <div className="flex items-center justify-between space-x-2">
@@ -384,6 +418,24 @@ function SettingsPage() {
                     <SelectItem value="fr">{t('settings.language.french')}</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="flex items-center justify-between space-x-2">
+                <div className="space-y-1">
+                  <Label htmlFor="mask-account-info">{t('settings.appearance.maskAccountInfo', 'Mask Account Names & Emails')}</Label>
+                  <p className="text-muted-foreground text-sm">
+                    {t('settings.appearance.maskAccountInfoDescription', 'Completely hide account names and emails across all views for privacy')}
+                  </p>
+                </div>
+                <Switch
+                  id="mask-account-info"
+                  checked={config?.mask_account_info || false}
+                  onCheckedChange={async (checked) => {
+                    if (config) {
+                      await saveConfig({ ...config, mask_account_info: checked });
+                    }
+                  }}
+                />
               </div>
             </CardContent>
           </Card>

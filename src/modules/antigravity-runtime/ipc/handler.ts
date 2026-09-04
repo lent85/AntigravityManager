@@ -1,7 +1,7 @@
 import { exec, execSync, spawn } from 'child_process';
 import path from 'path';
 import { promisify } from 'util';
-import findProcess, { ProcessInfo } from 'find-process';
+import findProcess, { ProcessInfo } from '@/shared/platform/findProcess';
 import { isNumber, isString } from 'lodash-es';
 import {
   type AntigravityProcessCandidate,
@@ -204,6 +204,8 @@ async function reportWindowsFindProcessFailure(error: unknown): Promise<void> {
   );
 }
 
+let lastLoggedProcessSummary = '';
+
 async function findAntigravityProcesses(
   target?: AntigravityAppTarget | null,
   includeAllProcesses = false,
@@ -242,11 +244,14 @@ async function findAntigravityProcesses(
   }
 
   const processes = Array.from(processMap.values());
-  if (processes.length === 0 && sawNoMatch) {
-    logger.debug('No Antigravity process found (pgrep returned 1)');
+  const summaryKey = `${target ?? 'all'}:${processes.map((p) => p.pid).sort().join(',')}`;
+  if (summaryKey !== lastLoggedProcessSummary) {
+    lastLoggedProcessSummary = summaryKey;
+    if (processes.length === 0 && sawNoMatch) {
+      logger.debug('No Antigravity process found (pgrep returned 1)');
+    }
+    logger.debug(`Found ${processes.length} processes matching 'Antigravity/antigravity'`);
   }
-
-  logger.debug(`Found ${processes.length} processes matching 'Antigravity/antigravity'`);
   return processes;
 }
 

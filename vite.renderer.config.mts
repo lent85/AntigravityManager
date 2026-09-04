@@ -50,11 +50,7 @@ export default defineConfig(({ mode }) => {
       }),
       tailwindcss(),
       ...(mode === 'production' ? [] : [codeInspectorPlugin({ bundler: 'vite' })]),
-      react({
-        babel: {
-          plugins: ['babel-plugin-react-compiler'],
-        },
-      }),
+      react(),
     ],
     optimizeDeps: {
       entries: ['index.html'],
@@ -65,7 +61,7 @@ export default defineConfig(({ mode }) => {
       CLARITY_BUILD_CONFIG: JSON.stringify(createClarityBuildConfig(clarityBuildEnv)),
     },
     resolve: {
-      preserveSymlinks: true,
+      dedupe: ['react', 'react-dom'],
       alias: {
         '@': path.resolve(process.cwd(), './src'),
       },

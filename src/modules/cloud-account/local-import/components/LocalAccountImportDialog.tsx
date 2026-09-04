@@ -375,9 +375,16 @@ export function LocalAccountImportDialog() {
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="outline">
-          <DatabaseZap className="h-4 w-4" aria-hidden="true" />
-          {t('cloud.localImport.trigger')}
+        <Button
+          variant="outline"
+          size="sm"
+          title={t('cloud.localImport.trigger')}
+          aria-label={t('cloud.localImport.trigger')}
+          className="h-8 cursor-pointer px-2.5 text-xs"
+        >
+          <DatabaseZap className="h-3.5 w-3.5 @md:mr-1.5" aria-hidden="true" />
+          <span className="hidden @4xl:inline">{t('cloud.localImport.trigger')}</span>
+          <span className="hidden @md:inline @4xl:hidden">Scan</span>
         </Button>
       </DialogTrigger>
       <DialogContent

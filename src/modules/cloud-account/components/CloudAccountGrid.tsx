@@ -5,6 +5,7 @@ import {
   CloudAccountCard,
   CompactCloudAccountCard,
 } from '@/modules/cloud-account/components/CloudAccountCard';
+import { DualCompactCloudAccountCard } from '@/modules/cloud-account/components/DualCompactCloudAccountCard';
 import {
   GRID_LAYOUT_CLASSES,
   type GridLayout,
@@ -54,22 +55,43 @@ export function CloudAccountGrid({
 
   return (
     <div className={GRID_LAYOUT_CLASSES[gridLayout]}>
-      {accounts.map((account) =>
-        gridLayout === 'compact' ? (
-          <CompactCloudAccountCard
-            key={account.id}
-            account={account}
-            quotaWindow={quotaWindow}
-            onRefresh={onRefresh}
-            onDelete={onDelete}
-            onSwitch={onSwitch}
-            onManageIdentity={onManageIdentity}
-            isRefreshing={refreshingAccountId === account.id}
-            isDeleting={deletingAccountId === account.id}
-            isSwitching={switchingAccountId === account.id}
-            switchingTarget={switchingAccountId === account.id ? switchingTarget : undefined}
-          />
-        ) : (
+      {accounts.map((account) => {
+        if (gridLayout === 'compact-dual') {
+          return (
+            <DualCompactCloudAccountCard
+              key={account.id}
+              account={account}
+              onRefresh={onRefresh}
+              onDelete={onDelete}
+              onSwitch={onSwitch}
+              onManageIdentity={onManageIdentity}
+              isRefreshing={refreshingAccountId === account.id}
+              isDeleting={deletingAccountId === account.id}
+              isSwitching={switchingAccountId === account.id}
+              switchingTarget={switchingAccountId === account.id ? switchingTarget : undefined}
+            />
+          );
+        }
+
+        if (gridLayout === 'compact') {
+          return (
+            <CompactCloudAccountCard
+              key={account.id}
+              account={account}
+              quotaWindow={quotaWindow}
+              onRefresh={onRefresh}
+              onDelete={onDelete}
+              onSwitch={onSwitch}
+              onManageIdentity={onManageIdentity}
+              isRefreshing={refreshingAccountId === account.id}
+              isDeleting={deletingAccountId === account.id}
+              isSwitching={switchingAccountId === account.id}
+              switchingTarget={switchingAccountId === account.id ? switchingTarget : undefined}
+            />
+          );
+        }
+
+        return (
           <CloudAccountCard
             key={account.id}
             account={account}
@@ -84,8 +106,8 @@ export function CloudAccountGrid({
             isDeleting={deletingAccountId === account.id}
             isSwitching={switchingAccountId === account.id}
           />
-        ),
-      )}
+        );
+      })}
 
       {accounts.length === 0 && hasActiveTierFilter && sourceAccountCount > 0 && (
         <div className="text-muted-foreground bg-muted/20 col-span-full rounded-lg border border-dashed py-14 text-center">

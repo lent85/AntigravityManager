@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { ipc } from '@/ipc/manager';
+import { ThemeMode } from '@/modules/app-shell/types/theme-mode';
+import { LOCAL_STORAGE_KEYS } from '@/shared/constants';
 
-type Theme = 'dark' | 'light' | 'system';
+export type Theme = ThemeMode;
 
 type ThemeProviderProps = {
   children: React.ReactNode;
@@ -22,7 +24,7 @@ const initialState: ThemeProviderState = {
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 
 export function ThemeProvider(props: ThemeProviderProps) {
-  const { children, defaultTheme = 'system', storageKey = 'vite-ui-theme' } = props;
+  const { children, defaultTheme = 'system', storageKey = LOCAL_STORAGE_KEYS.THEME } = props;
   const [theme, setTheme] = useState<Theme>(
     () => (localStorage.getItem(storageKey) as Theme) || defaultTheme,
   );
@@ -30,26 +32,32 @@ export function ThemeProvider(props: ThemeProviderProps) {
   useEffect(() => {
     const root = window.document.documentElement;
 
-    root.classList.remove('light', 'dark');
+    const applyTheme = (resolved: 'dark' | 'light') => {
+      root.classList.remove('light', 'dark');
+      root.classList.add(resolved);
+    };
 
     if (theme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light';
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      applyTheme(mediaQuery.matches ? 'dark' : 'light');
 
-      root.classList.add(systemTheme);
-      return;
+      const handleChange = (e: MediaQueryListEvent) => {
+        applyTheme(e.matches ? 'dark' : 'light');
+      };
+
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
     }
 
-    root.classList.add(theme);
+    applyTheme(theme);
   }, [theme]);
 
   const value = {
     theme,
-    setTheme: (theme: Theme) => {
-      localStorage.setItem(storageKey, theme);
-      setTheme(theme);
-      ipc.client.theme.setThemeMode(theme);
+    setTheme: (newTheme: Theme) => {
+      localStorage.setItem(storageKey, newTheme);
+      setTheme(newTheme);
+      ipc.client.theme.setThemeMode(newTheme);
     },
   };
 

@@ -58,6 +58,7 @@ export const AppConfigSchema = z.object({
   refresh_interval: z.number(), // minutes
   auto_sync: z.boolean(),
   sync_interval: z.number(), // minutes
+  process_poll_interval: z.number().default(30), // seconds, 0 means manual only
   auto_startup: z.boolean(),
   start_in_tray: z.boolean().default(false),
   error_reporting_enabled: z.boolean(),
@@ -67,7 +68,8 @@ export const AppConfigSchema = z.object({
   default_export_path: z.string().nullable().optional(), // Export path
   model_visibility: z.record(z.string(), z.boolean()).default({}), // Model visibility preferences
   provider_groupings_enabled: z.boolean().default(false), // Enable provider groupings UI
-  grid_layout: z.enum(['auto', '2-col', '3-col', 'list', 'compact']).default('auto'), // Account card grid layout
+  mask_account_info: z.boolean().default(false), // Mask sensitive account identity (name & email) across all views
+  grid_layout: z.enum(['auto', '2-col', '3-col', 'list', 'compact', 'compact-dual']).default('auto'), // Account card grid layout
   account_sort: z
     .enum(['recently-used', 'quota-overall', 'quota-claude', 'quota-pro3', 'quota-flash'])
     .default('recently-used'),
@@ -92,11 +94,12 @@ export type AppConfig = z.infer<typeof AppConfigSchema>;
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
   language: 'zh-CN',
-  theme: 'dark',
+  theme: 'system',
   auto_refresh: false,
   refresh_interval: 15,
   auto_sync: false,
   sync_interval: 5,
+  process_poll_interval: 30,
   auto_startup: false,
   start_in_tray: false,
   error_reporting_enabled: true,
@@ -106,6 +109,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   default_export_path: null,
   model_visibility: {}, // Model visibility preferences
   provider_groupings_enabled: false, // Enable provider groupings UI
+  mask_account_info: false, // Mask sensitive account identity
   grid_layout: 'auto' as const, // Account card grid layout
   account_sort: 'recently-used' as const,
   account_tier_filter: [],

@@ -1,7 +1,6 @@
 import { CalendarDays } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { WeeklyQuotaItem } from '@/modules/cloud-account/utils/quota-groups';
 import {
   clampQuotaPercentage,
@@ -9,6 +8,9 @@ import {
   formatResetTimeTitle,
   getQuotaStatus,
 } from '@/modules/cloud-account/utils/quota-display';
+
+import { QuotaIndicatorTooltip } from '@/modules/cloud-account/components/QuotaIndicatorTooltip';
+import { cn } from '@/shared/ui/utils';
 
 interface WeeklyQuotaDisplayProps {
   items: WeeklyQuotaItem[];
@@ -56,45 +58,28 @@ export function WeeklyQuotaDisplay({
   if (variant === 'compact') {
     return (
       <div className="mt-1 flex items-center gap-1">
-        {items.map((item) => {
-          const status = getQuotaStatus(item.percentage);
-          return (
-            <TooltipProvider key={item.id}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div
-                    tabIndex={0}
-                    role="progressbar"
-                    aria-label={`${item.groupName}: ${item.bucketLabel}`}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={clampQuotaPercentage(item.percentage)}
-                    className="bg-muted h-1.5 w-12 overflow-hidden rounded-full"
-                  >
-                    <div
-                      className={`h-full rounded-full transition-all duration-300 ${BAR_CLASS[status]}`}
-                      style={{ width: `${clampQuotaPercentage(item.percentage)}%` }}
-                    />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs">
-                    {item.groupName || t('cloud.card.quotaGroupUnknown')}: {item.percentage}%
-                  </p>
-                  <p className="text-muted-foreground text-[10px]">
-                    {formatResetTimeLabel(item.resetTime, {
-                      prefix: t('cloud.card.resetPrefix'),
-                      unknown: t('cloud.card.resetUnknown'),
-                    })}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          );
-        })}
+        {items.map((item) => (
+          <QuotaIndicatorTooltip
+            key={item.id}
+            name={item.groupName || item.bucketLabel}
+            displayName={`${item.groupName}: ${item.bucketLabel}`}
+            percentage={item.percentage}
+            periodType="weekly"
+            resetTime={item.resetTime}
+            barWidth="w-12"
+            barHeight="h-1.5"
+          />
+        ))}
       </div>
     );
   }
+
+  const gridColsClass =
+    items.length === 1
+      ? 'grid-cols-1'
+      : items.length === 2
+        ? 'grid-cols-1 sm:grid-cols-2'
+        : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3';
 
   return (
     <div className="space-y-2">
@@ -105,39 +90,41 @@ export function WeeklyQuotaDisplay({
         </span>
         <div className="bg-border/50 h-px flex-1" />
       </div>
-      {items.map((item) => {
-        const status = getQuotaStatus(item.percentage);
-        return (
-          <div key={item.id} className="bg-muted/25 rounded-lg border px-2 py-2">
-            <div className="mb-1.5 flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="truncate text-xs font-semibold">
-                  {item.groupName || t('cloud.card.quotaGroupUnknown')}
+      <div className={cn('grid gap-2', gridColsClass)}>
+        {items.map((item) => {
+          const status = getQuotaStatus(item.percentage);
+          return (
+            <div key={item.id} className="bg-muted/25 rounded-lg border px-2 py-2">
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-semibold">
+                    {item.groupName || t('cloud.card.quotaGroupUnknown')}
+                  </div>
+                  <div className="text-muted-foreground truncate text-[9px]">{item.bucketLabel}</div>
                 </div>
-                <div className="text-muted-foreground truncate text-[9px]">{item.bucketLabel}</div>
+                <span className={`font-mono text-xs font-bold ${TEXT_CLASS[status]}`}>
+                  {item.percentage}%
+                </span>
               </div>
-              <span className={`font-mono text-xs font-bold ${TEXT_CLASS[status]}`}>
-                {item.percentage}%
-              </span>
-            </div>
-            <div className="bg-muted h-1.5 overflow-hidden rounded-full">
+              <div className="bg-muted h-1.5 overflow-hidden rounded-full">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${BAR_CLASS[status]}`}
+                  style={{ width: `${clampQuotaPercentage(item.percentage)}%` }}
+                />
+              </div>
               <div
-                className={`h-full rounded-full transition-all duration-300 ${BAR_CLASS[status]}`}
-                style={{ width: `${clampQuotaPercentage(item.percentage)}%` }}
-              />
+                className="text-muted-foreground mt-1 truncate text-[9px]"
+                title={formatResetTimeTitle(item.resetTime, t('cloud.card.resetTime'))}
+              >
+                {formatResetTimeLabel(item.resetTime, {
+                  prefix: t('cloud.card.resetPrefix'),
+                  unknown: t('cloud.card.resetUnknown'),
+                })}
+              </div>
             </div>
-            <div
-              className="text-muted-foreground mt-1 truncate text-[9px]"
-              title={formatResetTimeTitle(item.resetTime, t('cloud.card.resetTime'))}
-            >
-              {formatResetTimeLabel(item.resetTime, {
-                prefix: t('cloud.card.resetPrefix'),
-                unknown: t('cloud.card.resetUnknown'),
-              })}
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

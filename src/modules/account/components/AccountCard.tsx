@@ -16,6 +16,12 @@ import { formatDistanceToNow, type Locale } from 'date-fns';
 import { enUS, fr, ru, vi, zhCN } from 'date-fns/locale';
 import { cn } from '@/shared/ui/utils';
 import { useTranslation } from 'react-i18next';
+import { useAppConfig } from '@/modules/config/hooks/useAppConfig';
+import {
+  maskEmail,
+  maskInitial,
+  maskName,
+} from '@/modules/cloud-account/utils/identity-masking';
 
 const DEFAULT_GLARE_POSITION = { x: 50, y: 50 };
 const DEFAULT_CARD_TRANSFORM = 'perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)';
@@ -45,18 +51,24 @@ export const AccountCard: React.FC<AccountCardProps> = ({
   isDeleting,
 }) => {
   const { t, i18n } = useTranslation();
+  const { config } = useAppConfig();
   const cardRef = useRef<HTMLDivElement>(null);
   const [cardTransform, setCardTransform] = useState('');
   const [glarePosition, setGlarePosition] = useState(DEFAULT_GLARE_POSITION);
 
-  const initials = account.name
-    ? account.name
-        .split(' ')
-        .map((n) => n[0])
-        .join('')
-        .toUpperCase()
-        .slice(0, 2)
-    : account.email[0].toUpperCase();
+  const isMasked = Boolean(config?.mask_account_info);
+  const displayName = maskName(account.name, isMasked, t('account.unknown', 'Unknown'));
+  const displayEmail = maskEmail(account.email, isMasked);
+  const initials = isMasked
+    ? maskInitial(account.name, account.email, true)
+    : account.name
+      ? account.name
+          .split(' ')
+          .map((n) => n[0])
+          .join('')
+          .toUpperCase()
+          .slice(0, 2)
+      : account.email[0].toUpperCase();
 
   // Handle pointer movement and calculate 3D rotation angles
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -125,7 +137,7 @@ export const AccountCard: React.FC<AccountCardProps> = ({
         <CardContent className="flex items-center justify-between p-4">
           <div className="flex min-w-0 flex-1 items-center gap-4">
             <Avatar className={cn('h-10 w-10', isCurrent && 'ring-primary ring-2 ring-offset-2')}>
-              <AvatarImage src={account.avatar_url} />
+              <AvatarImage src={!isMasked ? account.avatar_url : undefined} />
               <AvatarFallback className={isCurrent ? 'bg-primary text-primary-foreground' : ''}>
                 {initials}
               </AvatarFallback>
@@ -133,7 +145,7 @@ export const AccountCard: React.FC<AccountCardProps> = ({
 
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex items-center gap-2">
-                <h4 className="truncate leading-none font-semibold">{account.name}</h4>
+                <h4 className="truncate leading-none font-semibold">{displayName}</h4>
                 {isCurrent && (
                   <Badge variant="default" className="h-5 flex-none px-1.5 text-[10px]">
                     {t('account.current')}
@@ -143,7 +155,7 @@ export const AccountCard: React.FC<AccountCardProps> = ({
                   <RefreshCw className="text-muted-foreground h-3 w-3 flex-none animate-spin" />
                 )}
               </div>
-              <p className="text-muted-foreground truncate text-sm">{account.email}</p>
+              <p className="text-muted-foreground truncate text-sm">{displayEmail}</p>
               <p className="text-muted-foreground/60 truncate text-xs">
                 {t('account.lastUsed', {
                   time: formatDistanceToNow(new Date(account.last_used), {

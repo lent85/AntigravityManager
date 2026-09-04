@@ -26,7 +26,20 @@ import {
   setActiveOAuthClient,
   exportCloudAccounts,
   importCloudAccounts,
+  getMetricsPollInterval,
+  setMetricsPollInterval,
+  getEmulationState,
+  setEmulationEnabled,
+  setEmulationTickInterval,
+  generateEmulatedAccounts,
+  updateEmulatedAccountStrategy,
+  resetEmulatedQuotas,
+  clearEmulatedAccounts,
 } from './handler';
+import {
+  AccountEmulationStrategyConfigSchema,
+  EmulationStateSchema,
+} from '@/modules/cloud-account/emulation/types';
 import { CloudAccountRepo } from '@/modules/cloud-account/persistence/cloudHandler';
 import {
   AGY_SYNC_FROM_IDE_UNSUPPORTED_MESSAGE,
@@ -394,4 +407,81 @@ export const cloudRouter = os.router({
         throw error;
       }
     }),
+
+  getMetricsPollInterval: os.output(z.number()).handler(async () => {
+    return getMetricsPollInterval();
+  }),
+
+  setMetricsPollInterval: os
+    .input(z.object({ intervalMinutes: z.number().min(0).max(1440) }))
+    .output(z.number())
+    .handler(async ({ input }) => {
+      return setMetricsPollInterval(input.intervalMinutes);
+    }),
+
+  getEmulationState: os.output(EmulationStateSchema).handler(async () => {
+    return getEmulationState();
+  }),
+
+  setEmulationEnabled: os
+    .input(z.object({ enabled: z.boolean() }))
+    .output(EmulationStateSchema)
+    .handler(async ({ input }) => {
+      return setEmulationEnabled(input.enabled);
+    }),
+
+  setEmulationTickInterval: os
+    .input(z.object({ seconds: z.number().min(5).max(3600) }))
+    .output(EmulationStateSchema)
+    .handler(async ({ input }) => {
+      return setEmulationTickInterval(input.seconds);
+    }),
+
+  generateEmulatedAccounts: os
+    .input(
+      z.object({
+        count: z.number().min(1).max(200),
+        preset: z
+          .enum([
+            'drain_demo',
+            'auto_switch_test_bench',
+            'bursty_workload',
+            'rate_limited_test',
+            'balanced_pool',
+            'random_modern_mix',
+          ])
+          .optional(),
+        randomizeModels: z.boolean().optional(),
+        minModelsPerAccount: z.number().min(1).max(20).optional(),
+        maxModelsPerAccount: z.number().min(1).max(20).optional(),
+      }),
+    )
+    .output(z.array(z.any()))
+    .handler(async ({ input }) => {
+      return generateEmulatedAccounts(input.count, input.preset, {
+        randomizeModels: input.randomizeModels,
+        minModelsPerAccount: input.minModelsPerAccount,
+        maxModelsPerAccount: input.maxModelsPerAccount,
+      });
+    }),
+
+  updateEmulatedAccountStrategy: os
+    .input(
+      z.object({
+        accountId: z.string(),
+        strategy: AccountEmulationStrategyConfigSchema,
+      }),
+    )
+    .output(z.any().nullable())
+    .handler(async ({ input }) => {
+      return updateEmulatedAccountStrategy(input.accountId, input.strategy);
+    }),
+
+  resetEmulatedQuotas: os.output(EmulationStateSchema).handler(async () => {
+    return resetEmulatedQuotas();
+  }),
+
+  clearEmulatedAccounts: os.output(EmulationStateSchema).handler(async () => {
+    return clearEmulatedAccounts();
+  }),
 });

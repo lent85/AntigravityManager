@@ -1,6 +1,6 @@
 import { ipcRenderer, contextBridge } from 'electron';
 import type { RendererPerformanceSnapshot } from './modules/app-shell/performance-recorder/types';
-import { IPC_CHANNELS } from './shared/constants';
+import { IPC_CHANNELS } from '@/shared/constants';
 
 window.addEventListener('message', (event) => {
   if (event.data === IPC_CHANNELS.START_ORPC_SERVER) {

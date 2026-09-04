@@ -1,7 +1,7 @@
 import { execFile } from 'child_process';
 import path from 'path';
 import { promisify } from 'util';
-import findProcess from 'find-process';
+import findProcess from '@/shared/platform/findProcess';
 import psList from 'ps-list';
 
 const WINDOWS_PROCESS_COMMAND_TIMEOUT_MS = 3000;

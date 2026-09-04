@@ -4,7 +4,12 @@ import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 import type { ProviderStats } from '@/modules/cloud-account/utils/provider-grouping';
-import { clampQuotaPercentage } from '@/modules/cloud-account/utils/quota-display';
+import {
+  clampQuotaPercentage,
+  formatResetTimeLabel,
+  formatResetTimeTitle,
+} from '@/modules/cloud-account/utils/quota-display';
+import { cn } from '@/shared/ui/utils';
 
 interface ProviderGroupProps {
   stats: ProviderStats;
@@ -13,8 +18,6 @@ interface ProviderGroupProps {
   getQuotaTextColorClass: (percentage: number) => string;
   getQuotaBarColorClass: (percentage: number) => string;
   formatQuotaLabel: (percentage: number) => string;
-  formatResetTimeLabel: (resetTime?: string) => string;
-  formatResetTimeTitle: (resetTime?: string) => string | undefined;
   leftLabel: string;
 }
 
@@ -25,8 +28,6 @@ export const ProviderGroup: React.FC<ProviderGroupProps> = ({
   getQuotaTextColorClass,
   getQuotaBarColorClass,
   formatQuotaLabel,
-  formatResetTimeLabel,
-  formatResetTimeTitle,
   leftLabel,
 }) => {
   const { t } = useTranslation();
@@ -35,6 +36,16 @@ export const ProviderGroup: React.FC<ProviderGroupProps> = ({
   if (visibleModels.length === 0) {
     return null;
   }
+
+  const gridStyle =
+    visibleModels.length === 1
+      ? undefined
+      : { gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' };
+
+  const gridColsClass =
+    visibleModels.length === 1
+      ? 'grid-cols-1'
+      : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
 
   return (
     <div className="border-border/60 overflow-hidden rounded-lg border">
@@ -70,9 +81,9 @@ export const ProviderGroup: React.FC<ProviderGroupProps> = ({
           {earliestReset && (
             <span
               className="text-muted-foreground text-[10px]"
-              title={formatResetTimeTitle(earliestReset)}
+              title={formatResetTimeTitle(earliestReset, t('cloud.card.resetTime'))}
             >
-              {formatResetTimeLabel(earliestReset)}
+              {formatResetTimeLabel(earliestReset, { prefix: '', unknown: '' })}
             </span>
           )}
           <div className="flex items-baseline gap-1">
@@ -98,43 +109,61 @@ export const ProviderGroup: React.FC<ProviderGroupProps> = ({
 
       {/* Individual model rows (shown when expanded) */}
       {!isCollapsed && (
-        <div className="border-border/40 border-t">
-          {visibleModels.map((model, index) => (
-            <div
-              key={model.id}
-              className={`hover:bg-muted/60 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-3 py-2 pl-9 text-sm transition-colors ${
-                index < visibleModels.length - 1 ? 'border-border/20 border-b' : ''
-              }`}
-            >
-              <span className="text-muted-foreground min-w-0 truncate" title={model.id}>
-                {model.id.replace('models/', '')}
-              </span>
-              <div className="flex flex-col items-end gap-1">
-                <span
-                  className="text-muted-foreground text-[10px] leading-none"
-                  title={formatResetTimeTitle(model.resetTime)}
-                >
-                  {formatResetTimeLabel(model.resetTime)}
-                </span>
-                <div className="flex items-baseline gap-1.5">
+        <div
+          className={cn('border-border/40 grid gap-1.5 border-t p-2', gridColsClass)}
+          style={gridStyle}
+        >
+          {visibleModels.map((model) => {
+            const rawTimeLabel = formatResetTimeLabel(model.resetTime, {
+              prefix: '',
+              unknown: '',
+            }).trim();
+
+            return (
+              <div
+                key={model.id}
+                className="hover:bg-muted/60 bg-muted/15 flex flex-col justify-center gap-1 rounded-md border border-transparent p-2 text-sm transition-colors"
+              >
+                {/* Row 1: Model Name & Percentage */}
+                <div className="flex items-center justify-between gap-2">
                   <span
-                    className={`font-mono leading-none font-bold ${getQuotaTextColorClass(model.percentage)}`}
+                    className="text-muted-foreground min-w-0 truncate text-xs font-semibold"
+                    title={model.id}
                   >
-                    {formatQuotaLabel(model.percentage)}
+                    {model.id.replace('models/', '')}
                   </span>
-                  {model.percentage > 0 && (
-                    <span className="text-muted-foreground text-[10px]">{leftLabel}</span>
+                  <div className="flex items-baseline gap-1 shrink-0">
+                    <span
+                      className={`font-mono text-xs leading-none font-bold ${getQuotaTextColorClass(model.percentage)}`}
+                    >
+                      {formatQuotaLabel(model.percentage)}
+                    </span>
+                    {model.percentage > 0 && (
+                      <span className="text-muted-foreground text-[9px]">{leftLabel}</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Row 2: Slim Progress Bar & Countdown Time */}
+                <div className="flex items-center gap-2">
+                  <div className="bg-muted h-1.5 flex-1 overflow-hidden rounded-full">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${getQuotaBarColorClass(model.percentage)}`}
+                      style={{ width: `${clampQuotaPercentage(model.percentage)}%` }}
+                    />
+                  </div>
+                  {rawTimeLabel && (
+                    <span
+                      className="text-muted-foreground/80 font-mono text-[10px] shrink-0 leading-none"
+                      title={formatResetTimeTitle(model.resetTime, t('cloud.card.resetTime'))}
+                    >
+                      {rawTimeLabel}
+                    </span>
                   )}
                 </div>
-                <div className="bg-muted h-1.5 w-24 overflow-hidden rounded-full">
-                  <div
-                    className={`h-full rounded-full transition-all duration-300 ${getQuotaBarColorClass(model.percentage)}`}
-                    style={{ width: `${clampQuotaPercentage(model.percentage)}%` }}
-                  />
-                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
