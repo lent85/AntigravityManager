@@ -132,8 +132,14 @@ describe('AccountEmulationService', () => {
         observedModelIds.add(k);
       }
 
-      // Quantity must be within default 2 to 6
-      assert.ok(keys.length >= 2 && keys.length <= 6, `Expected 2..6 models, got ${keys.length}`);
+      // Quantity must be within default 2 to 10
+      assert.ok(keys.length >= 2 && keys.length <= 10, `Expected 2..10 models, got ${keys.length}`);
+
+      // Each account must contain models of different types (both Gemini and Claude)
+      const hasGemini = keys.some((k) => k.toLowerCase().includes('gemini'));
+      const hasClaude = keys.some((k) => k.toLowerCase().includes('claude'));
+      assert.ok(hasGemini, `Account ${acc.id} must include at least one Gemini model`);
+      assert.ok(hasClaude, `Account ${acc.id} must include at least one Claude model`);
 
       // Each model should have a valid percentage and reset time
       for (const modelInfo of Object.values(acc.quota.models)) {

@@ -282,21 +282,38 @@ export class AccountEmulationService {
 
       if (shouldRandomizeModels) {
         const minModels = Math.max(1, Math.min(options?.minModelsPerAccount ?? 2, SIMULATION_MODERN_MODELS.length));
-        const maxModels = Math.max(minModels, Math.min(options?.maxModelsPerAccount ?? 6, SIMULATION_MODERN_MODELS.length));
+        const maxModels = Math.max(minModels, Math.min(options?.maxModelsPerAccount ?? 10, SIMULATION_MODERN_MODELS.length));
         const targetModelCount = Math.floor(Math.random() * (maxModels - minModels + 1)) + minModels;
 
-        // Shuffle models
-        const pool = [...SIMULATION_MODERN_MODELS].sort(() => Math.random() - 0.5);
+        const geminiPool = SIMULATION_MODERN_MODELS.filter(
+          (m) => m.provider === 'google' || m.id.toLowerCase().includes('gemini'),
+        ).sort(() => Math.random() - 0.5);
 
-        // Ensure at least one model matching the account provider
-        const providerMatchIndex = pool.findIndex((m) => m.provider === provider);
+        const claudePool = SIMULATION_MODERN_MODELS.filter(
+          (m) => m.provider === 'anthropic' || m.id.toLowerCase().includes('claude'),
+        ).sort(() => Math.random() - 0.5);
+
         const selectedModelDefs: SimulationModelDefinition[] = [];
-        if (providerMatchIndex >= 0) {
-          selectedModelDefs.push(pool.splice(providerMatchIndex, 1)[0]!);
+
+        // Ensure at least one Gemini and at least one Claude model
+        if (geminiPool.length > 0) {
+          selectedModelDefs.push(geminiPool.shift()!);
+        }
+        if (claudePool.length > 0) {
+          selectedModelDefs.push(claudePool.shift()!);
         }
 
-        while (selectedModelDefs.length < targetModelCount && pool.length > 0) {
-          selectedModelDefs.push(pool.shift()!);
+        // Remaining pool contains all other models without duplicates
+        const remainingPool = [
+          ...geminiPool,
+          ...claudePool,
+          ...SIMULATION_MODERN_MODELS.filter((m) => !selectedModelDefs.some((s) => s.id === m.id)),
+        ]
+          .filter((m, idx, arr) => arr.findIndex((x) => x.id === m.id) === idx)
+          .sort(() => Math.random() - 0.5);
+
+        while (selectedModelDefs.length < targetModelCount && remainingPool.length > 0) {
+          selectedModelDefs.push(remainingPool.shift()!);
         }
 
         let hasClaude = false;

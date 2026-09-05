@@ -578,7 +578,7 @@ export function CloudAccountCard({
               {account.provider.toUpperCase()}
             </Badge>
             <AccountTierBadge account={account} unknownLabel={t('cloud.tierFilter.unknown')} />
-            {account.is_emulated && (
+            {account.is_emulated && !isMasked && (
               <span
                 className="flex items-center gap-1 rounded border border-purple-500/30 bg-purple-500/15 px-1.5 py-0 text-[10px] font-bold text-purple-400 h-5"
                 title={
@@ -1120,7 +1120,7 @@ export function CompactCloudAccountCard({
             unknownLabel={t('cloud.tierFilter.unknown')}
             className="h-4 max-w-24 px-1 text-[9px]"
           />
-          {account.is_emulated && (
+          {account.is_emulated && !isMasked && (
             <span
               className="rounded border border-purple-500/30 bg-purple-500/15 px-1 text-[9px] font-bold text-purple-400 flex items-center gap-0.5"
               title={

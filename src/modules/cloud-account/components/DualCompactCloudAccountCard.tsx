@@ -191,7 +191,7 @@ export function DualCompactCloudAccountCard({
               unknownLabel={t('cloud.tierFilter.unknown')}
               className="h-4 max-w-24 px-1 text-[9px]"
             />
-            {account.is_emulated && (
+            {account.is_emulated && !isMasked && (
               <span
                 className="rounded border border-purple-500/30 bg-purple-500/15 px-1 text-[9px] font-bold text-purple-400 flex items-center gap-0.5"
                 title={
