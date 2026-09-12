@@ -10,6 +10,8 @@ import {
   useSetAutoSwitchEnabled,
   useForcePollCloudMonitor,
   useSyncLocalAccount,
+  useMarkActiveAccount,
+  useDetectActiveAccounts,
   useOAuthClients,
   useSetActiveOAuthClient,
   startAuthFlow,
@@ -47,6 +49,7 @@ import {
   readQuotaWindowPreference,
   saveQuotaWindowPreference,
 } from '@/modules/cloud-account/utils/quota-window-preference';
+import { EmulationManagementDialog } from '@/modules/cloud-account/components/EmulationManagementDialog';
 
 export function CloudAccountList() {
   const { t } = useTranslation();
@@ -69,6 +72,8 @@ export function CloudAccountList() {
   const deleteMutation = useDeleteCloudAccount();
   const addMutation = useAddGoogleAccount();
   const switchMutation = useSwitchCloudAccount();
+  const markActiveMutation = useMarkActiveAccount();
+  const detectMutation = useDetectActiveAccounts();
   const syncMutation = useSyncLocalAccount();
 
   const { data: autoSwitchEnabled, isLoading: isSettingsLoading } = useAutoSwitchEnabled();
@@ -238,6 +243,19 @@ export function CloudAccountList() {
 
   // Batch Operations State
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isEmulationDialogOpen, setIsEmulationDialogOpen] = useState(false);
+
+  // Stealth shortcut: Ctrl+Shift+E toggles the emulation management dialog
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'E' || e.key === 'e')) {
+        e.preventDefault();
+        setIsEmulationDialogOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (!isError || !errorUpdatedAt || errorUpdatedAt === lastLoadErrorToastAtRef.current) {
@@ -301,6 +319,59 @@ export function CloudAccountList() {
           }),
       },
     );
+  };
+
+  const handleMarkActive = (id: string, appTarget?: AntigravityAppTarget) => {
+    markActiveMutation.mutate(
+      { accountId: id, appTarget },
+      {
+        onSuccess: (acc: CloudAccount) => {
+          const targetName =
+            appTarget === 'ide'
+              ? 'Antigravity IDE'
+              : appTarget === 'agy'
+                ? 'Antigravity CLI'
+                : 'Antigravity';
+          toast({
+            title: t('cloud.markActive.success', { target: targetName }),
+            description: acc.email,
+          });
+        },
+        onError: (err) =>
+          toast({
+            title: t('cloud.markActive.failed'),
+            description: getLocalizedErrorMessage(err, t),
+            variant: 'destructive',
+          }),
+      },
+    );
+  };
+
+  const handleDetectActive = () => {
+    detectMutation.mutate(undefined, {
+      onSuccess: (data) => {
+        const detectedTargets: string[] = [];
+        if (data.classic) detectedTargets.push(`Antigravity: ${data.classic.email}`);
+        if (data.ide) detectedTargets.push(`IDE: ${data.ide.email}`);
+        if (data.agy) detectedTargets.push(`CLI: ${data.agy.email}`);
+
+        if (detectedTargets.length > 0) {
+          toast({
+            title: t('cloud.autoDetectSuccess', { details: detectedTargets.join(', ') }),
+          });
+        } else {
+          toast({
+            title: t('cloud.autoDetectNone'),
+          });
+        }
+      },
+      onError: (err) =>
+        toast({
+          title: t('cloud.autoDetectFailed'),
+          description: getLocalizedErrorMessage(err, t),
+          variant: 'destructive',
+        }),
+    });
   };
 
   const handleDelete = (id: string) => {
@@ -758,6 +829,8 @@ export function CloudAccountList() {
         onToggleSelectAllAccounts={toggleSelectAllAccounts}
         onForcePoll={handleForcePoll}
         onSyncLocal={handleSyncLocal}
+        isDetectActivePending={detectMutation.isPending}
+        onDetectActiveAccounts={handleDetectActive}
         onExportDialogOpenChange={setIsExportDialogOpen}
         onImportDialogOpenChange={handleImportDialogOpenChange}
         onAddDialogOpenChange={handleAddDialogOpenChange}
@@ -799,6 +872,7 @@ export function CloudAccountList() {
         }}
         originFilter={originFilter}
         onOriginFilterChange={setOriginFilter}
+        showEmulationUi={Boolean(config?.show_emulation_ui)}
       />
 
       <CloudAccountGrid
@@ -815,6 +889,7 @@ export function CloudAccountList() {
         onRefresh={handleRefresh}
         onDelete={handleDelete}
         onSwitch={handleSwitch}
+        onMarkActive={handleMarkActive}
         onManageIdentity={handleManageIdentity}
         onToggleSelection={setSelectionState}
         onResetTierFilter={() => {
@@ -839,6 +914,11 @@ export function CloudAccountList() {
             setIdentityAccount(null);
           }
         }}
+      />
+
+      <EmulationManagementDialog
+        open={isEmulationDialogOpen}
+        onOpenChange={setIsEmulationDialogOpen}
       />
     </div>
   );

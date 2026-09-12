@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -61,7 +62,7 @@ export function EmulationPage() {
 
   const [count, setCount] = useState<number>(3);
   const [selectedPreset, setSelectedPreset] = useState<EmulationPresetType>('drain_demo');
-  const [randomizeModels, setRandomizeModels] = useState<boolean>(true);
+  const [randomizeQuota, setRandomizeQuota] = useState<boolean>(true);
 
   const isEnabled = !!emulationState?.enabled;
   const tickInterval = emulationState?.tickIntervalSeconds || 10;
@@ -108,19 +109,24 @@ export function EmulationPage() {
   };
 
   const handleGenerate = () => {
+    const validCount = Math.max(1, Math.min(200, Number(count) || 1));
+    if (validCount !== count) {
+      setCount(validCount);
+    }
     generateMutation.mutate(
       {
-        count,
+        count: validCount,
         preset: selectedPreset,
-        randomizeModels: selectedPreset === 'random_modern_mix' || randomizeModels,
+        randomizeQuota: selectedPreset === 'random_modern_mix' || randomizeQuota,
+        randomizeModels: selectedPreset === 'random_modern_mix' || randomizeQuota,
       },
       {
         onSuccess: () => {
           toast({
             title: t('cloud.emulation.toast.generated', 'Accounts Generated'),
             description: t('cloud.emulation.toast.generatedDesc', {
-              count,
-              defaultValue: `Successfully generated ${count} emulated account(s).`,
+              count: validCount,
+              defaultValue: `Successfully generated ${validCount} emulated account(s).`,
             }),
           });
         },
@@ -346,53 +352,92 @@ export function EmulationPage() {
               <div className="space-y-0.5 pr-2">
                 <Label htmlFor="randomize-models-switch" className="text-xs font-medium cursor-pointer flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                  {t('cloud.emulation.randomizeModels', 'Randomize Modern Models')}
+                  {t('cloud.emulation.randomizeQuota', 'Randomize Quota Levels')}
                 </Label>
                 <p className="text-[11px] text-muted-foreground">
-                  {t('cloud.emulation.randomizeModelsDesc', 'Assign 2–6 random modern models per account with diverse quota levels.')}
+                  {t('cloud.emulation.randomizeQuotaDesc', 'Randomize 5h and weekly quota levels across accounts (consistent within Gemini and Claude groups).')}
                 </p>
               </div>
               <Switch
                 id="randomize-models-switch"
-                checked={randomizeModels || selectedPreset === 'random_modern_mix'}
-                onCheckedChange={(checked) => setRandomizeModels(checked)}
+                checked={randomizeQuota || selectedPreset === 'random_modern_mix'}
+                onCheckedChange={(checked) => setRandomizeQuota(checked)}
                 disabled={selectedPreset === 'random_modern_mix'}
               />
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="w-32 space-y-1.5">
-                <Label className="text-xs font-medium">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="custom-account-count-input" className="text-xs font-medium">
                   {t('cloud.emulation.quantity', 'Quantity')}
                 </Label>
-                <Select
-                  value={String(count)}
-                  onValueChange={(val) => setCount(Number(val))}
-                >
-                  <SelectTrigger className="text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1" className="text-xs">1 account</SelectItem>
-                    <SelectItem value="3" className="text-xs">3 accounts</SelectItem>
-                    <SelectItem value="5" className="text-xs">5 accounts</SelectItem>
-                    <SelectItem value="10" className="text-xs">10 accounts</SelectItem>
-                    <SelectItem value="20" className="text-xs">20 accounts</SelectItem>
-                    <SelectItem value="50" className="text-xs">50 accounts</SelectItem>
-                    <SelectItem value="100" className="text-xs">100 accounts</SelectItem>
-                  </SelectContent>
-                </Select>
+                <span className="text-[11px] text-muted-foreground">
+                  {t('cloud.emulation.quantityNote', 'Enter 1 - 200 accounts or pick a preset')}
+                </span>
               </div>
 
-              <div className="flex-1 flex items-end">
-                <Button
-                  className="w-full text-xs bg-purple-600 hover:bg-purple-700 text-white cursor-pointer font-medium"
-                  onClick={handleGenerate}
-                  disabled={generateMutation.isPending}
-                >
-                  <Plus className="h-4 w-4 mr-1.5" />
-                  {t('cloud.emulation.generateBtn', 'Generate')}
-                </Button>
+              <div className="flex items-center gap-3">
+                <div className="w-32">
+                  <Input
+                    id="custom-account-count-input"
+                    type="number"
+                    min={1}
+                    max={200}
+                    value={count || ''}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (isNaN(val)) {
+                        setCount(0);
+                      } else {
+                        setCount(Math.max(1, Math.min(200, val)));
+                      }
+                    }}
+                    onBlur={() => {
+                      if (!count || count < 1) {
+                        setCount(1);
+                      } else if (count > 200) {
+                        setCount(200);
+                      }
+                    }}
+                    className="h-9 text-xs font-mono"
+                    placeholder="1 - 200"
+                  />
+                </div>
+
+                <div className="flex-1 flex items-end">
+                  <Button
+                    className="w-full text-xs bg-purple-600 hover:bg-purple-700 text-white cursor-pointer font-medium"
+                    onClick={handleGenerate}
+                    disabled={generateMutation.isPending}
+                  >
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    {t('cloud.emulation.generateBtn', 'Generate')} ({count || 1})
+                  </Button>
+                </div>
+              </div>
+
+              {/* Quick Presets */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                <span className="text-[11px] text-muted-foreground mr-1">
+                  {t('cloud.emulation.quantityPresets', 'Presets')}:
+                </span>
+                {[1, 3, 5, 10, 20, 50, 100].map((presetVal) => (
+                  <Button
+                    key={presetVal}
+                    type="button"
+                    variant={count === presetVal ? 'secondary' : 'outline'}
+                    size="sm"
+                    className={cn(
+                      'h-6 px-2 text-[11px] font-mono cursor-pointer transition-colors',
+                      count === presetVal
+                        ? 'border-purple-500/50 bg-purple-500/15 text-purple-600 dark:text-purple-300 font-semibold'
+                        : 'hover:bg-muted/80 text-muted-foreground',
+                    )}
+                    onClick={() => setCount(presetVal)}
+                  >
+                    +{presetVal}
+                  </Button>
+                ))}
               </div>
             </div>
           </CardContent>

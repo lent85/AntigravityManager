@@ -69,6 +69,7 @@ export const AppConfigSchema = z.object({
   model_visibility: z.record(z.string(), z.boolean()).default({}), // Model visibility preferences
   provider_groupings_enabled: z.boolean().default(false), // Enable provider groupings UI
   mask_account_info: z.boolean().default(false), // Mask sensitive account identity (name & email) across all views
+  show_emulation_ui: z.boolean().default(false), // Show emulation controls in navigation and toolbar
   grid_layout: z.enum(['auto', '2-col', '3-col', 'list', 'compact', 'compact-dual']).default('auto'), // Account card grid layout
   account_sort: z
     .enum(['recently-used', 'quota-overall', 'quota-claude', 'quota-pro3', 'quota-flash'])
@@ -110,6 +111,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   model_visibility: {}, // Model visibility preferences
   provider_groupings_enabled: false, // Enable provider groupings UI
   mask_account_info: false, // Mask sensitive account identity
+  show_emulation_ui: false, // Show emulation controls in navigation and toolbar
   grid_layout: 'auto' as const, // Account card grid layout
   account_sort: 'recently-used' as const,
   account_tier_filter: [],

@@ -14,8 +14,12 @@ import {
   restoreCloudIdentityProfileRevision,
   restoreCloudBaselineProfile,
   switchCloudAccount,
+  markActiveAccount,
+  detectActiveAccounts,
   getAutoSwitchEnabled,
   setAutoSwitchEnabled,
+  getAutoSwitchTargetsConfig,
+  setAutoSwitchNoRestartEnabled,
   getAutoSwitchModelsConfig,
   setAutoSwitchModelsConfig,
   type AutoSwitchModelConfig,
@@ -197,15 +201,58 @@ export const cloudRouter = os.router({
       await switchCloudAccount(input.accountId, input.appTarget);
     }),
 
-  getAutoSwitchEnabled: os.output(z.boolean()).handler(async () => {
-    return getAutoSwitchEnabled();
-  }),
+  markActiveAccount: os
+    .input(z.object({ accountId: z.string(), appTarget: AntigravityAppTargetSchema.optional() }))
+    .output(CloudAccountSchema)
+    .handler(async ({ input }) => {
+      return markActiveAccount(input.accountId, input.appTarget);
+    }),
+
+  detectActiveAccounts: os
+    .output(
+      z.object({
+        classic: z.object({ accountId: z.string(), email: z.string() }).nullable(),
+        ide: z.object({ accountId: z.string(), email: z.string() }).nullable(),
+        agy: z.object({ accountId: z.string(), email: z.string() }).nullable(),
+      }),
+    )
+    .handler(async () => {
+      return detectActiveAccounts();
+    }),
+
+  getAutoSwitchEnabled: os
+    .input(z.object({ appTarget: AntigravityAppTargetSchema.optional() }).optional())
+    .output(z.boolean())
+    .handler(async ({ input }) => {
+      return getAutoSwitchEnabled(input?.appTarget);
+    }),
 
   setAutoSwitchEnabled: os
+    .input(z.object({ enabled: z.boolean(), appTarget: AntigravityAppTargetSchema.optional() }))
+    .output(z.void())
+    .handler(async ({ input }) => {
+      await setAutoSwitchEnabled(input.enabled, input.appTarget);
+    }),
+
+  getAutoSwitchTargetsConfig: os
+    .output(
+      z.object({
+        classic: z.boolean(),
+        ide: z.boolean(),
+        agy: z.boolean(),
+        global: z.boolean(),
+        noRestart: z.boolean(),
+      }),
+    )
+    .handler(async () => {
+      return getAutoSwitchTargetsConfig();
+    }),
+
+  setAutoSwitchNoRestartEnabled: os
     .input(z.object({ enabled: z.boolean() }))
     .output(z.void())
     .handler(async ({ input }) => {
-      await setAutoSwitchEnabled(input.enabled);
+      setAutoSwitchNoRestartEnabled(input.enabled);
     }),
 
   getAutoSwitchModelsConfig: os
@@ -451,6 +498,7 @@ export const cloudRouter = os.router({
             'random_modern_mix',
           ])
           .optional(),
+        randomizeQuota: z.boolean().optional(),
         randomizeModels: z.boolean().optional(),
         minModelsPerAccount: z.number().min(1).max(20).optional(),
         maxModelsPerAccount: z.number().min(1).max(20).optional(),
@@ -459,6 +507,7 @@ export const cloudRouter = os.router({
     .output(z.array(z.any()))
     .handler(async ({ input }) => {
       return generateEmulatedAccounts(input.count, input.preset, {
+        randomizeQuota: input.randomizeQuota,
         randomizeModels: input.randomizeModels,
         minModelsPerAccount: input.minModelsPerAccount,
         maxModelsPerAccount: input.maxModelsPerAccount,

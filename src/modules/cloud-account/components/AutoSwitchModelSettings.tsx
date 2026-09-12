@@ -4,14 +4,29 @@ import {
   useCloudAccounts,
   useAutoSwitchModelsConfig,
   useSetAutoSwitchModelsConfig,
+  useAutoSwitchTargetsConfig,
+  useSetAutoSwitchEnabled,
+  useSetAutoSwitchNoRestartEnabled,
 } from '@/modules/cloud-account/hooks/useCloudAccounts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, Search, RotateCcw, Save } from 'lucide-react';
+import {
+  Loader2,
+  Search,
+  RotateCcw,
+  Save,
+  AppWindow,
+  Laptop,
+  Terminal,
+  Sparkles,
+  Zap,
+} from 'lucide-react';
 import { filter, flatMap, includes, size, sortBy, uniq } from 'lodash-es';
 import type { CloudAccount } from '@/modules/cloud-account/types';
 
@@ -46,6 +61,9 @@ function AutoSwitchModelSettingsInner({ accounts, initialConfig }: InnerProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const setConfigMutation = useSetAutoSwitchModelsConfig();
+  const { data: targetsConfig } = useAutoSwitchTargetsConfig();
+  const setTargetAutoSwitchMutation = useSetAutoSwitchEnabled();
+  const setNoRestartMutation = useSetAutoSwitchNoRestartEnabled();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [modelConfigMap, setModelConfigMap] =
@@ -136,7 +154,108 @@ function AutoSwitchModelSettingsInner({ accounts, initialConfig }: InnerProps) {
         </CardTitle>
         <CardDescription>{t('settings.autoSwitchModels.description')}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-5">
+        {/* Environment Toggles & Switch Strategy */}
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="flex items-center justify-between rounded-lg border p-3 shadow-xs">
+            <div className="flex items-center gap-2">
+              <AppWindow className="h-4 w-4 text-blue-500" />
+              <div>
+                <Label htmlFor="switch-target-classic" className="text-xs font-semibold cursor-pointer">
+                  App (Classic)
+                </Label>
+                <p className="text-[11px] text-muted-foreground">Antigravity Desktop</p>
+              </div>
+            </div>
+            <Switch
+              id="switch-target-classic"
+              checked={targetsConfig?.classic ?? false}
+              onCheckedChange={(checked) => {
+                setTargetAutoSwitchMutation.mutate({ enabled: checked, appTarget: 'classic' });
+              }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border p-3 shadow-xs">
+            <div className="flex items-center gap-2">
+              <Laptop className="h-4 w-4 text-indigo-500" />
+              <div>
+                <Label htmlFor="switch-target-ide" className="text-xs font-semibold cursor-pointer">
+                  IDE
+                </Label>
+                <p className="text-[11px] text-muted-foreground">Antigravity IDE</p>
+              </div>
+            </div>
+            <Switch
+              id="switch-target-ide"
+              checked={targetsConfig?.ide ?? false}
+              onCheckedChange={(checked) => {
+                setTargetAutoSwitchMutation.mutate({ enabled: checked, appTarget: 'ide' });
+              }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border p-3 shadow-xs">
+            <div className="flex items-center gap-2">
+              <Terminal className="h-4 w-4 text-emerald-500" />
+              <div>
+                <Label htmlFor="switch-target-agy" className="text-xs font-semibold cursor-pointer">
+                  CLI (agy)
+                </Label>
+                <p className="text-[11px] text-muted-foreground">Zero-restart CLI</p>
+              </div>
+            </div>
+            <Switch
+              id="switch-target-agy"
+              checked={targetsConfig?.agy ?? false}
+              onCheckedChange={(checked) => {
+                setTargetAutoSwitchMutation.mutate({ enabled: checked, appTarget: 'agy' });
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Live Sync No-Restart Toggle */}
+        <div className="flex items-center justify-between rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-3">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+              <Zap className="h-3.5 w-3.5 fill-current" />
+              <Label htmlFor="switch-no-restart" className="cursor-pointer">
+                {t('settings.autoSwitchModels.noRestartTitle', 'Seamless Live Sync (No Restart for IDE/App)')}
+              </Label>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {t(
+                'settings.autoSwitchModels.noRestartDesc',
+                'Synchronize tokens directly into OS Credential Store without killing or restarting IDE windows.',
+              )}
+            </p>
+          </div>
+          <Switch
+            id="switch-no-restart"
+            checked={targetsConfig?.noRestart ?? false}
+            onCheckedChange={(checked) => {
+              setNoRestartMutation.mutate({ enabled: checked });
+            }}
+          />
+        </div>
+
+        {/* Smart Urgency Strategy Callout */}
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-muted-foreground">
+          <Sparkles className="h-4 w-4 shrink-0 text-amber-500 mt-0.5" />
+          <div>
+            <span className="font-semibold text-foreground">
+              {t('settings.autoSwitchModels.smartUrgencyTitle', 'Smart Quota Urgency & Target Isolation')}
+            </span>
+            <p className="mt-0.5 leading-relaxed text-[11px]">
+              {t(
+                'settings.autoSwitchModels.smartUrgencyDesc',
+                'Accounts nearing weekly reset or 5-hour rolling reset with high quota are automatically prioritized to prevent quota waste. Accounts are also isolated across targets so each environment avoids sharing the same active account unless depleted.',
+              )}
+            </p>
+          </div>
+        </div>
+
         {/* Search */}
         <div className="relative">
           <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />

@@ -107,6 +107,7 @@ export async function bootstrapNestServer(config: ProxyConfig): Promise<NestServ
   try {
     const fastifyAdapter = new FastifyAdapter();
     app = await NestFactory.create<NestFastifyApplication>(AppModule, fastifyAdapter, {
+      abortOnError: false,
       logger: ['error', 'warn', 'log'],
     });
 

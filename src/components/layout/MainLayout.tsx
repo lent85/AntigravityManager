@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, Outlet, useLocation } from '@tanstack/react-router';
+import { Link, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
 import { cn } from '@/shared/ui/utils';
 import { StatusBar } from '@/components/layout/StatusBar';
 import { SidebarIndicators } from '@/components/layout/SidebarIndicators';
@@ -20,11 +20,14 @@ import { ErrorBoundary } from 'react-error-boundary';
 import { useToast } from '@/components/ui/use-toast';
 import { getLocalizedErrorMessage } from '@/shared/utils/errorMessages';
 import { useEmulationState } from '@/modules/cloud-account/hooks/useCloudAccounts';
+import { useAppConfig } from '@/modules/config/hooks/useAppConfig';
 
 export const MainLayout: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const { toast } = useToast();
+  const { config } = useAppConfig();
   const hasShownRouteErrorToastRef = useRef(false);
   const { data: emulationState } = useEmulationState(5000);
   const isEmulationActive = !!emulationState?.enabled;
@@ -41,6 +44,22 @@ export const MainLayout: React.FC = () => {
     localStorage.setItem('sidebar-collapsed', JSON.stringify(isCollapsed));
   }, [isCollapsed]);
 
+  // Stealth shortcut: Ctrl+Shift+E toggles between accounts and emulation lab
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'E' || e.key === 'e')) {
+        e.preventDefault();
+        if (location.pathname === '/emulation') {
+          navigate({ to: '/' });
+        } else {
+          navigate({ to: '/emulation' });
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [location.pathname, navigate]);
+
   const navItems = [
     {
       to: '/',
@@ -52,12 +71,16 @@ export const MainLayout: React.FC = () => {
       icon: Network,
       label: t('nav.proxy'),
     },
-    {
-      to: '/emulation',
-      icon: FlaskConical,
-      label: t('nav.emulation', 'Emulation'),
-      badge: isEmulationActive ? emulatedAccountCount : undefined,
-    },
+    ...(config?.show_emulation_ui
+      ? [
+          {
+            to: '/emulation' as const,
+            icon: FlaskConical,
+            label: t('nav.emulation', 'Emulation'),
+            badge: isEmulationActive ? emulatedAccountCount : undefined,
+          },
+        ]
+      : []),
     {
       to: '/settings',
       icon: Settings,

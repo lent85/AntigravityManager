@@ -11,11 +11,14 @@ vi.mock('@/modules/cloud-account/persistence/cloud-account-settings-store', () =
   CloudAccountSettingsStore: {
     getSetting: vi.fn(),
     getActiveAccountIdForTarget: vi.fn(),
+    getAutoSwitchEnabledForTarget: vi.fn(),
+    isNoRestartEnabled: vi.fn(),
   },
 }));
 
 vi.mock('@/modules/cloud-account/ipc/handler', () => ({
   switchCloudAccount: vi.fn(),
+  markActiveAccount: vi.fn(),
 }));
 
 vi.mock('@/shared/logging/logger', () => ({
@@ -307,5 +310,190 @@ describe('AutoSwitchService', () => {
     await expect(AutoSwitchService.findBestAccount('current')).resolves.toMatchObject({
       id: 'priority-present',
     });
+  });
+
+  it('isolates targets to avoid sharing accounts when non-overlapping candidates are available', async () => {
+    const { CloudAccountRepo } = await import('@/modules/cloud-account/persistence/cloudHandler');
+    const { CloudAccountSettingsStore } =
+      await import('@/modules/cloud-account/persistence/cloud-account-settings-store');
+    const { AutoSwitchService } =
+      await import('@/modules/cloud-account/services/AutoSwitchService');
+
+    vi.mocked(CloudAccountSettingsStore.getSetting).mockReturnValue({});
+    vi.mocked(CloudAccountSettingsStore.getActiveAccountIdForTarget).mockImplementation((target) => {
+      if (target === 'ide') return 'acc-in-use-by-ide';
+      return '';
+    });
+
+    vi.mocked(CloudAccountRepo.getAccounts).mockResolvedValue([
+      createAccount('current', {
+        models: { 'gemini-pro': { percentage: 1, resetTime: '' } },
+      }),
+      createAccount('acc-in-use-by-ide', {
+        models: { 'gemini-pro': { percentage: 95, resetTime: '' } },
+      }),
+      createAccount('acc-free', {
+        models: { 'gemini-pro': { percentage: 80, resetTime: '' } },
+      }),
+    ]);
+
+    // When switching for 'classic', prefer 'acc-free' over 'acc-in-use-by-ide'
+    await expect(AutoSwitchService.findBestAccount('current', 'classic')).resolves.toMatchObject({
+      id: 'acc-free',
+    });
+  });
+
+  it('falls back to shared account across targets when no other healthy candidate exists', async () => {
+    const { CloudAccountRepo } = await import('@/modules/cloud-account/persistence/cloudHandler');
+    const { CloudAccountSettingsStore } =
+      await import('@/modules/cloud-account/persistence/cloud-account-settings-store');
+    const { AutoSwitchService } =
+      await import('@/modules/cloud-account/services/AutoSwitchService');
+
+    vi.mocked(CloudAccountSettingsStore.getSetting).mockReturnValue({});
+    vi.mocked(CloudAccountSettingsStore.getActiveAccountIdForTarget).mockImplementation((target) => {
+      if (target === 'ide') return 'acc-in-use-by-ide';
+      return '';
+    });
+
+    vi.mocked(CloudAccountRepo.getAccounts).mockResolvedValue([
+      createAccount('current', {
+        models: { 'gemini-pro': { percentage: 1, resetTime: '' } },
+      }),
+      createAccount('acc-in-use-by-ide', {
+        models: { 'gemini-pro': { percentage: 95, resetTime: '' } },
+      }),
+      createAccount('acc-depleted', {
+        models: { 'gemini-pro': { percentage: 2, resetTime: '' } },
+      }),
+    ]);
+
+    await expect(AutoSwitchService.findBestAccount('current', 'classic')).resolves.toMatchObject({
+      id: 'acc-in-use-by-ide',
+    });
+  });
+
+  it('prioritizes accounts nearing weekly quota reset that still have high weekly quota', async () => {
+    const { CloudAccountRepo } = await import('@/modules/cloud-account/persistence/cloudHandler');
+    const { CloudAccountSettingsStore } =
+      await import('@/modules/cloud-account/persistence/cloud-account-settings-store');
+    const { AutoSwitchService } =
+      await import('@/modules/cloud-account/services/AutoSwitchService');
+
+    const now = Date.parse('2026-09-12T10:00:00Z');
+    const resetSoon = new Date(now + 4 * 3600 * 1000).toISOString(); // 4 hours away
+    const resetFar = new Date(now + 120 * 3600 * 1000).toISOString(); // 5 days away
+
+    vi.mocked(CloudAccountSettingsStore.getSetting).mockReturnValue({});
+    vi.mocked(CloudAccountSettingsStore.getActiveAccountIdForTarget).mockReturnValue('');
+
+    vi.mocked(CloudAccountRepo.getAccounts).mockResolvedValue([
+      createAccount('current', {
+        models: { 'gemini-pro': { percentage: 0, resetTime: '' } },
+      }),
+      createAccount('acc-expiring-weekly', {
+        models: { 'gemini-pro': { percentage: 80, resetTime: '' } },
+        quota_groups: [
+          {
+            display_name: 'Gemini Pro',
+            buckets: [
+              {
+                bucket_id: 'weekly',
+                window: 'week',
+                remaining_fraction: 0.85,
+                reset_time: resetSoon,
+              },
+            ],
+          },
+        ],
+      }),
+      createAccount('acc-not-expiring', {
+        models: { 'gemini-pro': { percentage: 82, resetTime: '' } },
+        quota_groups: [
+          {
+            display_name: 'Gemini Pro',
+            buckets: [
+              {
+                bucket_id: 'weekly',
+                window: 'week',
+                remaining_fraction: 0.85,
+                reset_time: resetFar,
+              },
+            ],
+          },
+        ],
+      }),
+    ]);
+
+    await expect(
+      AutoSwitchService.findBestAccount('current', undefined, now),
+    ).resolves.toMatchObject({
+      id: 'acc-expiring-weekly',
+    });
+  });
+
+  it('prioritizes accounts nearing 5h block reset that still have high quota', async () => {
+    const { CloudAccountRepo } = await import('@/modules/cloud-account/persistence/cloudHandler');
+    const { CloudAccountSettingsStore } =
+      await import('@/modules/cloud-account/persistence/cloud-account-settings-store');
+    const { AutoSwitchService } =
+      await import('@/modules/cloud-account/services/AutoSwitchService');
+
+    const now = Date.parse('2026-09-12T10:00:00Z');
+    const reset15m = new Date(now + 15 * 60 * 1000).toISOString(); // 15 mins away
+    const reset4h = new Date(now + 4 * 3600 * 1000).toISOString(); // 4 hours away
+
+    vi.mocked(CloudAccountSettingsStore.getSetting).mockReturnValue({});
+    vi.mocked(CloudAccountSettingsStore.getActiveAccountIdForTarget).mockReturnValue('');
+
+    vi.mocked(CloudAccountRepo.getAccounts).mockResolvedValue([
+      createAccount('current', {
+        models: { 'gemini-pro': { percentage: 0, resetTime: '' } },
+      }),
+      createAccount('acc-expiring-5h', {
+        models: {
+          'gemini-pro': { percentage: 75, resetTime: reset15m },
+        },
+      }),
+      createAccount('acc-fresh-5h', {
+        models: {
+          'gemini-pro': { percentage: 78, resetTime: reset4h },
+        },
+      }),
+    ]);
+
+    await expect(
+      AutoSwitchService.findBestAccount('current', undefined, now),
+    ).resolves.toMatchObject({
+      id: 'acc-expiring-5h',
+    });
+  });
+
+  it('switches using markActiveAccount when isNoRestartEnabled is true for GUI targets', async () => {
+    const { CloudAccountRepo } = await import('@/modules/cloud-account/persistence/cloudHandler');
+    const { CloudAccountSettingsStore } =
+      await import('@/modules/cloud-account/persistence/cloud-account-settings-store');
+    const { markActiveAccount, switchCloudAccount } =
+      await import('@/modules/cloud-account/ipc/handler');
+    const { AutoSwitchService } =
+      await import('@/modules/cloud-account/services/AutoSwitchService');
+
+    vi.mocked(CloudAccountSettingsStore.getAutoSwitchEnabledForTarget).mockReturnValue(true);
+    vi.mocked(CloudAccountSettingsStore.isNoRestartEnabled).mockReturnValue(true);
+    vi.mocked(CloudAccountSettingsStore.getActiveAccountIdForTarget).mockReturnValue('acc-depleted');
+
+    vi.mocked(CloudAccountRepo.getAccounts).mockResolvedValue([
+      createAccount('acc-depleted', {
+        models: { 'gemini-pro': { percentage: 2, resetTime: '' } },
+      }),
+      createAccount('acc-healthy', {
+        models: { 'gemini-pro': { percentage: 90, resetTime: '' } },
+      }),
+    ]);
+
+    const switched = await AutoSwitchService.checkAndSwitchIfNeeded('ide');
+    expect(switched).toBe(true);
+    expect(markActiveAccount).toHaveBeenCalledWith('acc-healthy', 'ide');
+    expect(switchCloudAccount).not.toHaveBeenCalled();
   });
 });

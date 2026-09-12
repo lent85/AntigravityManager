@@ -53,7 +53,7 @@ const NestedCredentialPayloadSchema = z
   })
   .passthrough();
 
-function buildCredentialStorePayload(token: CredentialStoreTokenInput): string {
+export function buildCredentialStorePayload(token: CredentialStoreTokenInput): string {
   const expiry = new Date(token.expiry_timestamp * 1000)
     .toISOString()
     .replace(/\.(\d{3})Z$/, '.$1000Z');
@@ -90,7 +90,7 @@ function decodeCredentialStoreText(secret: Uint8Array): string {
   }
 }
 
-function parseCredentialStorePayload(payload: string): CredentialStoreToken {
+export function parseCredentialStorePayload(payload: string): CredentialStoreToken {
   let parsedJson: unknown;
   try {
     parsedJson = JSON.parse(payload);

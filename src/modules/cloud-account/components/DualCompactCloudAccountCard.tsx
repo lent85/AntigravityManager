@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   CalendarDays,
+  CheckCircle2,
   Clock3,
   Fingerprint,
   FlaskConical,
@@ -60,6 +61,7 @@ interface DualCompactCloudAccountCardProps {
   onRefresh: (id: string) => void;
   onDelete: (id: string) => void;
   onSwitch: (id: string, appTarget?: AntigravityAppTarget) => void;
+  onMarkActive?: (id: string, appTarget?: AntigravityAppTarget) => void;
   onManageIdentity: (id: string) => void;
   isRefreshing?: boolean;
   isDeleting?: boolean;
@@ -72,6 +74,7 @@ export function DualCompactCloudAccountCard({
   onRefresh,
   onDelete,
   onSwitch,
+  onMarkActive,
   onManageIdentity,
   isRefreshing,
   isDeleting,
@@ -191,7 +194,7 @@ export function DualCompactCloudAccountCard({
               unknownLabel={t('cloud.tierFilter.unknown')}
               className="h-4 max-w-24 px-1 text-[9px]"
             />
-            {account.is_emulated && !isMasked && (
+            {Boolean(config?.show_emulation_ui) && account.is_emulated && !isMasked && (
               <span
                 className="rounded border border-purple-500/30 bg-purple-500/15 px-1 text-[9px] font-bold text-purple-400 flex items-center gap-0.5"
                 title={
@@ -484,6 +487,56 @@ export function DualCompactCloudAccountCard({
                   </Badge>
                 )}
               </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-muted-foreground px-2 py-1.5 text-[10px] uppercase tracking-wider">
+                {t('cloud.markActive.title', 'Mark as In-Use (No restart)')}
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                onClick={() => onMarkActive?.(account.id, 'classic')}
+                disabled={isSwitching || account.is_active_classic}
+                className="flex cursor-pointer items-center justify-between py-2 text-xs"
+              >
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="text-green-500 h-3.5 w-3.5" />
+                  <span>{t('cloud.markActive.antigravity', 'Mark as in-use for Antigravity')}</span>
+                </span>
+                {account.is_active_classic && (
+                  <Badge className="h-4 border-none bg-green-500/20 px-1 text-[9px] font-semibold text-green-600 hover:bg-green-500/20">
+                    Active
+                  </Badge>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onMarkActive?.(account.id, 'ide')}
+                disabled={isSwitching || account.is_active_ide}
+                className="flex cursor-pointer items-center justify-between py-2 text-xs"
+              >
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="text-indigo-500 h-3.5 w-3.5" />
+                  <span>{t('cloud.markActive.ide', 'Mark as in-use for Antigravity IDE')}</span>
+                </span>
+                {account.is_active_ide && (
+                  <Badge className="h-4 border-none bg-indigo-500/20 px-1 text-[9px] font-semibold text-indigo-600 hover:bg-indigo-500/20">
+                    Active
+                  </Badge>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onMarkActive?.(account.id, 'agy')}
+                disabled={isSwitching || account.is_active_agy}
+                className="flex cursor-pointer items-center justify-between py-2 text-xs"
+              >
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="text-emerald-500 h-3.5 w-3.5" />
+                  <span>{t('cloud.markActive.agy', 'Mark as in-use for Antigravity CLI')}</span>
+                </span>
+                {account.is_active_agy && (
+                  <Badge className="h-4 border-none bg-emerald-500/20 px-1 text-[9px] font-semibold text-emerald-600 hover:bg-emerald-500/20">
+                    Active
+                  </Badge>
+                )}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -537,6 +590,55 @@ export function DualCompactCloudAccountCard({
               <span className="flex items-center gap-2">
                 <Terminal className="text-emerald-500 h-3.5 w-3.5" />
                 <span>{t('account.switchToAgy', 'Switch to Antigravity CLI')}</span>
+              </span>
+              {account.is_active_agy && (
+                <Badge className="h-4 border-none bg-emerald-500/20 px-1 text-[9px] font-semibold text-emerald-600">
+                  Active
+                </Badge>
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-muted-foreground px-2 py-1.5 text-[10px] uppercase tracking-wider">
+              {t('cloud.markActive.title', 'Mark as In-Use (No restart)')}
+            </DropdownMenuLabel>
+            <DropdownMenuItem
+              onClick={() => onMarkActive?.(account.id, 'classic')}
+              disabled={isSwitching || account.is_active_classic}
+              className="flex cursor-pointer items-center justify-between py-2 text-xs"
+            >
+              <span className="flex items-center gap-2">
+                <CheckCircle2 className="text-green-500 h-3.5 w-3.5" />
+                <span>{t('cloud.markActive.antigravity', 'Mark as in-use for Antigravity')}</span>
+              </span>
+              {account.is_active_classic && (
+                <Badge className="h-4 border-none bg-green-500/20 px-1 text-[9px] font-semibold text-green-600">
+                  Active
+                </Badge>
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => onMarkActive?.(account.id, 'ide')}
+              disabled={isSwitching || account.is_active_ide}
+              className="flex cursor-pointer items-center justify-between py-2 text-xs"
+            >
+              <span className="flex items-center gap-2">
+                <CheckCircle2 className="text-indigo-500 h-3.5 w-3.5" />
+                <span>{t('cloud.markActive.ide', 'Mark as in-use for Antigravity IDE')}</span>
+              </span>
+              {account.is_active_ide && (
+                <Badge className="h-4 border-none bg-indigo-500/20 px-1 text-[9px] font-semibold text-indigo-600">
+                  Active
+                </Badge>
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => onMarkActive?.(account.id, 'agy')}
+              disabled={isSwitching || account.is_active_agy}
+              className="flex cursor-pointer items-center justify-between py-2 text-xs"
+            >
+              <span className="flex items-center gap-2">
+                <CheckCircle2 className="text-emerald-500 h-3.5 w-3.5" />
+                <span>{t('cloud.markActive.agy', 'Mark as in-use for Antigravity CLI')}</span>
               </span>
               {account.is_active_agy && (
                 <Badge className="h-4 border-none bg-emerald-500/20 px-1 text-[9px] font-semibold text-emerald-600">

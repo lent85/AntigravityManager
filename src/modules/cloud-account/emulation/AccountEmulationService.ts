@@ -9,6 +9,10 @@ import {
   type GenerateEmulatedAccountsOptions,
   EmulationStateSchema,
 } from './types';
+import {
+  createWeeklyQuotaGroups,
+  applyDrainStep,
+} from '@/modules/cloud-account/domain/quota-group-engine';
 import { randomUUID } from 'node:crypto';
 
 export interface SimulationModelDefinition {
@@ -20,28 +24,27 @@ export interface SimulationModelDefinition {
 }
 
 export const SIMULATION_MODERN_MODELS: readonly SimulationModelDefinition[] = [
-  // Gemini modern models
-  { id: 'gemini-3.1-pro-high', displayName: 'Gemini 3.1 Pro (High)', provider: 'google', supportsThinking: true, supportsImages: true },
-  { id: 'gemini-3.1-pro-low', displayName: 'Gemini 3.1 Pro (Low)', provider: 'google', supportsThinking: true, supportsImages: true },
-  { id: 'gemini-3.5-flash-high', displayName: 'Gemini 3.5 Flash (High)', provider: 'google', supportsThinking: true, supportsImages: true },
-  { id: 'gemini-3.5-flash-medium', displayName: 'Gemini 3.5 Flash (Medium)', provider: 'google', supportsImages: true },
-  { id: 'gemini-3-flash', displayName: 'Gemini 3 Flash', provider: 'google', supportsImages: true },
-  { id: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', provider: 'google', supportsThinking: true, supportsImages: true },
-  { id: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', provider: 'google', supportsImages: true },
-  { id: 'gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash Lite', provider: 'google' },
-  { id: 'gemini-3-pro-image', displayName: 'Gemini 3 Pro Image', provider: 'google', supportsImages: true },
-  { id: 'gemini-3.1-flash-image', displayName: 'Gemini 3.1 Flash Image', provider: 'google', supportsImages: true },
+  // Gemini modern models (Google Antigravity current catalog)
+  { id: 'gemini-3.8-flash-tiered', displayName: 'Gemini 3.8 Flash Tiered', provider: 'google', supportsThinking: true },
+  { id: 'gemini-3.8-flash-high', displayName: 'Gemini 3.8 Flash High', provider: 'google', supportsThinking: true },
+  { id: 'gemini-3.8-flash-medium', displayName: 'Gemini 3.8 Flash Medium', provider: 'google', supportsThinking: true },
+  { id: 'gemini-3.8-flash-low', displayName: 'Gemini 3.8 Flash Low', provider: 'google', supportsThinking: true },
+  { id: 'gemini-3.7-flash-tiered', displayName: 'Gemini 3.7 Flash Tiered', provider: 'google', supportsThinking: true },
+  { id: 'gemini-3.7-flash-high', displayName: 'Gemini 3.7 Flash High', provider: 'google', supportsThinking: true },
+  { id: 'gemini-3.7-flash-medium', displayName: 'Gemini 3.7 Flash Medium', provider: 'google', supportsThinking: true },
+  { id: 'gemini-3.7-flash-low', displayName: 'Gemini 3.7 Flash Low', provider: 'google', supportsThinking: true },
+  { id: 'gemini-3.6-flash-tiered', displayName: 'Gemini 3.6 Flash Tiered', provider: 'google', supportsThinking: true },
+  { id: 'gemini-3.6-flash-high', displayName: 'Gemini 3.6 Flash High', provider: 'google', supportsThinking: true },
+  { id: 'gemini-3.6-flash-medium', displayName: 'Gemini 3.6 Flash Medium', provider: 'google', supportsThinking: true },
+  { id: 'gemini-3.6-flash-low', displayName: 'Gemini 3.6 Flash Low', provider: 'google', supportsThinking: true },
+  { id: 'gemini-3.5-flash', displayName: 'Gemini 3.5 Flash', provider: 'google', supportsImages: true },
+  { id: 'gemini-3.1-pro', displayName: 'Gemini 3.1 Pro', provider: 'google', supportsThinking: true, supportsImages: true },
+  { id: 'gemini-flash-lite', displayName: 'Gemini Flash Lite', provider: 'google', supportsImages: true },
+  { id: 'gemini-flash-image', displayName: 'Gemini Flash Image', provider: 'google', supportsImages: true },
 
-  // Claude modern models
-  { id: 'claude-sonnet-4-6', displayName: 'Claude Sonnet 4.6', provider: 'anthropic', supportsThinking: true },
-  { id: 'claude-sonnet-4-6-thinking', displayName: 'Claude Sonnet 4.6 (Thinking)', provider: 'anthropic', supportsThinking: true },
-  { id: 'claude-opus-4-6-thinking', displayName: 'Claude Opus 4.6 (Thinking)', provider: 'anthropic', supportsThinking: true },
-  { id: 'claude-3-7-sonnet', displayName: 'Claude 3.7 Sonnet', provider: 'anthropic', supportsThinking: true },
-  { id: 'claude-3-5-sonnet', displayName: 'Claude 3.5 Sonnet', provider: 'anthropic', supportsThinking: true },
-  { id: 'claude-3-5-haiku', displayName: 'Claude 3.5 Haiku', provider: 'anthropic' },
-
-  // Open-weight / Other models
-  { id: 'gpt-oss-120b-medium', displayName: 'GPT-OSS 120B (Medium)', provider: 'other' },
+  // Claude modern models (provided via Google Antigravity)
+  { id: 'claude-sonnet-4-6', displayName: 'Claude 4.6 Sonnet', provider: 'anthropic', supportsThinking: true },
+  { id: 'claude-opus-4-6', displayName: 'Claude Opus 4 6', provider: 'anthropic', supportsThinking: true },
 ];
 
 const EMULATION_SETTING_KEY = 'cloud_account_emulation_state';
@@ -78,7 +81,121 @@ export class AccountEmulationService {
         accounts: [],
       };
     }
-    return parsed.data as EmulationState;
+    const state = parsed.data as EmulationState;
+    let modified = false;
+    for (const acc of state.accounts) {
+      if (acc.email.endsWith('@sim.mock')) {
+        acc.email = acc.email.replace(/@sim\.mock$/, '@gmail.com');
+        modified = true;
+      }
+      if (acc.status_reason && (acc.status_reason.includes('Emulated') || acc.status_reason.includes('Simulated'))) {
+        acc.status_reason = acc.status_reason.replace(/\s*\((?:Emulated|Simulated)[^)]*\)/g, '').trim();
+        modified = true;
+      }
+
+      // Automatically migrate emulated accounts to include the full modern Google catalog and sync group quotas
+      if (acc.is_emulated) {
+        const existingKeys = Object.keys(acc.quota?.models || {});
+        const isMissingNewModels = SIMULATION_MODERN_MODELS.some((m) => !acc.quota?.models?.[m.id]);
+        const hasLegacyModels = existingKeys.some((k) => !SIMULATION_MODERN_MODELS.some((m) => m.id === k));
+
+        if (isMissingNewModels || hasLegacyModels) {
+          let geminiPct = 85;
+          let geminiResetTime = new Date(Date.now() + 5 * 3600 * 1000).toISOString();
+          for (const key of existingKeys) {
+            if (key.includes('gemini') && acc.quota.models[key]) {
+              geminiPct = acc.quota.models[key].percentage;
+              if (acc.quota.models[key].resetTime) {
+                geminiResetTime = acc.quota.models[key].resetTime;
+              }
+              break;
+            }
+          }
+
+          let claudePct = 80;
+          let claudeResetTime = new Date(Date.now() + 5 * 3600 * 1000).toISOString();
+          for (const key of existingKeys) {
+            if (key.includes('claude') && acc.quota.models[key]) {
+              claudePct = acc.quota.models[key].percentage;
+              if (acc.quota.models[key].resetTime) {
+                claudeResetTime = acc.quota.models[key].resetTime;
+              }
+              break;
+            }
+          }
+
+          const upgradedModels: CloudQuotaData['models'] = {};
+          for (const mDef of SIMULATION_MODERN_MODELS) {
+            const isClaude = mDef.provider === 'anthropic' || mDef.id.includes('claude');
+            upgradedModels[mDef.id] = {
+              percentage: isClaude ? claudePct : geminiPct,
+              resetTime: isClaude ? claudeResetTime : geminiResetTime,
+              display_name: mDef.displayName,
+              ...(mDef.supportsImages ? { supports_images: true } : {}),
+              ...(mDef.supportsThinking ? { supports_thinking: true } : {}),
+            };
+          }
+          acc.quota.models = upgradedModels;
+          modified = true;
+        }
+
+        const hasWeeklyClaude =
+          Array.isArray(acc.quota?.quota_groups) &&
+          acc.quota.quota_groups.some((g) => g.display_name === 'Claude Weekly Shared');
+        const hasWeeklyGemini =
+          Array.isArray(acc.quota?.quota_groups) &&
+          acc.quota.quota_groups.some((g) => g.display_name === 'Gemini Weekly Shared');
+
+        if (!hasWeeklyClaude || !hasWeeklyGemini) {
+          let geminiPct = 85;
+          let claudePct = 80;
+          for (const key of Object.keys(acc.quota?.models || {})) {
+            if (key.includes('gemini') && acc.quota.models[key]) {
+              geminiPct = acc.quota.models[key].percentage;
+              break;
+            }
+          }
+          for (const key of Object.keys(acc.quota?.models || {})) {
+            if (key.includes('claude') && acc.quota.models[key]) {
+              claudePct = acc.quota.models[key].percentage;
+              break;
+            }
+          }
+          const weeklyResetTimeStr = new Date(Date.now() + 6 * 24 * 3600 * 1000).toISOString();
+          acc.quota.quota_groups = [
+            {
+              display_name: 'Claude Weekly Shared',
+              buckets: [
+                {
+                  bucket_id: 'claude-weekly',
+                  window: 'weekly',
+                  remaining_fraction: Number((claudePct / 100).toFixed(2)),
+                  reset_time: weeklyResetTimeStr,
+                  display_name: 'Claude Sonnet 4-6 Weekly',
+                },
+              ],
+            },
+            {
+              display_name: 'Gemini Weekly Shared',
+              buckets: [
+                {
+                  bucket_id: 'gemini-weekly',
+                  window: 'weekly',
+                  remaining_fraction: Number((geminiPct / 100).toFixed(2)),
+                  reset_time: weeklyResetTimeStr,
+                  display_name: 'Gemini 3 Flash Weekly',
+                },
+              ],
+            },
+          ];
+          modified = true;
+        }
+      }
+    }
+    if (modified) {
+      this.saveState(state);
+    }
+    return state;
   }
 
   static saveState(state: EmulationState): void {
@@ -140,8 +257,8 @@ export class AccountEmulationService {
       name: profile.name,
       avatar_url: profile.avatar_url,
       token: {
-        access_token: `mock_access_token_${profile.id}`,
-        refresh_token: `mock_refresh_token_${profile.id}`,
+        access_token: `ya29.a0AfH6SMA${profile.id.replace(/[^a-zA-Z0-9]/g, '')}`,
+        refresh_token: `1//0g${profile.id.replace(/[^a-zA-Z0-9]/g, '')}`,
         expires_in: 3600,
         expiry_timestamp: Math.floor(Date.now() / 1000) + 3600,
         token_type: 'Bearer',
@@ -169,15 +286,18 @@ export class AccountEmulationService {
     const state = this.getState();
     const created: EmulatedAccountProfile[] = [];
     const timestamp = Date.now();
-    const shouldRandomizeModels = options?.randomizeModels === true || preset === 'random_modern_mix';
+    const shouldRandomizeQuota =
+      options?.randomizeQuota === true ||
+      options?.randomizeModels === true ||
+      preset === 'random_modern_mix';
 
     for (let i = 0; i < count; i++) {
       const idx = (state.accounts.length + i) % MOCK_NAMES.length;
       const baseName = MOCK_NAMES[idx] || `Tester ${state.accounts.length + i + 1}`;
       const uniqueSuffix = randomUUID().slice(0, 4);
-      const email = `${baseName.toLowerCase().replace(/\s+/g, '.')}.${uniqueSuffix}@sim.mock`;
+      const email = `${baseName.toLowerCase().replace(/\s+/g, '.')}.${uniqueSuffix}@gmail.com`;
       const id = `emulated-${randomUUID()}`;
-      const provider: 'google' | 'anthropic' = i % 4 === 3 ? 'anthropic' : 'google';
+      const provider: 'google' | 'anthropic' = 'google';
 
       let tier: 'Free' | 'Pro' | 'Ultra' = 'Pro';
       let status: 'active' | 'rate_limited' | 'expired' = 'active';
@@ -188,12 +308,10 @@ export class AccountEmulationService {
         tickIntervalSeconds: state.tickIntervalSeconds,
       };
 
-      let initialPercentages: { geminiPro: number; geminiFlash: number; claudeSonnet: number; weeklyFraction: number } = {
-        geminiPro: 85,
-        geminiFlash: 90,
-        claudeSonnet: 75,
-        weeklyFraction: 0.8,
-      };
+      let gemini5hPercent = 85;
+      let geminiWeeklyFraction = 0.85;
+      let claude5hPercent = 80;
+      let claudeWeeklyFraction = 0.8;
 
       const ratio = Math.max(0.1, 1 - (i * 0.2) % 0.85);
 
@@ -203,37 +321,34 @@ export class AccountEmulationService {
           drainStepPercent: 4,
           tickIntervalSeconds: state.tickIntervalSeconds,
         };
-        initialPercentages = {
-          geminiPro: 92,
-          geminiFlash: 95,
-          claudeSonnet: 88,
-          weeklyFraction: 0.9,
-        };
+        gemini5hPercent = 95;
+        geminiWeeklyFraction = 0.95;
+        claude5hPercent = 90;
+        claudeWeeklyFraction = 0.9;
       } else if (preset === 'auto_switch_test_bench') {
         if (i === 0) {
           // Account 1: Low quota (< 5%) to trigger auto-switch
-          initialPercentages = {
-            geminiPro: 4,
-            geminiFlash: 3,
-            claudeSonnet: 2,
-            weeklyFraction: 0.04,
-          };
+          gemini5hPercent = Math.floor(Math.random() * 3) + 2; // 2-4%
+          geminiWeeklyFraction = Number((gemini5hPercent / 100).toFixed(2));
+          claude5hPercent = Math.floor(Math.random() * 3) + 2; // 2-4%
+          claudeWeeklyFraction = Number((claude5hPercent / 100).toFixed(2));
           strategy = { type: 'linear', drainStepPercent: 1, tickIntervalSeconds: state.tickIntervalSeconds };
         } else if (i === 1) {
           // Account 2: Rate limited
           status = 'rate_limited';
-          status_reason = 'RESOURCE_EXHAUSTED (Emulated quota exhaustion)';
+          status_reason = 'RESOURCE_EXHAUSTED';
           strategy = { type: 'rate_limited', drainStepPercent: 0, tickIntervalSeconds: state.tickIntervalSeconds };
-          initialPercentages = { geminiPro: 0, geminiFlash: 0, claudeSonnet: 0, weeklyFraction: 0 };
+          gemini5hPercent = 0;
+          geminiWeeklyFraction = 0;
+          claude5hPercent = 0;
+          claudeWeeklyFraction = 0;
         } else {
           // Healthy backup accounts
           tier = i % 2 === 0 ? 'Ultra' : 'Pro';
-          initialPercentages = {
-            geminiPro: 88,
-            geminiFlash: 94,
-            claudeSonnet: 82,
-            weeklyFraction: 0.85,
-          };
+          gemini5hPercent = Math.floor(Math.random() * 11) + 85; // 85-95%
+          geminiWeeklyFraction = Number((gemini5hPercent / 100).toFixed(2));
+          claude5hPercent = Math.floor(Math.random() * 11) + 80; // 80-90%
+          claudeWeeklyFraction = Number((claude5hPercent / 100).toFixed(2));
           strategy = { type: 'linear', drainStepPercent: 2, tickIntervalSeconds: state.tickIntervalSeconds };
         }
       } else if (preset === 'bursty_workload') {
@@ -243,18 +358,19 @@ export class AccountEmulationService {
           tickIntervalSeconds: state.tickIntervalSeconds,
           rateLimitProbability: 0.25,
         };
-        initialPercentages = {
-          geminiPro: 70,
-          geminiFlash: 85,
-          claudeSonnet: 60,
-          weeklyFraction: 0.65,
-        };
+        gemini5hPercent = Math.floor(Math.random() * 35) + 50; // 50-84%
+        geminiWeeklyFraction = Number((gemini5hPercent / 100).toFixed(2));
+        claude5hPercent = Math.floor(Math.random() * 35) + 45; // 45-79%
+        claudeWeeklyFraction = Number((claude5hPercent / 100).toFixed(2));
       } else if (preset === 'rate_limited_test') {
         status = 'rate_limited';
-        status_reason = 'RESOURCE_EXHAUSTED (HTTP 429 Simulated)';
+        status_reason = 'RESOURCE_EXHAUSTED (HTTP 429)';
         strategy = { type: 'rate_limited', drainStepPercent: 0, tickIntervalSeconds: state.tickIntervalSeconds };
-        initialPercentages = { geminiPro: 0, geminiFlash: 0, claudeSonnet: 0, weeklyFraction: 0 };
-      } else if (preset === 'random_modern_mix') {
+        gemini5hPercent = 0;
+        geminiWeeklyFraction = 0;
+        claude5hPercent = 0;
+        claudeWeeklyFraction = 0;
+      } else if (preset === 'random_modern_mix' || shouldRandomizeQuota) {
         const tiers: Array<'Free' | 'Pro' | 'Ultra'> = ['Free', 'Pro', 'Ultra'];
         tier = tiers[i % tiers.length] || 'Pro';
         strategy = {
@@ -263,175 +379,73 @@ export class AccountEmulationService {
           tickIntervalSeconds: state.tickIntervalSeconds,
           rateLimitProbability: 0.2,
         };
+        gemini5hPercent = Math.floor(Math.random() * 85) + 15; // 15-99%
+        geminiWeeklyFraction = Number((Math.max(0.1, (Math.floor(Math.random() * 85) + 15) / 100)).toFixed(2));
+        claude5hPercent = Math.floor(Math.random() * 85) + 15; // 15-99%
+        claudeWeeklyFraction = Number((Math.max(0.1, (Math.floor(Math.random() * 85) + 15) / 100)).toFixed(2));
       } else {
         // balanced_pool
         const tiers: Array<'Free' | 'Pro' | 'Ultra'> = ['Free', 'Pro', 'Ultra'];
         tier = tiers[i % tiers.length] || 'Pro';
-        initialPercentages = {
-          geminiPro: Math.round(ratio * 100),
-          geminiFlash: Math.round(ratio * 95),
-          claudeSonnet: Math.round(ratio * 90),
-          weeklyFraction: ratio,
-        };
+        gemini5hPercent = Math.round(ratio * 100);
+        geminiWeeklyFraction = Number(ratio.toFixed(2));
+        claude5hPercent = Math.round(ratio * 90);
+        claudeWeeklyFraction = Number(ratio.toFixed(2));
         strategy = { type: 'linear', drainStepPercent: 2, tickIntervalSeconds: state.tickIntervalSeconds };
       }
 
-      const resetTimeStr = new Date(Date.now() + 5 * 3600 * 1000).toISOString();
-      const quotaModels: CloudQuotaData['models'] = {};
-      const quotaGroups: NonNullable<CloudQuotaData['quota_groups']> = [];
+      const geminiResetTimeStr = new Date(Date.now() + 5 * 3600 * 1000).toISOString();
+      const claudeResetTimeStr = new Date(Date.now() + 5 * 3600 * 1000).toISOString();
+      const weeklyResetTimeStr = new Date(Date.now() + 6 * 24 * 3600 * 1000).toISOString();
 
-      if (shouldRandomizeModels) {
-        const minModels = Math.max(1, Math.min(options?.minModelsPerAccount ?? 2, SIMULATION_MODERN_MODELS.length));
-        const maxModels = Math.max(minModels, Math.min(options?.maxModelsPerAccount ?? 10, SIMULATION_MODERN_MODELS.length));
+      let modelDefs = [...SIMULATION_MODERN_MODELS];
+      if (options?.minModelsPerAccount !== undefined || options?.maxModelsPerAccount !== undefined) {
+        const minModels = Math.max(1, Math.min(options?.minModelsPerAccount ?? modelDefs.length, modelDefs.length));
+        const maxModels = Math.max(minModels, Math.min(options?.maxModelsPerAccount ?? modelDefs.length, modelDefs.length));
         const targetModelCount = Math.floor(Math.random() * (maxModels - minModels + 1)) + minModels;
+        modelDefs = modelDefs.slice(0, targetModelCount);
+      }
 
-        const geminiPool = SIMULATION_MODERN_MODELS.filter(
-          (m) => m.provider === 'google' || m.id.toLowerCase().includes('gemini'),
-        ).sort(() => Math.random() - 0.5);
+      const quotaModels: CloudQuotaData['models'] = {};
+      let hasClaude = false;
+      let hasGemini = false;
 
-        const claudePool = SIMULATION_MODERN_MODELS.filter(
-          (m) => m.provider === 'anthropic' || m.id.toLowerCase().includes('claude'),
-        ).sort(() => Math.random() - 0.5);
-
-        const selectedModelDefs: SimulationModelDefinition[] = [];
-
-        // Ensure at least one Gemini and at least one Claude model
-        if (geminiPool.length > 0) {
-          selectedModelDefs.push(geminiPool.shift()!);
-        }
-        if (claudePool.length > 0) {
-          selectedModelDefs.push(claudePool.shift()!);
-        }
-
-        // Remaining pool contains all other models without duplicates
-        const remainingPool = [
-          ...geminiPool,
-          ...claudePool,
-          ...SIMULATION_MODERN_MODELS.filter((m) => !selectedModelDefs.some((s) => s.id === m.id)),
-        ]
-          .filter((m, idx, arr) => arr.findIndex((x) => x.id === m.id) === idx)
-          .sort(() => Math.random() - 0.5);
-
-        while (selectedModelDefs.length < targetModelCount && remainingPool.length > 0) {
-          selectedModelDefs.push(remainingPool.shift()!);
-        }
-
-        let hasClaude = false;
-        let hasGemini = false;
-
-        for (const mDef of selectedModelDefs) {
-          if (mDef.provider === 'anthropic' || mDef.id.includes('claude')) {
-            hasClaude = true;
-          }
-          if (mDef.provider === 'google' || mDef.id.includes('gemini')) {
-            hasGemini = true;
-          }
-
-          let modelPercentage = 80;
-          if (status === 'rate_limited') {
-            modelPercentage = 0;
-          } else if (preset === 'auto_switch_test_bench' && i === 0) {
-            modelPercentage = Math.floor(Math.random() * 4) + 1; // 1-4%
-          } else if (preset === 'drain_demo') {
-            modelPercentage = Math.floor(Math.random() * 15) + 84; // 84-98%
-          } else if (preset === 'bursty_workload') {
-            modelPercentage = Math.floor(Math.random() * 45) + 40; // 40-85%
-          } else if (preset === 'random_modern_mix') {
-            modelPercentage = Math.floor(Math.random() * 80) + 20; // 20-99%
-          } else {
-            const basePct = Math.round(ratio * 100);
-            const variation = Math.floor(Math.random() * 21) - 10;
-            modelPercentage = Math.max(5, Math.min(100, basePct + variation));
-          }
-
+      for (const mDef of modelDefs) {
+        const isClaude = mDef.provider === 'anthropic' || mDef.id.toLowerCase().includes('claude');
+        if (isClaude) {
+          hasClaude = true;
           quotaModels[mDef.id] = {
-            percentage: modelPercentage,
-            resetTime: resetTimeStr,
+            percentage: claude5hPercent,
+            resetTime: claudeResetTimeStr,
+            display_name: mDef.displayName,
+            ...(mDef.supportsImages ? { supports_images: true } : {}),
+            ...(mDef.supportsThinking ? { supports_thinking: true } : {}),
+          };
+        } else {
+          hasGemini = true;
+          quotaModels[mDef.id] = {
+            percentage: gemini5hPercent,
+            resetTime: geminiResetTimeStr,
             display_name: mDef.displayName,
             ...(mDef.supportsImages ? { supports_images: true } : {}),
             ...(mDef.supportsThinking ? { supports_thinking: true } : {}),
           };
         }
-
-        const weeklyFraction = status === 'rate_limited' ? 0 : Math.max(0.1, Number(ratio.toFixed(2)));
-        const weeklyResetTime = new Date(Date.now() + 6 * 24 * 3600 * 1000).toISOString();
-
-        if (hasClaude) {
-          quotaGroups.push({
-            display_name: 'Claude Weekly Shared',
-            buckets: [
-              {
-                bucket_id: 'claude-weekly',
-                window: 'weekly',
-                remaining_fraction: weeklyFraction,
-                reset_time: weeklyResetTime,
-                display_name: 'Claude Sonnet 4-6 Weekly',
-              },
-            ],
-          });
-        }
-        if (hasGemini) {
-          quotaGroups.push({
-            display_name: 'Gemini Weekly Shared',
-            buckets: [
-              {
-                bucket_id: 'gemini-weekly',
-                window: 'weekly',
-                remaining_fraction: weeklyFraction,
-                reset_time: weeklyResetTime,
-                display_name: 'Gemini 3 Flash Weekly',
-              },
-            ],
-          });
-        }
-      } else {
-        quotaModels['gemini-2.5-pro'] = {
-          percentage: initialPercentages.geminiPro,
-          resetTime: resetTimeStr,
-          display_name: 'Gemini 2.5 Pro',
-          supports_images: true,
-          supports_thinking: true,
-        };
-        quotaModels['gemini-2.5-flash'] = {
-          percentage: initialPercentages.geminiFlash,
-          resetTime: resetTimeStr,
-          display_name: 'Gemini 2.5 Flash',
-          supports_images: true,
-        };
-        quotaModels['claude-3-5-sonnet'] = {
-          percentage: initialPercentages.claudeSonnet,
-          resetTime: resetTimeStr,
-          display_name: 'Claude 3.5 Sonnet',
-          supports_thinking: true,
-        };
-
-        quotaGroups.push(
-          {
-            display_name: 'Claude Weekly Shared',
-            buckets: [
-              {
-                bucket_id: 'claude-weekly',
-                window: 'weekly',
-                remaining_fraction: initialPercentages.weeklyFraction,
-                reset_time: new Date(Date.now() + 6 * 24 * 3600 * 1000).toISOString(),
-                display_name: 'Claude Sonnet 4-6 Weekly',
-              },
-            ],
-          },
-          {
-            display_name: 'Gemini Weekly Shared',
-            buckets: [
-              {
-                bucket_id: 'gemini-weekly',
-                window: 'weekly',
-                remaining_fraction: initialPercentages.weeklyFraction,
-                reset_time: new Date(Date.now() + 6 * 24 * 3600 * 1000).toISOString(),
-                display_name: 'Gemini 3 Flash Weekly',
-              },
-            ],
-          },
-        );
       }
+
+      const quotaGroups = createWeeklyQuotaGroups(
+        geminiWeeklyFraction,
+        claudeWeeklyFraction,
+        weeklyResetTimeStr,
+      ).filter((g) => {
+        if (g.display_name === 'Claude Weekly Shared') {
+          return hasClaude;
+        }
+        if (g.display_name === 'Gemini Weekly Shared') {
+          return hasGemini;
+        }
+        return true;
+      });
 
       const quota: CloudQuotaData = {
         subscription_tier: tier,
@@ -585,7 +599,7 @@ export class AccountEmulationService {
       if (strategy.type === 'rate_limited') {
         if (account.status !== 'rate_limited') {
           account.status = 'rate_limited';
-          account.status_reason = 'RESOURCE_EXHAUSTED (Simulated Rate Limit)';
+          account.status_reason = 'RESOURCE_EXHAUSTED';
           changed = true;
         }
         continue;
@@ -619,33 +633,11 @@ export class AccountEmulationService {
       }
 
       if (drainPercent > 0) {
-        let allZero = true;
-        for (const modelKey of Object.keys(account.quota.models)) {
-          const model = account.quota.models[modelKey];
-          if (model) {
-            const nextVal = Math.max(0, model.percentage - drainPercent);
-            if (nextVal !== model.percentage) {
-              model.percentage = nextVal;
-              changed = true;
-            }
-            if (nextVal > 0) {
-              allZero = false;
-            }
-          }
-        }
-
-        const fractionDrain = drainPercent / 100;
-        if (account.quota.quota_groups) {
-          for (const group of account.quota.quota_groups) {
-            for (const bucket of group.buckets) {
-              const nextFraction = Math.max(0, bucket.remaining_fraction - fractionDrain);
-              if (nextFraction !== bucket.remaining_fraction) {
-                bucket.remaining_fraction = Number(nextFraction.toFixed(4));
-                changed = true;
-              }
-            }
-          }
-        }
+        const drainResult = applyDrainStep(account.quota.models, account.quota.quota_groups, drainPercent);
+        account.quota.models = drainResult.updatedModels;
+        account.quota.quota_groups = drainResult.updatedGroups;
+        changed = true;
+        const allZero = drainResult.allDepleted;
 
         if (allZero && strategy.type === 'auto_recover') {
           // Auto recover after reaching zero: reset back to 100%

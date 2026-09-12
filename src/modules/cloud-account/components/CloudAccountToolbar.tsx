@@ -25,6 +25,10 @@ import {
   Upload,
   Zap,
   FlaskConical,
+  AppWindow,
+  ChevronDown,
+  Laptop,
+  Terminal,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -39,9 +43,11 @@ import {
 } from '@/components/ui/dialog';
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
@@ -67,7 +73,12 @@ import type { AccountTierOption } from '@/modules/cloud-account/utils/account-ti
 import { LocalAccountImportDialog } from '@/modules/cloud-account/local-import/components/LocalAccountImportDialog';
 import type { QuotaWindow } from '@/modules/cloud-account/utils/quota-groups';
 import { EmulationManagementDialog } from '@/modules/cloud-account/components/EmulationManagementDialog';
-import { useEmulationState } from '@/modules/cloud-account/hooks/useCloudAccounts';
+import {
+  useEmulationState,
+  useAutoSwitchTargetsConfig,
+  useSetAutoSwitchEnabled,
+  useSetAutoSwitchNoRestartEnabled,
+} from '@/modules/cloud-account/hooks/useCloudAccounts';
 
 type ImportStrategy = 'merge' | 'overwrite' | 'skip-existing';
 
@@ -107,6 +118,8 @@ interface CloudAccountToolbarProps {
   onToggleSelectAllAccounts: () => void;
   onForcePoll: () => void;
   onSyncLocal: (appTarget: AntigravityAppTarget) => void;
+  isDetectActivePending?: boolean;
+  onDetectActiveAccounts?: () => void;
   onExportDialogOpenChange: (open: boolean) => void;
   onImportDialogOpenChange: (open: boolean) => void;
   onAddDialogOpenChange: (open: boolean) => void;
@@ -124,6 +137,7 @@ interface CloudAccountToolbarProps {
   onUpdateGridLayout: (layout: GridLayout) => void;
   onQuotaWindowChange: (quotaWindow: QuotaWindow) => void;
   onToggleMaskAccountInfo?: () => void;
+  showEmulationUi?: boolean;
   originFilter?: 'all' | 'real' | 'emulated';
   onOriginFilterChange?: (filter: 'all' | 'real' | 'emulated') => void;
 }
@@ -164,6 +178,8 @@ export function CloudAccountToolbar({
   onToggleSelectAllAccounts,
   onForcePoll,
   onSyncLocal,
+  isDetectActivePending = false,
+  onDetectActiveAccounts,
   onExportDialogOpenChange,
   onImportDialogOpenChange,
   onAddDialogOpenChange,
@@ -181,11 +197,21 @@ export function CloudAccountToolbar({
   onUpdateGridLayout,
   onQuotaWindowChange,
   onToggleMaskAccountInfo,
+  showEmulationUi = false,
   originFilter = 'all',
   onOriginFilterChange,
 }: CloudAccountToolbarProps) {
   const { t } = useTranslation();
   const { data: emulationState } = useEmulationState(3000);
+  const { data: targetsConfig } = useAutoSwitchTargetsConfig();
+  const setTargetAutoSwitchMutation = useSetAutoSwitchEnabled();
+  const setNoRestartMutation = useSetAutoSwitchNoRestartEnabled();
+
+  const classicEnabled = targetsConfig ? targetsConfig.classic : !!autoSwitchEnabled;
+  const ideEnabled = targetsConfig ? targetsConfig.ide : !!autoSwitchEnabled;
+  const agyEnabled = targetsConfig ? targetsConfig.agy : !!autoSwitchEnabled;
+  const noRestartEnabled = targetsConfig ? targetsConfig.noRestart : false;
+  const activeTargetsCount = [classicEnabled, ideEnabled, agyEnabled].filter(Boolean).length;
   const [searchQuery, setSearchQuery] = useState('');
 
   return (
@@ -261,27 +287,120 @@ export function CloudAccountToolbar({
           </Dialog>
 
           {/* Auto-Switch */}
-          <div
-            className="bg-muted/50 flex h-8 items-center gap-1.5 rounded-md border px-2 sm:gap-2 sm:px-2.5"
-            title={t('cloud.autoSwitch')}
-          >
-            <div className="flex items-center gap-1.5">
-              <Zap
-                className={`h-3.5 w-3.5 ${autoSwitchEnabled ? 'fill-yellow-500 text-yellow-500' : 'text-muted-foreground'}`}
-              />
-              <Label htmlFor="auto-switch" className="cursor-pointer text-xs font-medium">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(
+                  'h-8 cursor-pointer px-2 text-xs font-medium gap-1.5 transition-colors',
+                  activeTargetsCount > 0
+                    ? 'border-yellow-500/40 bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20'
+                    : 'text-muted-foreground',
+                )}
+                title={t('cloud.autoSwitch')}
+                aria-label={t('cloud.autoSwitch')}
+              >
+                <Zap
+                  className={cn(
+                    'h-3.5 w-3.5',
+                    activeTargetsCount > 0 ? 'fill-yellow-500 text-yellow-500' : 'text-muted-foreground',
+                  )}
+                />
                 <span className="hidden @xl:inline">{t('cloud.autoSwitch')}</span>
                 <span className="hidden @sm:inline @xl:hidden">Auto</span>
-              </Label>
-            </div>
-            <Switch
-              id="auto-switch"
-              checked={!!autoSwitchEnabled}
-              onCheckedChange={onToggleAutoSwitch}
-              disabled={isSettingsLoading || isSetAutoSwitchPending}
-              className="scale-75 origin-right"
-            />
-          </div>
+                {activeTargetsCount > 0 && (
+                  <span className="rounded-full bg-yellow-500/20 px-1 text-[10px] font-bold text-yellow-600 dark:text-yellow-400">
+                    {activeTargetsCount}/3
+                  </span>
+                )}
+                <ChevronDown className="h-3 w-3 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64 p-1.5" sideOffset={6}>
+              <DropdownMenuLabel className="text-muted-foreground px-2 py-1 text-[11px] font-semibold tracking-wider uppercase">
+                {t('cloud.autoSwitchTargets.title', 'Auto-Switch Environments')}
+              </DropdownMenuLabel>
+              <DropdownMenuCheckboxItem
+                checked={classicEnabled}
+                onCheckedChange={(checked) => {
+                  setTargetAutoSwitchMutation.mutate({ enabled: checked, appTarget: 'classic' });
+                }}
+                className="cursor-pointer py-1.5 text-xs"
+              >
+                <span className="flex items-center gap-2">
+                  <AppWindow className="h-3.5 w-3.5 text-blue-500" />
+                  <span>{t('cloud.autoSwitchTargets.classic', 'Antigravity App (Classic)')}</span>
+                </span>
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={ideEnabled}
+                onCheckedChange={(checked) => {
+                  setTargetAutoSwitchMutation.mutate({ enabled: checked, appTarget: 'ide' });
+                }}
+                className="cursor-pointer py-1.5 text-xs"
+              >
+                <span className="flex items-center gap-2">
+                  <Laptop className="h-3.5 w-3.5 text-indigo-500" />
+                  <span>{t('cloud.autoSwitchTargets.ide', 'Antigravity IDE')}</span>
+                </span>
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={agyEnabled}
+                onCheckedChange={(checked) => {
+                  setTargetAutoSwitchMutation.mutate({ enabled: checked, appTarget: 'agy' });
+                }}
+                className="cursor-pointer py-1.5 text-xs"
+              >
+                <span className="flex items-center gap-2">
+                  <Terminal className="h-3.5 w-3.5 text-emerald-500" />
+                  <span>{t('cloud.autoSwitchTargets.agy', 'Antigravity CLI (agy)')}</span>
+                </span>
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator className="my-1" />
+              <DropdownMenuLabel className="text-muted-foreground px-2 py-1 text-[11px] font-semibold tracking-wider uppercase">
+                {t('cloud.autoSwitchMode.title', 'Switch Behavior')}
+              </DropdownMenuLabel>
+              <DropdownMenuCheckboxItem
+                checked={noRestartEnabled}
+                onCheckedChange={(checked) => {
+                  setNoRestartMutation.mutate({ enabled: checked });
+                }}
+                className="cursor-pointer py-1.5 text-xs"
+              >
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-medium">
+                    {t('cloud.autoSwitchMode.noRestart', 'Live Sync (No Restart)')}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground leading-tight">
+                    {t(
+                      'cloud.autoSwitchMode.noRestartDesc',
+                      'Update credentials in background without killing IDE windows',
+                    )}
+                  </span>
+                </div>
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator className="my-1" />
+              <div className="flex items-center justify-between px-2 py-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
+                  onClick={() => onToggleAutoSwitch(true)}
+                >
+                  {t('cloud.autoSwitchTargets.enableAll', 'All On')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
+                  onClick={() => onToggleAutoSwitch(false)}
+                >
+                  {t('cloud.autoSwitchTargets.disableAll', 'All Off')}
+                </Button>
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Select All */}
           <Button
@@ -313,34 +432,36 @@ export function CloudAccountToolbar({
           </Button>
 
           {/* Emulation Sandbox */}
-          <EmulationManagementDialog
-            trigger={
-              <Button
-                variant={emulationState?.enabled ? 'secondary' : 'outline'}
-                size="sm"
-                className={cn(
-                  'h-8 cursor-pointer px-2.5 text-xs transition-colors',
-                  emulationState?.enabled &&
-                    'border-purple-500/40 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300',
-                )}
-                title={t('cloud.emulation.toolbarTitle', 'Account Emulation & Quota Simulation')}
-                aria-label={t('cloud.emulation.toolbarTitle', 'Account Emulation & Quota Simulation')}
-              >
-                <FlaskConical
+          {showEmulationUi && (
+            <EmulationManagementDialog
+              trigger={
+                <Button
+                  variant={emulationState?.enabled ? 'secondary' : 'outline'}
+                  size="sm"
                   className={cn(
-                    'h-3.5 w-3.5 @md:mr-1.5',
-                    emulationState?.enabled ? 'text-purple-400' : 'text-muted-foreground',
+                    'h-8 cursor-pointer px-2.5 text-xs transition-colors',
+                    emulationState?.enabled &&
+                      'border-purple-500/40 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300',
                   )}
-                />
-                <span className="hidden @xl:inline">{t('cloud.emulation.toolbarBtn', 'Emulation')}</span>
-                {emulationState?.enabled && (
-                  <span className="ml-1 px-1 py-0 text-[10px] rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                    {emulationState.accounts?.length ?? 0}
-                  </span>
-                )}
-              </Button>
-            }
-          />
+                  title={t('cloud.emulation.toolbarTitle', 'Account Emulation & Quota Simulation')}
+                  aria-label={t('cloud.emulation.toolbarTitle', 'Account Emulation & Quota Simulation')}
+                >
+                  <FlaskConical
+                    className={cn(
+                      'h-3.5 w-3.5 @md:mr-1.5',
+                      emulationState?.enabled ? 'text-purple-400' : 'text-muted-foreground',
+                    )}
+                  />
+                  <span className="hidden @xl:inline">{t('cloud.emulation.toolbarBtn', 'Emulation')}</span>
+                  {emulationState?.enabled && (
+                    <span className="ml-1 px-1 py-0 text-[10px] rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                      {emulationState.accounts?.length ?? 0}
+                    </span>
+                  )}
+                </Button>
+              }
+            />
+          )}
         </div>
 
         {/* Right: Sync & Data Operations */}
@@ -570,7 +691,8 @@ export function CloudAccountToolbar({
             </TooltipProvider>
 
             {/* Origin Filter (All / Real / Emulated) */}
-            {emulationState?.enabled &&
+            {showEmulationUi &&
+              emulationState?.enabled &&
               (emulationState.accounts?.length ?? 0) > 0 &&
               onOriginFilterChange && (
                 <div className="flex items-center gap-0.5 rounded-md border p-0.5 text-xs">

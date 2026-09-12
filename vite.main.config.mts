@@ -1,4 +1,4 @@
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, normalizePath } from 'vite';
 import fs from 'fs';
 import path from 'path';
 import { builtinModules } from 'module';
@@ -8,6 +8,14 @@ import {
   createOpenTelemetryBuildConfig,
   type OpenTelemetryBuildEnv,
 } from './src/shared/observability/openTelemetryConfig';
+
+function normalizeTarget(filePath: string): string {
+  try {
+    return normalizePath(fs.realpathSync.native(filePath));
+  } catch {
+    return normalizePath(filePath);
+  }
+}
 
 function resolvePathPlugin() {
   const extensions = [
@@ -46,12 +54,12 @@ function resolvePathPlugin() {
 
       if (targetPath) {
         if (fs.existsSync(targetPath) && fs.statSync(targetPath).isFile()) {
-          return targetPath;
+          return normalizeTarget(targetPath);
         }
         for (const ext of extensions) {
           const testPath = targetPath + ext;
           if (fs.existsSync(testPath) && fs.statSync(testPath).isFile()) {
-            return testPath;
+            return normalizeTarget(testPath);
           }
         }
       }
@@ -141,17 +149,17 @@ export default defineConfig(({ mode }) => {
     resolve: {
       extensions: ['.ts', '.tsx', '.js', '.jsx', '.json', '.mts', '.mjs'],
       alias: {
-        '@': path.resolve(process.cwd(), './src'),
-        kafkajs: path.resolve(process.cwd(), './src/mocks/empty.ts'),
-        mqtt: path.resolve(process.cwd(), './src/mocks/empty.ts'),
-        amqplib: path.resolve(process.cwd(), './src/mocks/empty.ts'),
-        'amqp-connection-manager': path.resolve(process.cwd(), './src/mocks/empty.ts'),
-        nats: path.resolve(process.cwd(), './src/mocks/empty.ts'),
-        ioredis: path.resolve(process.cwd(), './src/mocks/empty.ts'),
-        '@fastify/static': path.resolve(process.cwd(), './src/mocks/empty.ts'),
-        '@fastify/view': path.resolve(process.cwd(), './src/mocks/empty.ts'),
-        '@nestjs/microservices': path.resolve(process.cwd(), './src/mocks/nestjs-microservices'),
-        '@nestjs/websockets': path.resolve(process.cwd(), './src/mocks/nestjs-websockets'),
+        '@': normalizeTarget(path.resolve(process.cwd(), './src')),
+        kafkajs: normalizeTarget(path.resolve(process.cwd(), './src/mocks/empty.ts')),
+        mqtt: normalizeTarget(path.resolve(process.cwd(), './src/mocks/empty.ts')),
+        amqplib: normalizeTarget(path.resolve(process.cwd(), './src/mocks/empty.ts')),
+        'amqp-connection-manager': normalizeTarget(path.resolve(process.cwd(), './src/mocks/empty.ts')),
+        nats: normalizeTarget(path.resolve(process.cwd(), './src/mocks/empty.ts')),
+        ioredis: normalizeTarget(path.resolve(process.cwd(), './src/mocks/empty.ts')),
+        '@fastify/static': normalizeTarget(path.resolve(process.cwd(), './src/mocks/empty.ts')),
+        '@fastify/view': normalizeTarget(path.resolve(process.cwd(), './src/mocks/empty.ts')),
+        '@nestjs/microservices': normalizeTarget(path.resolve(process.cwd(), './src/mocks/nestjs-microservices')),
+        '@nestjs/websockets': normalizeTarget(path.resolve(process.cwd(), './src/mocks/nestjs-websockets')),
       },
     },
     build: {

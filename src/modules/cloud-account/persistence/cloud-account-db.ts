@@ -19,7 +19,17 @@ export type DrizzleExecutor = Pick<
   'insert' | 'update' | 'delete' | 'select'
 >;
 
+const initializedDbPaths = new Set<string>();
+
+export function resetDatabaseInitializationCache(): void {
+  initializedDbPaths.clear();
+}
+
 function ensureDatabaseInitialized(dbPath: string): void {
+  if (initializedDbPaths.has(dbPath)) {
+    return;
+  }
+
   const dir = path.dirname(dbPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -80,6 +90,8 @@ function ensureDatabaseInitialized(dbPath: string): void {
         value TEXT NOT NULL
       );
     `);
+
+    initializedDbPaths.add(dbPath);
   } catch (error) {
     logger.error('Failed to initialize cloud database schema', error);
     throw error;

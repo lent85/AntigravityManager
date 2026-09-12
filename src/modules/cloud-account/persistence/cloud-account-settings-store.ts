@@ -80,4 +80,40 @@ export class CloudAccountSettingsStore {
 
     return value.trim();
   }
+
+  static getAutoSwitchEnabledForTarget(target?: AntigravityAppTarget | null): boolean {
+    if (!target) {
+      return this.getSetting<boolean>('auto_switch_enabled', false);
+    }
+    const normalizedTarget = resolveAntigravityAppTarget(target);
+    const targetKey = `auto_switch_enabled.${normalizedTarget}`;
+    const targetSetting = this.readSetting(targetKey);
+    if (typeof targetSetting === 'boolean') {
+      return targetSetting;
+    }
+    return this.getSetting<boolean>('auto_switch_enabled', false);
+  }
+
+  static setAutoSwitchEnabledForTarget(
+    target: AntigravityAppTarget | undefined | null,
+    enabled: boolean,
+  ): void {
+    if (!target) {
+      this.setSetting('auto_switch_enabled', enabled);
+      for (const t of ['classic', 'ide', 'agy'] as const) {
+        this.setSetting(`auto_switch_enabled.${t}`, enabled);
+      }
+      return;
+    }
+    const normalizedTarget = resolveAntigravityAppTarget(target);
+    this.setSetting(`auto_switch_enabled.${normalizedTarget}`, enabled);
+  }
+
+  static isNoRestartEnabled(): boolean {
+    return this.getSetting<boolean>('auto_switch_no_restart', false);
+  }
+
+  static setNoRestartEnabled(enabled: boolean): void {
+    this.setSetting('auto_switch_no_restart', enabled);
+  }
 }

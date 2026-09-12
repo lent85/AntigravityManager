@@ -34,7 +34,7 @@ import {
   MODEL_LIST_OWNER,
 } from '@/modules/proxy-gateway/antigravity/ModelMapping';
 import { getServerConfig } from '@/server/server-config';
-import { AccountLeaseService } from '@/modules/proxy-gateway/server/modules/account-lease/account-lease.service';
+import { AccountLeaseService } from '../account-lease/account-lease.service';
 import { UpstreamRequestError } from '@/modules/proxy-gateway/server/common/exceptions/upstream-request.exception';
 import {
   type ImageMonitoringRequest,

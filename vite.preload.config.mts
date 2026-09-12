@@ -1,7 +1,15 @@
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, normalizePath } from 'vite';
 import { sentryVitePlugin } from '@sentry/vite-plugin';
 import fs from 'fs';
 import path from 'path';
+
+function normalizeTarget(filePath: string): string {
+  try {
+    return normalizePath(fs.realpathSync.native(filePath));
+  } catch {
+    return normalizePath(filePath);
+  }
+}
 
 function resolvePathPlugin() {
   const extensions = [
@@ -40,12 +48,12 @@ function resolvePathPlugin() {
 
       if (targetPath) {
         if (fs.existsSync(targetPath) && fs.statSync(targetPath).isFile()) {
-          return targetPath;
+          return normalizeTarget(targetPath);
         }
         for (const ext of extensions) {
           const testPath = targetPath + ext;
           if (fs.existsSync(testPath) && fs.statSync(testPath).isFile()) {
-            return testPath;
+            return normalizeTarget(testPath);
           }
         }
       }
@@ -79,7 +87,7 @@ export default defineConfig(({ mode }) => {
     resolve: {
       extensions: ['.ts', '.tsx', '.js', '.jsx', '.json', '.mts', '.mjs'],
       alias: {
-        '@': path.resolve(process.cwd(), './src'),
+        '@': normalizeTarget(path.resolve(process.cwd(), './src')),
       },
     },
     build: {

@@ -138,8 +138,16 @@ export function filterAndSortCloudAccounts(
       ? accounts
       : accounts.filter((account) => selectedTierKeySet.has(getAccountTierKey(account)));
 
-  const activeAccounts = filteredAccounts.filter((account) => account.is_active);
-  const otherAccounts = filteredAccounts.filter((account) => !account.is_active);
+  const isAccountActive = (account: CloudAccount) =>
+    Boolean(
+      account.is_active ||
+        account.is_active_classic ||
+        account.is_active_ide ||
+        account.is_active_agy,
+    );
+
+  const activeAccounts = filteredAccounts.filter(isAccountActive);
+  const otherAccounts = filteredAccounts.filter((account) => !isAccountActive(account));
 
   return [
     ...sortCloudAccounts(activeAccounts, 'recently-used', options.modelVisibility),

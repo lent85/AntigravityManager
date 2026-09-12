@@ -200,8 +200,47 @@ describe('account tier filtering', () => {
     ]);
   });
 
+  it('pins accounts that are active in any environment (classic, ide, agy) to the top', () => {
+    const accounts: CloudAccount[] = [
+      {
+        ...createAccount('normal-recent', { lastUsed: 100 }),
+      },
+      {
+        ...createAccount('agy-active', { lastUsed: 10 }),
+        is_active_agy: true,
+      },
+      {
+        ...createAccount('ide-active', { lastUsed: 20 }),
+        is_active_ide: true,
+      },
+      {
+        ...createAccount('classic-active', { lastUsed: 30 }),
+        is_active_classic: true,
+      },
+      {
+        ...createAccount('normal-old', { lastUsed: 5 }),
+      },
+    ];
+
+    const result = filterAndSortCloudAccounts(accounts, {
+      selectedTierKeys: [],
+      sortKey: 'recently-used',
+      modelVisibility: {},
+    });
+
+    // All active accounts must come before non-active accounts
+    const activeIds = result.slice(0, 3).map((a) => a.id);
+    expect(activeIds).toContain('agy-active');
+    expect(activeIds).toContain('ide-active');
+    expect(activeIds).toContain('classic-active');
+
+    const inactiveIds = result.slice(3).map((a) => a.id);
+    expect(inactiveIds).toEqual(['normal-recent', 'normal-old']);
+  });
+
   it('formats tier labels without inventing provider values', () => {
     expect(formatAccountTierLabel('  Pro   (Restricted) ')).toBe('Pro (Restricted)');
     expect(formatAccountTierLabel(undefined)).toBe('Unknown');
   });
 });
+

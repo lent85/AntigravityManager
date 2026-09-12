@@ -2,25 +2,41 @@ import { Notification } from 'electron';
 import { CloudAccountRepo } from '@/modules/cloud-account/persistence/cloudHandler';
 import { CloudAccountSettingsStore } from '@/modules/cloud-account/persistence/cloud-account-settings-store';
 import { CloudAccount } from '@/modules/cloud-account/types';
-import { switchCloudAccount } from '@/modules/cloud-account/ipc/handler';
+import { markActiveAccount, switchCloudAccount } from '@/modules/cloud-account/ipc/handler';
 import { logger } from '@/shared/logging/logger';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
+import { selectWeeklyQuotaItems } from '@/modules/cloud-account/utils/quota-groups';
 
 interface AccountSelectionScore {
   priorityScore: number | null;
+  weeklyUrgencyScore: number;
+  block5hUrgencyScore: number;
   fallbackScore: number;
+  isSharedWithOtherTarget: boolean;
 }
 
 export class AutoSwitchService {
   /**
+   * Checks if auto switch is enabled for a specific target or globally.
+   */
+  static isAutoSwitchEnabledForTarget(target?: AntigravityAppTarget | undefined): boolean {
+    return CloudAccountSettingsStore.getAutoSwitchEnabledForTarget(target);
+  }
+
+  /**
    * Finds the best cloud account to switch to.
    * Criteria:
    * 1. Not the current account (unless it's the only one).
-   * 2. Status is 'active'.
-   * 3. Has quota >= 5% in the best available model of every enabled quota group.
-   * 4. Sorted by priority models quota first, falling back to enabled models.
+   * 2. Status is 'active' and not depleted.
+   * 3. Target isolation: Prefer accounts not active in another target.
+   * 4. Smart Urgency: Prioritize accounts nearing weekly or 5h reset with plenty of quota.
+   * 5. Fallback to priority models and overall quota percentage.
    */
-  static async findBestAccount(currentAccountId: string): Promise<CloudAccount | null> {
+  static async findBestAccount(
+    currentAccountId: string,
+    target?: AntigravityAppTarget,
+    now: number = Date.now(),
+  ): Promise<CloudAccount | null> {
     const accounts = await CloudAccountRepo.getAccounts();
     const config =
       CloudAccountSettingsStore.getSetting<Record<string, { enabled: boolean; priority: boolean }>>(
@@ -28,7 +44,7 @@ export class AutoSwitchService {
         {},
       ) || {};
 
-    // Filter potential candidates
+    // 1. Filter viable candidate accounts
     const candidates = accounts.filter((acc) => {
       if (acc.id === currentAccountId) return false;
       if (acc.status !== 'active') return false; // Rate limited or expired accounts are skipped
@@ -39,11 +55,47 @@ export class AutoSwitchService {
 
     if (candidates.length === 0) return null;
 
-    // Sort by "Best" score
-    candidates.sort((a, b) => {
-      const scoreA = this.calculateAccountScore(a, config);
-      const scoreB = this.calculateAccountScore(b, config);
+    // 2. Target Isolation: Find accounts currently in use by other targets
+    const otherActiveAccountIds = new Set<string>();
+    if (target) {
+      for (const t of ['classic', 'ide', 'agy'] as const) {
+        if (t !== target) {
+          const activeId = CloudAccountSettingsStore.getActiveAccountIdForTarget(t);
+          if (activeId) {
+            otherActiveAccountIds.add(activeId);
+          }
+        }
+      }
+    }
 
+    // Split candidates into non-overlapping and overlapping
+    const nonOverlappingCandidates = candidates.filter(
+      (acc) => !otherActiveAccountIds.has(acc.id),
+    );
+    // Use non-overlapping candidates first; fallback to all candidates only if none available
+    const candidatePool =
+      nonOverlappingCandidates.length > 0 ? nonOverlappingCandidates : candidates;
+
+    // 3. Sort candidates using Smart Quota Urgency Score
+    candidatePool.sort((a, b) => {
+      const isAShared = otherActiveAccountIds.has(a.id);
+      const isBShared = otherActiveAccountIds.has(b.id);
+      if (isAShared !== isBShared) {
+        return isAShared ? 1 : -1;
+      }
+
+      const scoreA = this.calculateAccountScore(a, config, isAShared, now);
+      const scoreB = this.calculateAccountScore(b, config, isBShared, now);
+
+      // Compare Weekly and 5h Block Urgency (burning quota before reset)
+      const urgencyA = scoreA.weeklyUrgencyScore + scoreA.block5hUrgencyScore;
+      const urgencyB = scoreB.weeklyUrgencyScore + scoreB.block5hUrgencyScore;
+
+      if (Math.abs(urgencyA - urgencyB) >= 1) {
+        return urgencyB - urgencyA;
+      }
+
+      // Priority models comparison
       if (scoreA.priorityScore !== null || scoreB.priorityScore !== null) {
         if (scoreA.priorityScore === null) return 1;
         if (scoreB.priorityScore === null) return -1;
@@ -55,7 +107,7 @@ export class AutoSwitchService {
       return scoreB.fallbackScore - scoreA.fallbackScore;
     });
 
-    return candidates[0];
+    return candidatePool[0];
   }
 
   private static getModelConfig(
@@ -69,14 +121,22 @@ export class AutoSwitchService {
   private static calculateAccountScore(
     account: CloudAccount,
     config: Record<string, { enabled: boolean; priority: boolean }>,
+    isSharedWithOtherTarget: boolean,
+    now: number,
   ): AccountSelectionScore {
     if (!account.quota?.models) {
-      return { priorityScore: null, fallbackScore: 0 };
+      return {
+        priorityScore: null,
+        weeklyUrgencyScore: 0,
+        block5hUrgencyScore: 0,
+        fallbackScore: 0,
+        isSharedWithOtherTarget,
+      };
     }
 
     const entries = Object.entries(account.quota.models);
 
-    // 1. Get priority models that are enabled and exist in this account
+    // 1. Priority models score
     const priorityEntries = entries.filter(([modelId]) => {
       const modelConfig = this.getModelConfig(config, modelId);
       return modelConfig?.enabled && modelConfig?.priority;
@@ -87,7 +147,7 @@ export class AutoSwitchService {
           priorityEntries.length
         : null;
 
-    // 2. Fall back to all enabled models when no candidate exposes a priority model
+    // 2. Fallback all-enabled models score
     const enabledEntries = entries.filter(([modelId]) => {
       const modelConfig = this.getModelConfig(config, modelId);
       return modelConfig ? modelConfig.enabled : true;
@@ -98,7 +158,49 @@ export class AutoSwitchService {
           enabledEntries.length
         : 0;
 
-    return { priorityScore, fallbackScore };
+    // 3. Weekly Quota Urgency Score: prioritize accounts nearing reset with plenty of quota
+    let weeklyUrgencyScore = 0;
+    const weeklyItems = selectWeeklyQuotaItems(account.quota.quota_groups);
+    for (const item of weeklyItems) {
+      if (!item.resetTime) continue;
+      const resetTimestamp = Date.parse(item.resetTime);
+      if (Number.isNaN(resetTimestamp) || resetTimestamp <= now) continue;
+
+      const hoursUntilReset = (resetTimestamp - now) / (1000 * 60 * 60);
+      // If resetting within 72 hours and still has substantial quota (>= 20%)
+      if (hoursUntilReset <= 72 && item.percentage >= 20) {
+        // Shorter time + higher percentage yields higher score
+        const score = (item.percentage / Math.max(1, hoursUntilReset)) * 5;
+        if (score > weeklyUrgencyScore) {
+          weeklyUrgencyScore = score;
+        }
+      }
+    }
+
+    // 4. 5h Block Quota Urgency Score: prioritize accounts nearing block reset with high quota
+    let block5hUrgencyScore = 0;
+    for (const [, model] of enabledEntries) {
+      if (!model.resetTime) continue;
+      const resetTimestamp = Date.parse(model.resetTime);
+      if (Number.isNaN(resetTimestamp) || resetTimestamp <= now) continue;
+
+      const minutesUntilReset = (resetTimestamp - now) / (1000 * 60);
+      // If resetting within 90 minutes and has remaining quota >= 20%
+      if (minutesUntilReset <= 90 && model.percentage >= 20) {
+        const score = (model.percentage / Math.max(5, minutesUntilReset)) * 5;
+        if (score > block5hUrgencyScore) {
+          block5hUrgencyScore = score;
+        }
+      }
+    }
+
+    return {
+      priorityScore,
+      weeklyUrgencyScore,
+      block5hUrgencyScore,
+      fallbackScore,
+      isSharedWithOtherTarget,
+    };
   }
 
   /**
@@ -107,8 +209,9 @@ export class AutoSwitchService {
    */
   static async checkAndSwitchIfNeeded(
     appTarget?: AntigravityAppTarget | undefined,
+    now: number = Date.now(),
   ): Promise<boolean> {
-    const enabled = CloudAccountSettingsStore.getSetting<boolean>('auto_switch_enabled', false);
+    const enabled = this.isAutoSwitchEnabledForTarget(appTarget);
     if (!enabled) return false;
 
     // Get current active account for the target
@@ -126,7 +229,7 @@ export class AutoSwitchService {
 
     const currentAccount = targetAccount ?? accounts.find((account) => account.is_active);
 
-    // If no active account, maybe we should pick one?
+    // If no active account, nothing to check
     if (!currentAccount) return false;
 
     // Check if current is depleted
@@ -134,29 +237,53 @@ export class AutoSwitchService {
 
     if (isDepleted || currentAccount.status === 'rate_limited') {
       logger.info(
-        `AutoSwitch: Current account ${currentAccount.email} is depleted or rate limited.`,
+        `AutoSwitch: Current account ${currentAccount.email} for target ${appTarget ?? 'default'} is depleted or rate limited.`,
       );
 
-      const nextAccount = await this.findBestAccount(currentAccount.id);
+      const nextAccount = await this.findBestAccount(currentAccount.id, appTarget, now);
       if (nextAccount) {
-        logger.info(`AutoSwitch: Switching to ${nextAccount.email}...`);
+        const isNoRestart = CloudAccountSettingsStore.isNoRestartEnabled();
+        logger.info(
+          `AutoSwitch: Switching target ${appTarget ?? 'default'} to ${nextAccount.email} (no-restart: ${isNoRestart})...`,
+        );
 
-        // Perform the switch
-        await switchCloudAccount(nextAccount.id, appTarget);
+        const targetLabel =
+          appTarget === 'agy' ? 'CLI' : appTarget === 'ide' ? 'IDE' : 'App (Classic)';
 
-        // Show Desktop Notification to alert the user of the switch
-        try {
-          new Notification({
-            title: 'Antigravity Manager: Auto-Switch',
-            body: `Switched account to ${nextAccount.email} due to quota limit. Reopen IDE and type "continue" if needed!`,
-          }).show();
-        } catch (err) {
-          logger.error('Failed to show auto-switch desktop notification', err);
+        if (isNoRestart && appTarget !== 'agy') {
+          // Perform live sync without restarting GUI process
+          await markActiveAccount(nextAccount.id, appTarget);
+
+          try {
+            new Notification({
+              title: `Antigravity Manager: Auto-Switch (${targetLabel})`,
+              body: `Switched to ${nextAccount.email} (Live sync, no restart). Token updated in credential store.`,
+            }).show();
+          } catch (err) {
+            logger.error('Failed to show auto-switch desktop notification', err);
+          }
+        } else {
+          // Perform standard switch (CLI is always seamless; GUI apps restart)
+          await switchCloudAccount(nextAccount.id, appTarget);
+
+          try {
+            new Notification({
+              title: `Antigravity Manager: Auto-Switch (${targetLabel})`,
+              body:
+                appTarget === 'agy'
+                  ? `Switched CLI account to ${nextAccount.email} due to quota limit.`
+                  : `Switched account to ${nextAccount.email} due to quota limit. Reopen IDE and type "continue" if needed!`,
+            }).show();
+          } catch (err) {
+            logger.error('Failed to show auto-switch desktop notification', err);
+          }
         }
 
         return true;
       } else {
-        logger.warn('AutoSwitch: No healthy accounts available to switch to.');
+        logger.warn(
+          `AutoSwitch: No healthy accounts available to switch to for target ${appTarget ?? 'default'}.`,
+        );
       }
     }
 

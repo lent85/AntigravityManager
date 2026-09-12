@@ -437,6 +437,24 @@ function SettingsPage() {
                   }}
                 />
               </div>
+
+              <div className="flex items-center justify-between space-x-2">
+                <div className="space-y-1">
+                  <Label htmlFor="show-emulation-ui">{t('settings.appearance.showEmulationUi', 'Show Emulation Controls')}</Label>
+                  <p className="text-muted-foreground text-sm">
+                    {t('settings.appearance.showEmulationUiDescription', 'Display emulation controls in navigation and toolbar (or toggle anytime with Ctrl+Shift+E)')}
+                  </p>
+                </div>
+                <Switch
+                  id="show-emulation-ui"
+                  checked={config?.show_emulation_ui || false}
+                  onCheckedChange={async (checked) => {
+                    if (config) {
+                      await saveConfig({ ...config, show_emulation_ui: checked });
+                    }
+                  }}
+                />
+              </div>
             </CardContent>
           </Card>
 

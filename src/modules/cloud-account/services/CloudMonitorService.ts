@@ -61,9 +61,7 @@ const CLOUD_MONITOR_NOTIFICATION_TEXT: Record<
   },
 };
 
-const AUTO_SWITCH_TARGETS: AntigravityAppTarget[] = AntigravityAppTargetSchema.options.filter(
-  (target) => target !== 'agy',
-);
+const AUTO_SWITCH_TARGETS: AntigravityAppTarget[] = [...AntigravityAppTargetSchema.options];
 
 function getCloudMonitorLanguage(language: string | null | undefined): CloudMonitorLanguage {
   const normalizedLanguage = language?.toLowerCase() ?? 'en';
@@ -148,7 +146,15 @@ export class CloudMonitorService {
   }
 
   private static isAutoSwitchEnabled(): boolean {
-    return CloudAccountSettingsStore.getSetting<boolean>('auto_switch_enabled', false);
+    if (CloudAccountSettingsStore.getSetting<boolean>('auto_switch_enabled', false)) {
+      return true;
+    }
+    for (const target of AUTO_SWITCH_TARGETS) {
+      if (AutoSwitchService.isAutoSwitchEnabledForTarget(target)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   static configureWeeklyWarmupExecutor(executor: WeeklyWarmupExecutor): void {
@@ -510,7 +516,9 @@ export class CloudMonitorService {
 
     // 5. Check for Auto-Switch
     for (const target of AUTO_SWITCH_TARGETS) {
-      await AutoSwitchService.checkAndSwitchIfNeeded(target);
+      if (AutoSwitchService.isAutoSwitchEnabledForTarget(target)) {
+        await AutoSwitchService.checkAndSwitchIfNeeded(target);
+      }
     }
     if (epoch === this.stopEpoch) {
       await this.runWeeklyWarmups(refreshedAccounts);

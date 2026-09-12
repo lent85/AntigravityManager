@@ -63,6 +63,7 @@ export type EmulationPresetType =
   | 'random_modern_mix';
 
 export interface GenerateEmulatedAccountsOptions {
+  randomizeQuota?: boolean;
   randomizeModels?: boolean;
   minModelsPerAccount?: number;
   maxModelsPerAccount?: number;

@@ -15,8 +15,12 @@ import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarge
 
 import {
   switchCloudAccount,
+  markActiveAccount,
+  detectActiveAccounts,
   getAutoSwitchEnabled,
   setAutoSwitchEnabled,
+  getAutoSwitchTargetsConfig,
+  setAutoSwitchNoRestartEnabled,
   getAutoSwitchModelsConfig,
   setAutoSwitchModelsConfig,
   forcePollCloudMonitor,
@@ -133,12 +137,36 @@ export function useSwitchCloudAccount() {
   });
 }
 
+export function useMarkActiveAccount() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: markActiveAccount,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cloudAccounts });
+      queryClient.invalidateQueries({ queryKey: ['currentAccount'] });
+    },
+  });
+}
+
+export function useDetectActiveAccounts() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: detectActiveAccounts,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cloudAccounts });
+      queryClient.invalidateQueries({ queryKey: ['currentAccount'] });
+    },
+  });
+}
+
 export const AUTO_SWITCH_KEY = ['autoSwitchEnabled'];
 
-export function useAutoSwitchEnabled() {
+export function useAutoSwitchEnabled(appTarget?: AntigravityAppTarget) {
   return useQuery<boolean>({
-    queryKey: AUTO_SWITCH_KEY,
-    queryFn: getAutoSwitchEnabled,
+    queryKey: [...AUTO_SWITCH_KEY, appTarget],
+    queryFn: () => getAutoSwitchEnabled(appTarget ? { appTarget } : undefined),
     staleTime: Infinity, // Settings don't change often unless we change them
   });
 }
@@ -148,7 +176,31 @@ export function useSetAutoSwitchEnabled() {
   return useMutation({
     mutationFn: setAutoSwitchEnabled,
     onSuccess: (_, variables) => {
-      queryClient.setQueryData(AUTO_SWITCH_KEY, variables.enabled);
+      if (!variables.appTarget) {
+        queryClient.setQueryData(AUTO_SWITCH_KEY, variables.enabled);
+      }
+      queryClient.invalidateQueries({ queryKey: AUTO_SWITCH_TARGETS_CONFIG_KEY });
+      queryClient.invalidateQueries({ queryKey: AUTO_SWITCH_KEY });
+    },
+  });
+}
+
+export const AUTO_SWITCH_TARGETS_CONFIG_KEY = ['autoSwitchTargetsConfig'];
+
+export function useAutoSwitchTargetsConfig() {
+  return useQuery({
+    queryKey: AUTO_SWITCH_TARGETS_CONFIG_KEY,
+    queryFn: getAutoSwitchTargetsConfig,
+    staleTime: 30_000,
+  });
+}
+
+export function useSetAutoSwitchNoRestartEnabled() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: setAutoSwitchNoRestartEnabled,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: AUTO_SWITCH_TARGETS_CONFIG_KEY });
     },
   });
 }

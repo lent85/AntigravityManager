@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { isEmpty, isString } from 'lodash-es';
-import { AccountLeaseService } from '@/modules/proxy-gateway/server/modules/account-lease/account-lease.service';
-import { GeminiClient } from '@/modules/proxy-gateway/server/modules/gemini/gemini-client.service';
+import { AccountLeaseService } from '../account-lease/account-lease.service';
+import { GeminiClient } from '../gemini/gemini-client.service';
 import { v4 as uuidv4 } from 'uuid';
 import { Observable } from 'rxjs';
 import { transformClaudeRequestIn } from '@/modules/proxy-gateway/antigravity/ClaudeRequestMapper';

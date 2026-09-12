@@ -29,12 +29,28 @@ export function switchCloudAccount(input: { accountId: string; appTarget?: Antig
   return ipc.client.cloud.switchCloudAccount(input);
 }
 
-export function getAutoSwitchEnabled() {
-  return ipc.client.cloud.getAutoSwitchEnabled();
+export function markActiveAccount(input: { accountId: string; appTarget?: AntigravityAppTarget }) {
+  return ipc.client.cloud.markActiveAccount(input);
 }
 
-export function setAutoSwitchEnabled(input: { enabled: boolean }) {
+export function detectActiveAccounts() {
+  return ipc.client.cloud.detectActiveAccounts();
+}
+
+export function getAutoSwitchEnabled(input?: { appTarget?: AntigravityAppTarget }) {
+  return ipc.client.cloud.getAutoSwitchEnabled(input);
+}
+
+export function setAutoSwitchEnabled(input: { enabled: boolean; appTarget?: AntigravityAppTarget }) {
   return ipc.client.cloud.setAutoSwitchEnabled(input);
+}
+
+export function getAutoSwitchTargetsConfig() {
+  return ipc.client.cloud.getAutoSwitchTargetsConfig();
+}
+
+export function setAutoSwitchNoRestartEnabled(input: { enabled: boolean }) {
+  return ipc.client.cloud.setAutoSwitchNoRestartEnabled(input);
 }
 
 export async function getAutoSwitchModelsConfig(): Promise<
@@ -185,6 +201,7 @@ export function setEmulationTickInterval(input: { seconds: number }) {
 export function generateEmulatedAccounts(input: {
   count: number;
   preset?: import('@/modules/cloud-account/emulation/types').EmulationPresetType;
+  randomizeQuota?: boolean;
   randomizeModels?: boolean;
   minModelsPerAccount?: number;
   maxModelsPerAccount?: number;

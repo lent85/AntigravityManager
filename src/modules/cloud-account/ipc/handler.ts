@@ -29,7 +29,17 @@ import { getAntigravityDbPaths, refreshAntigravityProcessCache } from '@/shared/
 import { runWithSwitchGuard } from '@/modules/antigravity-runtime/switch/switchGuard';
 import { executeSwitchFlow } from '@/modules/antigravity-runtime/switch/switchFlow';
 import { getCurrentAccountInfo } from '@/modules/account/public';
-import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
+import {
+  type AntigravityAppTarget,
+  resolveAntigravityAppTarget,
+} from '@/shared/platform/antigravityAppTarget';
+import { readAgyCliToken } from '@/modules/cloud-account/persistence/agyCliTokenReader';
+import {
+  buildCredentialStorePayload,
+  readAntigravityCredentialStoreToken,
+  writeAntigravityCredentialStoreToken,
+} from '@/modules/cloud-account/persistence/antigravityCredentialStore';
+import { writeAgyCliToken } from '@/modules/cloud-account/persistence/agyCliTokenStore';
 import type { DeviceProfile, DeviceProfilesSnapshot } from '@/modules/identity-profile/types';
 import {
   classifyAccountStatusFromError,
@@ -410,6 +420,44 @@ export async function listCloudAccounts(): Promise<CloudAccount[]> {
     : CloudAccountSettingsStore.getActiveAccountIdForTarget('ide');
   const activeAgyAccountId = CloudAccountSettingsStore.getActiveAccountIdForTarget('agy');
 
+  let effectiveActiveAgyAccountId = activeAgyAccountId;
+  if (!effectiveActiveAgyAccountId) {
+    try {
+      const cliToken = readAgyCliToken();
+      if (cliToken) {
+        const matched = accounts.find(
+          (acc) =>
+            acc.token.refresh_token === cliToken.refreshToken ||
+            (cliToken.accessToken && acc.token.access_token === cliToken.accessToken),
+        );
+        if (matched) {
+          effectiveActiveAgyAccountId = matched.id;
+        }
+      }
+    } catch {
+      // Best-effort check
+    }
+  }
+
+  let effectiveActiveIdeAccountId = activeIdeAccountId;
+  if (!ideEmail && !effectiveActiveIdeAccountId) {
+    try {
+      const credToken = readAntigravityCredentialStoreToken();
+      if (credToken) {
+        const matched = accounts.find(
+          (acc) =>
+            acc.token.refresh_token === credToken.refreshToken ||
+            (credToken.accessToken && acc.token.access_token === credToken.accessToken),
+        );
+        if (matched) {
+          effectiveActiveIdeAccountId = matched.id;
+        }
+      }
+    } catch {
+      // Best-effort check
+    }
+  }
+
   const mappedRealAccounts = accounts.map((account) => {
     const accountEmail = normalizeAccountEmail(account.email);
     const isClassicActive =
@@ -417,8 +465,9 @@ export async function listCloudAccounts(): Promise<CloudAccount[]> {
         ? activeClassicAccountId === account.id
         : classicEmail === accountEmail;
     const isIdeActive =
-      ideEmail === accountEmail || (!!activeIdeAccountId && activeIdeAccountId === account.id);
-    const isAgyActive = activeAgyAccountId === account.id;
+      ideEmail === accountEmail ||
+      (!!effectiveActiveIdeAccountId && effectiveActiveIdeAccountId === account.id);
+    const isAgyActive = effectiveActiveAgyAccountId === account.id;
     return {
       ...account,
       is_active: isClassicActive || isIdeActive || isAgyActive,
@@ -742,6 +791,170 @@ export async function switchCloudAccount(
   });
 }
 
+export interface DetectedActiveAccountsResult {
+  classic: { accountId: string; email: string } | null;
+  ide: { accountId: string; email: string } | null;
+  agy: { accountId: string; email: string } | null;
+}
+
+export async function markActiveAccount(
+  accountId: string,
+  appTarget?: AntigravityAppTarget,
+): Promise<CloudAccount> {
+  const account = await CloudAccountRepo.getAccount(accountId);
+  if (!account) {
+    throw new Error(`Account not found: ${accountId}`);
+  }
+
+  const normalizedTarget = resolveAntigravityAppTarget(appTarget);
+  CloudAccountSettingsStore.setActiveForTarget(normalizedTarget, account.id);
+  CloudAccountRepo.setActive(account.id);
+  CloudAccountRepo.updateLastUsed(account.id);
+
+  // Best-effort credential synchronization without restarting any running processes
+  if (normalizedTarget === 'agy') {
+    try {
+      const payload = buildCredentialStorePayload({
+        access_token: account.token.access_token,
+        refresh_token: account.token.refresh_token,
+        expiry_timestamp: account.token.expiry_timestamp,
+      });
+      writeAgyCliToken(payload);
+      logger.info(`Synchronized CLI token for marked active account: ${account.email}`);
+    } catch (err) {
+      logger.warn('Failed to synchronize CLI token for marked account', err);
+    }
+  } else {
+    const usesCredentialStore =
+      CredentialStoreInjectionAdapter.shouldInjectTokenIntoCredentialStore(normalizedTarget);
+    if (usesCredentialStore) {
+      try {
+        writeAntigravityCredentialStoreToken(
+          {
+            access_token: account.token.access_token,
+            refresh_token: account.token.refresh_token,
+            expiry_timestamp: account.token.expiry_timestamp,
+          },
+          { syncGoogleOAuthFiles: true, email: account.email },
+        );
+        logger.info(
+          `Synchronized credential store token for marked active account: ${account.email}`,
+        );
+      } catch (err) {
+        logger.warn('Failed to synchronize credential store token for marked account', err);
+      }
+    }
+  }
+
+  notifyTrayUpdate(account);
+  return account;
+}
+
+export async function detectActiveAccounts(): Promise<DetectedActiveAccountsResult> {
+  const accounts = await CloudAccountRepo.getAccounts();
+  const result: DetectedActiveAccountsResult = {
+    classic: null,
+    ide: null,
+    agy: null,
+  };
+
+  const findAccountByRefreshToken = (refreshToken?: string) => {
+    if (!refreshToken) return undefined;
+    return accounts.find((acc) => acc.token.refresh_token === refreshToken);
+  };
+
+  const findAccountByAccessToken = (accessToken?: string) => {
+    if (!accessToken) return undefined;
+    return accounts.find((acc) => acc.token.access_token === accessToken);
+  };
+
+  const findAccountByEmail = (email?: string) => {
+    if (!email) return undefined;
+    const normalized = normalizeAccountEmail(email);
+    return accounts.find((acc) => normalizeAccountEmail(acc.email) === normalized);
+  };
+
+  // 1. Detect Antigravity CLI (`agy`)
+  try {
+    const cliToken = readAgyCliToken();
+    if (cliToken) {
+      const agyAccount =
+        findAccountByRefreshToken(cliToken.refreshToken) ||
+        findAccountByAccessToken(cliToken.accessToken);
+      if (agyAccount) {
+        CloudAccountSettingsStore.setActiveForTarget('agy', agyAccount.id);
+        result.agy = { accountId: agyAccount.id, email: agyAccount.email };
+      }
+    }
+  } catch (err) {
+    logger.warn('Failed to detect active Antigravity CLI account', err);
+  }
+
+  // 2. Detect Antigravity IDE (`ide`)
+  try {
+    let ideAccount: CloudAccount | undefined;
+    try {
+      const credToken = readAntigravityCredentialStoreToken();
+      if (credToken) {
+        ideAccount =
+          findAccountByRefreshToken(credToken.refreshToken) ||
+          findAccountByAccessToken(credToken.accessToken);
+      }
+    } catch {
+      // Credential store might be unavailable or empty
+    }
+
+    if (!ideAccount) {
+      const ideInfo = getCurrentAccountInfo('ide');
+      if (ideInfo.isAuthenticated && ideInfo.email) {
+        ideAccount = findAccountByEmail(ideInfo.email);
+      }
+    }
+
+    if (ideAccount) {
+      CloudAccountSettingsStore.setActiveForTarget('ide', ideAccount.id);
+      result.ide = { accountId: ideAccount.id, email: ideAccount.email };
+    }
+  } catch (err) {
+    logger.warn('Failed to detect active Antigravity IDE account', err);
+  }
+
+  // 3. Detect Antigravity Classic (`classic`)
+  try {
+    let classicAccount: CloudAccount | undefined;
+    try {
+      const classicInfo = getCurrentAccountInfo('classic');
+      if (classicInfo.isAuthenticated && classicInfo.email) {
+        classicAccount = findAccountByEmail(classicInfo.email);
+      }
+    } catch {
+      // SQLite state might not exist
+    }
+
+    if (!classicAccount) {
+      try {
+        const credToken = readAntigravityCredentialStoreToken();
+        if (credToken) {
+          classicAccount =
+            findAccountByRefreshToken(credToken.refreshToken) ||
+            findAccountByAccessToken(credToken.accessToken);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (classicAccount) {
+      CloudAccountSettingsStore.setActiveForTarget('classic', classicAccount.id);
+      result.classic = { accountId: classicAccount.id, email: classicAccount.email };
+    }
+  } catch (err) {
+    logger.warn('Failed to detect active Antigravity Classic account', err);
+  }
+
+  return result;
+}
+
 export async function getCloudIdentityProfiles(accountId: string): Promise<DeviceProfilesSnapshot> {
   const account = await CloudAccountRepo.getAccount(accountId);
   if (!account) {
@@ -837,12 +1050,33 @@ export async function openCloudIdentityStorageFolder(): Promise<void> {
   }
 }
 
-export function getAutoSwitchEnabled(): boolean {
-  return CloudAccountSettingsStore.getSetting<boolean>('auto_switch_enabled', false);
+export interface AutoSwitchTargetsConfig {
+  classic: boolean;
+  ide: boolean;
+  agy: boolean;
+  global: boolean;
+  noRestart: boolean;
 }
 
-export async function setAutoSwitchEnabled(enabled: boolean): Promise<void> {
-  CloudAccountSettingsStore.setSetting('auto_switch_enabled', enabled);
+export function getAutoSwitchTargetsConfig(): AutoSwitchTargetsConfig {
+  return {
+    classic: CloudAccountSettingsStore.getAutoSwitchEnabledForTarget('classic'),
+    ide: CloudAccountSettingsStore.getAutoSwitchEnabledForTarget('ide'),
+    agy: CloudAccountSettingsStore.getAutoSwitchEnabledForTarget('agy'),
+    global: CloudAccountSettingsStore.getSetting<boolean>('auto_switch_enabled', false),
+    noRestart: CloudAccountSettingsStore.isNoRestartEnabled(),
+  };
+}
+
+export function getAutoSwitchEnabled(target?: AntigravityAppTarget): boolean {
+  return CloudAccountSettingsStore.getAutoSwitchEnabledForTarget(target);
+}
+
+export async function setAutoSwitchEnabled(
+  enabled: boolean,
+  target?: AntigravityAppTarget,
+): Promise<void> {
+  CloudAccountSettingsStore.setAutoSwitchEnabledForTarget(target, enabled);
   // Trigger an immediate check if enabled
   if (enabled) {
     const { CloudMonitorService } =
@@ -851,6 +1085,10 @@ export async function setAutoSwitchEnabled(enabled: boolean): Promise<void> {
       logger.error('Failed to poll after enabling auto-switch', err),
     );
   }
+}
+
+export function setAutoSwitchNoRestartEnabled(enabled: boolean): void {
+  CloudAccountSettingsStore.setNoRestartEnabled(enabled);
 }
 
 export interface AutoSwitchModelConfig {

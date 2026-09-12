@@ -20,6 +20,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -75,7 +76,7 @@ export function EmulationManagementDialog({
 
   const [count, setCount] = useState<number>(3);
   const [selectedPreset, setSelectedPreset] = useState<EmulationPresetType>('drain_demo');
-  const [randomizeModels, setRandomizeModels] = useState<boolean>(true);
+  const [randomizeQuota, setRandomizeQuota] = useState<boolean>(true);
 
   const isEnabled = !!emulationState?.enabled;
   const tickInterval = emulationState?.tickIntervalSeconds || 10;
@@ -122,19 +123,24 @@ export function EmulationManagementDialog({
   };
 
   const handleGenerate = () => {
+    const validCount = Math.max(1, Math.min(200, Number(count) || 1));
+    if (validCount !== count) {
+      setCount(validCount);
+    }
     generateMutation.mutate(
       {
-        count,
+        count: validCount,
         preset: selectedPreset,
-        randomizeModels: selectedPreset === 'random_modern_mix' || randomizeModels,
+        randomizeQuota: selectedPreset === 'random_modern_mix' || randomizeQuota,
+        randomizeModels: selectedPreset === 'random_modern_mix' || randomizeQuota,
       },
       {
         onSuccess: () => {
           toast({
             title: t('cloud.emulation.toast.generated', 'Accounts Generated'),
             description: t('cloud.emulation.toast.generatedDesc', {
-              count,
-              defaultValue: `Successfully generated ${count} emulated account(s).`,
+              count: validCount,
+              defaultValue: `Successfully generated ${validCount} emulated account(s).`,
             }),
           });
         },
@@ -298,28 +304,35 @@ export function EmulationManagementDialog({
                 </Select>
               </div>
 
-              {/* Count Selector */}
+              {/* Count Input & Presets */}
               <div className="sm:col-span-2 space-y-1">
-                <Label className="text-[11px] text-muted-foreground">
+                <Label htmlFor="dialog-custom-account-count-input" className="text-[11px] text-muted-foreground">
                   {t('cloud.emulation.quantity', 'Quantity')}
                 </Label>
-                <Select
-                  value={String(count)}
-                  onValueChange={(val) => setCount(Number(val))}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1" className="text-xs">1</SelectItem>
-                    <SelectItem value="3" className="text-xs">3</SelectItem>
-                    <SelectItem value="5" className="text-xs">5</SelectItem>
-                    <SelectItem value="10" className="text-xs">10</SelectItem>
-                    <SelectItem value="20" className="text-xs">20</SelectItem>
-                    <SelectItem value="50" className="text-xs">50</SelectItem>
-                    <SelectItem value="100" className="text-xs">100</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Input
+                  id="dialog-custom-account-count-input"
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={count || ''}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    if (isNaN(val)) {
+                      setCount(0);
+                    } else {
+                      setCount(Math.max(1, Math.min(200, val)));
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!count || count < 1) {
+                      setCount(1);
+                    } else if (count > 200) {
+                      setCount(200);
+                    }
+                  }}
+                  className="h-8 text-xs font-mono"
+                  placeholder="1 - 200"
+                />
               </div>
 
               {/* Generate Button */}
@@ -331,26 +344,50 @@ export function EmulationManagementDialog({
                   disabled={generateMutation.isPending}
                 >
                   <Plus className="h-3.5 w-3.5 mr-1" />
-                  {t('cloud.emulation.generateBtn', 'Generate')}
+                  {t('cloud.emulation.generateBtn', 'Generate')} ({count || 1})
                 </Button>
               </div>
             </div>
 
-            {/* Randomize Modern Models Switch */}
+            {/* Presets Row */}
+            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+              <span className="text-[10px] text-muted-foreground mr-1">
+                {t('cloud.emulation.quantityPresets', 'Presets')}:
+              </span>
+              {[1, 3, 5, 10, 20, 50, 100].map((presetVal) => (
+                <Button
+                  key={presetVal}
+                  type="button"
+                  variant={count === presetVal ? 'secondary' : 'outline'}
+                  size="sm"
+                  className={cn(
+                    'h-5 px-1.5 text-[10px] font-mono cursor-pointer transition-colors',
+                    count === presetVal
+                      ? 'border-purple-500/50 bg-purple-500/15 text-purple-600 dark:text-purple-300 font-semibold'
+                      : 'hover:bg-muted/80 text-muted-foreground',
+                  )}
+                  onClick={() => setCount(presetVal)}
+                >
+                  +{presetVal}
+                </Button>
+              ))}
+            </div>
+
+            {/* Randomize Quotas Switch */}
             <div className="flex items-center justify-between pt-2 border-t border-muted/50 mt-1">
               <div className="space-y-0.5 pr-2">
                 <Label htmlFor="dialog-randomize-models-switch" className="text-[11px] font-medium cursor-pointer flex items-center gap-1.5">
                   <Sparkles className="h-3 w-3 text-amber-500" />
-                  {t('cloud.emulation.randomizeModels', 'Randomize Modern Models')}
+                  {t('cloud.emulation.randomizeQuota', 'Randomize Quota Levels')}
                 </Label>
                 <p className="text-[10px] text-muted-foreground">
-                  {t('cloud.emulation.randomizeModelsDesc', 'Assign 2–6 random modern models per account with diverse quota levels.')}
+                  {t('cloud.emulation.randomizeQuotaDesc', 'Randomize 5h and weekly quota levels across accounts (consistent within Gemini and Claude groups).')}
                 </p>
               </div>
               <Switch
                 id="dialog-randomize-models-switch"
-                checked={randomizeModels || selectedPreset === 'random_modern_mix'}
-                onCheckedChange={(checked) => setRandomizeModels(checked)}
+                checked={randomizeQuota || selectedPreset === 'random_modern_mix'}
+                onCheckedChange={(checked) => setRandomizeQuota(checked)}
                 disabled={selectedPreset === 'random_modern_mix'}
               />
             </div>

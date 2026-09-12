@@ -2,8 +2,8 @@ import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { GeminiToolConfigAliasesSchema } from '../../../antigravity/GeminiToolConfigCompat';
 import { createGeminiRequestEnvelope } from './gemini-request-envelope';
 import { isEmpty, isNumber } from 'lodash-es';
-import { AccountLeaseService } from '@/modules/proxy-gateway/server/modules/account-lease/account-lease.service';
-import { GeminiClient } from '@/modules/proxy-gateway/server/modules/gemini/gemini-client.service';
+import { AccountLeaseService } from '../account-lease/account-lease.service';
+import { GeminiClient } from './gemini-client.service';
 import { Observable } from 'rxjs';
 import { GeminiInternalRequest } from '@/modules/proxy-gateway/antigravity/types';
 import {

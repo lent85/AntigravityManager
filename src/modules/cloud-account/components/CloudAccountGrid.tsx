@@ -28,6 +28,7 @@ interface CloudAccountGridProps {
   onRefresh: (id: string) => void;
   onDelete: (id: string) => void;
   onSwitch: (id: string, appTarget?: AntigravityAppTarget) => void;
+  onMarkActive?: (id: string, appTarget?: AntigravityAppTarget) => void;
   onManageIdentity: (id: string) => void;
   onToggleSelection: (id: string, selected: boolean) => void;
   onResetTierFilter: () => void;
@@ -47,6 +48,7 @@ export function CloudAccountGrid({
   onRefresh,
   onDelete,
   onSwitch,
+  onMarkActive,
   onManageIdentity,
   onToggleSelection,
   onResetTierFilter,
@@ -64,6 +66,7 @@ export function CloudAccountGrid({
               onRefresh={onRefresh}
               onDelete={onDelete}
               onSwitch={onSwitch}
+              onMarkActive={onMarkActive}
               onManageIdentity={onManageIdentity}
               isRefreshing={refreshingAccountId === account.id}
               isDeleting={deletingAccountId === account.id}
@@ -82,6 +85,7 @@ export function CloudAccountGrid({
               onRefresh={onRefresh}
               onDelete={onDelete}
               onSwitch={onSwitch}
+              onMarkActive={onMarkActive}
               onManageIdentity={onManageIdentity}
               isRefreshing={refreshingAccountId === account.id}
               isDeleting={deletingAccountId === account.id}
@@ -99,6 +103,7 @@ export function CloudAccountGrid({
             onRefresh={onRefresh}
             onDelete={onDelete}
             onSwitch={onSwitch}
+            onMarkActive={onMarkActive}
             onManageIdentity={onManageIdentity}
             isSelected={selectedIds.has(account.id)}
             onToggleSelection={onToggleSelection}
