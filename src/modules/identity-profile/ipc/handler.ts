@@ -10,6 +10,7 @@ import {
   getAgentDir,
   getAntigravityDbPaths,
   getAntigravityStoragePaths,
+  getAppDataDir,
 } from '@/shared/platform/paths';
 
 const GLOBAL_BASELINE_FILE = 'device_original.json';
@@ -543,7 +544,12 @@ export function getStoragePath(appTarget?: AntigravityAppTarget): string {
 }
 
 export function getStorageDirectoryPath(appTarget?: AntigravityAppTarget): string {
-  return path.dirname(getStoragePath(appTarget));
+  try {
+    return path.dirname(getStoragePath(appTarget));
+  } catch {
+    const candidates = getAntigravityStoragePaths(appTarget);
+    return candidates.length > 0 ? path.dirname(candidates[0]) : getAppDataDir(appTarget);
+  }
 }
 
 export function loadGlobalOriginalProfile(): DeviceProfile | null {
@@ -702,7 +708,23 @@ export function applyDeviceProfile(
   profile: DeviceProfile,
   appTarget?: AntigravityAppTarget,
 ): string {
-  const storagePath = getStoragePath(appTarget);
+  let storagePath: string;
+  try {
+    storagePath = getStoragePath(appTarget);
+  } catch (error) {
+    const candidatePaths = getAntigravityStoragePaths(appTarget);
+    if (candidatePaths.length > 0) {
+      storagePath = candidatePaths[0];
+      const storageDir = path.dirname(storagePath);
+      if (!fs.existsSync(storageDir)) {
+        fs.mkdirSync(storageDir, { recursive: true });
+      }
+      fs.writeFileSync(storagePath, '{}\n', 'utf-8');
+    } else {
+      throw error;
+    }
+  }
+
   const backupPath = `${storagePath}.backup`;
   const stateDbPath = getStateDbPathFromStorage(storagePath);
   const stateBackupPath = `${stateDbPath}.backup`;

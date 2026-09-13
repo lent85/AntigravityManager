@@ -175,7 +175,18 @@ export async function executeSwitchFlow(options: SwitchFlowOptions): Promise<voi
               throw new Error('Account has no bound identity profile');
             }
             trace.phaseSync('applyProfileMs', () => {
-              applyDeviceProfile(targetProfile, appTarget);
+              try {
+                applyDeviceProfile(targetProfile, appTarget);
+              } catch (error: any) {
+                if (error?.message === 'storage_json_not_found') {
+                  logger.warn(
+                    'Skipping device profile apply because credential-store target storage.json was not found',
+                    error,
+                  );
+                  return;
+                }
+                throw error;
+              }
             });
           }
         } else {

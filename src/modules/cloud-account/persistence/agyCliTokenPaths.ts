@@ -47,11 +47,12 @@ export function getAgyCliTokenPaths(options: GetAgyCliTokenPathsOptions = {}): s
     pathEnvironment: options.pathEnvironment ?? process.env.PATH,
     platform,
   });
-  if (localExecutablePath) {
-    const sessionDirectory = localPathApi.join(homeDirectory, ...AGY_CLI_DIR_SEGMENTS);
-    if (exists(sessionDirectory)) {
-      appendUniquePath(tokenPaths, localPathApi.join(sessionDirectory, AGY_CLI_TOKEN_FILE));
-    }
+  const sessionDirectory = localPathApi.join(homeDirectory, ...AGY_CLI_DIR_SEGMENTS);
+  const localTokenCandidate = localPathApi.join(sessionDirectory, AGY_CLI_TOKEN_FILE);
+  if (localExecutablePath && exists(sessionDirectory)) {
+    appendUniquePath(tokenPaths, localTokenCandidate);
+  } else if (exists(localTokenCandidate)) {
+    appendUniquePath(tokenPaths, localTokenCandidate);
   }
 
   if (platform !== 'win32') {

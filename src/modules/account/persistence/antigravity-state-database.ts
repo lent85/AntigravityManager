@@ -13,6 +13,7 @@ import { ProtobufUtils } from '@/shared/serialization/protobuf';
 import { openDrizzleConnection } from '@/shared/persistence/database/dbConnection';
 import { itemTable } from '@/shared/persistence/database/schema';
 import type { CredentialStoreTokenInput } from '@/shared/auth/credentialStoreToken';
+import { extractEmailFromJwt } from '@/shared/auth/jwt';
 
 const KEYS_TO_BACKUP: ItemTableKey[] = [
   'antigravityAuthStatus',
@@ -198,6 +199,31 @@ function readCurrentAccountInfoFromDbPath(
       }
     }
 
+    // Query for antigravityUnifiedStateSync.oauthToken
+    let unifiedEmail = '';
+    const unifiedValue = readItemValue(
+      orm,
+      'antigravityUnifiedStateSync.oauthToken',
+      `${contextPrefix}.antigravityUnifiedStateSync.oauthToken`,
+    );
+    if (unifiedValue) {
+      try {
+        const unifiedBuffer = Buffer.from(unifiedValue, 'base64');
+        const unifiedData = new Uint8Array(unifiedBuffer);
+        const details =
+          ProtobufUtils.extractOAuthTokenDetailsFromUnifiedState(unifiedData) ??
+          ProtobufUtils.extractOAuthTokenInfoFromUnifiedState(unifiedData);
+        if (details?.idToken) {
+          const extracted = extractEmailFromJwt(details.idToken);
+          if (extracted) {
+            unifiedEmail = extracted;
+          }
+        }
+      } catch (error) {
+        logger.warn('Failed to parse unified OAuth token in account info read', error);
+      }
+    }
+
     // Helper to find email in object
     const findEmail = (obj: { email?: string; user?: { email?: string } }): string => {
       if (!obj) {
@@ -217,6 +243,7 @@ function readCurrentAccountInfoFromDbPath(
       findEmail(initState) ||
       findEmail(googleState) ||
       findEmail(settingsState) ||
+      unifiedEmail ||
       '';
 
     const name = authStatus?.user?.name || initState?.user?.name || authStatus?.name || '';

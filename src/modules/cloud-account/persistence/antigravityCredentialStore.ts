@@ -245,14 +245,17 @@ function writeViaSecretTool(payload: string): void {
   );
 }
 
-export type CredentialStoreWriteOptions =
+export type CredentialStoreWriteOptions = (
   | {
       syncGoogleOAuthFiles: true;
       email: string;
     }
   | {
       syncGoogleOAuthFiles?: false;
-    };
+    }
+) & {
+  syncAgyCliToken?: boolean;
+};
 
 export function writeAntigravityCredentialStoreToken(
   token: CredentialStoreTokenInput,
@@ -265,7 +268,9 @@ export function writeAntigravityCredentialStoreToken(
 
   // The CLI keeps the same payload in a file rather than the credential store,
   // so it has to be updated here or it stays on the previous account.
-  writeAgyCliToken(payload);
+  if (options.syncAgyCliToken !== false) {
+    writeAgyCliToken(payload);
+  }
 
   if (options.syncGoogleOAuthFiles) {
     try {

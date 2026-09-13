@@ -38,6 +38,15 @@ export function detectAgyCliExecutablePath(
     return userLocalPath;
   }
 
+  if (platform === 'win32') {
+    const localAppData =
+      process.env.LOCALAPPDATA || pathApi.join(homeDirectory, 'AppData', 'Local');
+    const appDataLocalPath = pathApi.join(localAppData, 'agy', 'bin', executableName);
+    if (exists(appDataLocalPath)) {
+      return appDataLocalPath;
+    }
+  }
+
   const pathEnvironment = options.pathEnvironment ?? process.env.PATH;
   if (pathEnvironment) {
     for (const directory of pathEnvironment.split(pathApi.delimiter)) {

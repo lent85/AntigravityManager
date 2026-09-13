@@ -125,7 +125,11 @@ const vi = {
     current: 'Hiện tại',
     lastUsed: 'Đã dùng {{time}}',
     switchToAntigravity: 'Chuyển sang Antigravity',
-    switchToIde: 'Chuyển sang Antigravity IDE',
+    switchToIde: 'Chuyển sang IDE',
+    switchToAgy: 'Chuyển sang CLI',
+    forceApplyToAntigravity: 'Buộc áp dụng Antigravity',
+    forceApplyToIde: 'Buộc áp dụng IDE',
+    forceApplyToAgy: 'Buộc áp dụng CLI',
   },
   home: {
     title: 'Tài khoản',
@@ -477,9 +481,9 @@ const vi = {
     autoDetectFailed: 'Phát hiện tài khoản thất bại',
     markActive: {
       title: 'Đánh dấu đang dùng (Không restart)',
-      antigravity: 'Đánh dấu dùng cho Antigravity',
-      ide: 'Đánh dấu dùng cho Antigravity IDE',
-      agy: 'Đánh dấu dùng cho Antigravity CLI',
+      antigravity: 'Đánh dấu Antigravity',
+      ide: 'Đánh dấu IDE',
+      agy: 'Đánh dấu CLI',
       success: 'Đã đánh dấu tài khoản đang dùng cho {{target}}',
       failed: 'Đánh dấu tài khoản thất bại',
     },
@@ -497,6 +501,7 @@ const vi = {
     toolbar: {
       maskIdentity: 'Ẩn tên & email',
       unmaskIdentity: 'Hiện tên & email',
+      detectActive: 'Phát hiện môi trường đang hoạt động',
     },
     emulation: {
       title: 'Giả Lập Tài Khoản & Quota',

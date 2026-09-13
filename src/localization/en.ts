@@ -126,7 +126,11 @@ const en = {
     current: 'Current',
     lastUsed: 'Last used {{time}}',
     switchToAntigravity: 'Switch to Antigravity',
-    switchToIde: 'Switch to Antigravity IDE',
+    switchToIde: 'Switch to IDE',
+    switchToAgy: 'Switch to CLI',
+    forceApplyToAntigravity: 'Force Apply Antigravity',
+    forceApplyToIde: 'Force Apply IDE',
+    forceApplyToAgy: 'Force Apply CLI',
   },
   home: {
     title: 'Accounts',
@@ -482,9 +486,9 @@ const en = {
     autoDetectFailed: 'Failed to auto-detect active accounts',
     markActive: {
       title: 'Mark as In-Use (No restart)',
-      antigravity: 'Mark as in-use for Antigravity',
-      ide: 'Mark as in-use for Antigravity IDE',
-      agy: 'Mark as in-use for Antigravity CLI',
+      antigravity: 'Mark Antigravity',
+      ide: 'Mark IDE',
+      agy: 'Mark CLI',
       success: 'Account marked as in-use for {{target}}',
       failed: 'Failed to mark account as in-use',
     },
@@ -502,6 +506,7 @@ const en = {
     toolbar: {
       maskIdentity: 'Mask name & email',
       unmaskIdentity: 'Show name & email',
+      detectActive: 'Detect Active Environments',
     },
     emulation: {
       title: 'Account Emulation & Quota Simulation',

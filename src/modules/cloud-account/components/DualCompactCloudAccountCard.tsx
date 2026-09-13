@@ -436,104 +436,116 @@ export function DualCompactCloudAccountCard({
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              className="w-56"
+              className="animate-in fade-in zoom-in-95 w-72 min-w-[18rem] duration-100"
               onMouseEnter={() => setMenuOpen(true)}
             >
-              <DropdownMenuLabel className="text-muted-foreground px-2 py-1.5 text-[10px] uppercase tracking-wider">
+              <DropdownMenuLabel className="text-muted-foreground px-2 py-1.5 text-[10px] tracking-wider uppercase">
                 {t('cloud.card.switchTarget', 'Switch Environment')}
               </DropdownMenuLabel>
               <DropdownMenuItem
                 onClick={() => onSwitch(account.id)}
-                disabled={isSwitching || account.is_active_classic}
+                disabled={isSwitching}
                 className="flex cursor-pointer items-center justify-between py-2 text-xs"
               >
-                <span className="flex items-center gap-2">
-                  <Power className="text-primary h-3.5 w-3.5" />
-                  <span>{t('account.switchToAntigravity', 'Switch to Antigravity')}</span>
+                <span className="flex items-center gap-2 whitespace-nowrap">
+                  <Power className="text-green-500 h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">
+                    {account.is_active_classic
+                      ? t('account.forceApplyToAntigravity', 'Force Apply to Antigravity')
+                      : t('account.switchToAntigravity', 'Switch to Antigravity')}
+                  </span>
                 </span>
                 {account.is_active_classic && (
-                  <Badge className="h-4 border-none bg-green-500/20 px-1 text-[9px] font-semibold text-green-600 hover:bg-green-500/20">
-                    Active
+                  <Badge className="h-4 shrink-0 border-none bg-green-500/20 px-1 text-[9px] font-semibold text-green-600 hover:bg-green-500/20">
+                    {t('account.active', 'Active')}
                   </Badge>
                 )}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => onSwitch(account.id, 'ide')}
-                disabled={isSwitching || account.is_active_ide}
+                disabled={isSwitching}
                 className="flex cursor-pointer items-center justify-between py-2 text-xs"
               >
-                <span className="flex items-center gap-2">
-                  <Repeat2 className="text-primary h-3.5 w-3.5" />
-                  <span>{t('account.switchToIde', 'Switch to Antigravity IDE')}</span>
+                <span className="flex items-center gap-2 whitespace-nowrap">
+                  <Repeat2 className="text-indigo-500 h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">
+                    {account.is_active_ide
+                      ? t('account.forceApplyToIde', 'Force Apply to Antigravity IDE')
+                      : t('account.switchToIde', 'Switch to Antigravity IDE')}
+                  </span>
                 </span>
                 {account.is_active_ide && (
-                  <Badge className="h-4 border-none bg-indigo-500/20 px-1 text-[9px] font-semibold text-indigo-600 hover:bg-indigo-500/20">
-                    Active
+                  <Badge className="h-4 shrink-0 border-none bg-indigo-500/20 px-1 text-[9px] font-semibold text-indigo-600 hover:bg-indigo-500/20">
+                    {t('account.active', 'Active')}
                   </Badge>
                 )}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => onSwitch(account.id, 'agy')}
-                disabled={isSwitching || account.is_active_agy}
+                disabled={isSwitching}
                 className="flex cursor-pointer items-center justify-between py-2 text-xs"
               >
-                <span className="flex items-center gap-2">
-                  <Terminal className="text-primary h-3.5 w-3.5" />
-                  <span>{t('account.switchToAgy', 'Switch to Antigravity CLI')}</span>
+                <span className="flex items-center gap-2 whitespace-nowrap">
+                  <Terminal className="text-emerald-500 h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">
+                    {account.is_active_agy
+                      ? t('account.forceApplyToAgy', 'Force Apply to Antigravity CLI')
+                      : t('account.switchToAgy', 'Switch to Antigravity CLI')}
+                  </span>
                 </span>
                 {account.is_active_agy && (
-                  <Badge className="h-4 border-none bg-emerald-500/20 px-1 text-[9px] font-semibold text-emerald-600 hover:bg-emerald-500/20">
-                    Active
+                  <Badge className="h-4 shrink-0 border-none bg-emerald-500/20 px-1 text-[9px] font-semibold text-emerald-600 hover:bg-emerald-500/20">
+                    {t('account.active', 'Active')}
                   </Badge>
                 )}
               </DropdownMenuItem>
 
               <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-muted-foreground px-2 py-1.5 text-[10px] uppercase tracking-wider">
+              <DropdownMenuLabel className="text-muted-foreground px-2 py-1.5 text-[10px] tracking-wider uppercase">
                 {t('cloud.markActive.title', 'Mark as In-Use (No restart)')}
               </DropdownMenuLabel>
               <DropdownMenuItem
                 onClick={() => onMarkActive?.(account.id, 'classic')}
-                disabled={isSwitching || account.is_active_classic}
+                disabled={isSwitching}
                 className="flex cursor-pointer items-center justify-between py-2 text-xs"
               >
-                <span className="flex items-center gap-2">
-                  <CheckCircle2 className="text-green-500 h-3.5 w-3.5" />
-                  <span>{t('cloud.markActive.antigravity', 'Mark as in-use for Antigravity')}</span>
+                <span className="flex items-center gap-2 whitespace-nowrap">
+                  <CheckCircle2 className="text-green-500 h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{t('cloud.markActive.antigravity', 'Mark as in-use for Antigravity')}</span>
                 </span>
                 {account.is_active_classic && (
-                  <Badge className="h-4 border-none bg-green-500/20 px-1 text-[9px] font-semibold text-green-600 hover:bg-green-500/20">
-                    Active
+                  <Badge className="h-4 shrink-0 border-none bg-green-500/20 px-1 text-[9px] font-semibold text-green-600 hover:bg-green-500/20">
+                    {t('account.active', 'Active')}
                   </Badge>
                 )}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => onMarkActive?.(account.id, 'ide')}
-                disabled={isSwitching || account.is_active_ide}
+                disabled={isSwitching}
                 className="flex cursor-pointer items-center justify-between py-2 text-xs"
               >
-                <span className="flex items-center gap-2">
-                  <CheckCircle2 className="text-indigo-500 h-3.5 w-3.5" />
-                  <span>{t('cloud.markActive.ide', 'Mark as in-use for Antigravity IDE')}</span>
+                <span className="flex items-center gap-2 whitespace-nowrap">
+                  <CheckCircle2 className="text-indigo-500 h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{t('cloud.markActive.ide', 'Mark as in-use for Antigravity IDE')}</span>
                 </span>
                 {account.is_active_ide && (
-                  <Badge className="h-4 border-none bg-indigo-500/20 px-1 text-[9px] font-semibold text-indigo-600 hover:bg-indigo-500/20">
-                    Active
+                  <Badge className="h-4 shrink-0 border-none bg-indigo-500/20 px-1 text-[9px] font-semibold text-indigo-600 hover:bg-indigo-500/20">
+                    {t('account.active', 'Active')}
                   </Badge>
                 )}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => onMarkActive?.(account.id, 'agy')}
-                disabled={isSwitching || account.is_active_agy}
+                disabled={isSwitching}
                 className="flex cursor-pointer items-center justify-between py-2 text-xs"
               >
-                <span className="flex items-center gap-2">
-                  <CheckCircle2 className="text-emerald-500 h-3.5 w-3.5" />
-                  <span>{t('cloud.markActive.agy', 'Mark as in-use for Antigravity CLI')}</span>
+                <span className="flex items-center gap-2 whitespace-nowrap">
+                  <CheckCircle2 className="text-emerald-500 h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{t('cloud.markActive.agy', 'Mark as in-use for Antigravity CLI')}</span>
                 </span>
                 {account.is_active_agy && (
-                  <Badge className="h-4 border-none bg-emerald-500/20 px-1 text-[9px] font-semibold text-emerald-600 hover:bg-emerald-500/20">
-                    Active
+                  <Badge className="h-4 shrink-0 border-none bg-emerald-500/20 px-1 text-[9px] font-semibold text-emerald-600 hover:bg-emerald-500/20">
+                    {t('account.active', 'Active')}
                   </Badge>
                 )}
               </DropdownMenuItem>
@@ -548,124 +560,139 @@ export function DualCompactCloudAccountCard({
               <span className="sr-only">Menu</span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel className="text-muted-foreground px-2 py-1.5 text-[10px] uppercase tracking-wider">
+          <DropdownMenuContent
+            align="end"
+            className="animate-in fade-in zoom-in-95 w-72 min-w-[18rem] max-h-[calc(100vh-4rem)] overflow-y-auto duration-100"
+          >
+            <DropdownMenuLabel className="text-muted-foreground px-2 py-1.5 text-[10px] tracking-wider uppercase">
               {t('cloud.card.switchTarget', 'Switch Environment')}
             </DropdownMenuLabel>
             <DropdownMenuItem
               onClick={() => onSwitch(account.id)}
-              disabled={isSwitching || account.is_active_classic}
+              disabled={isSwitching}
               className="flex cursor-pointer items-center justify-between py-2 text-xs"
             >
-              <span className="flex items-center gap-2">
-                <Power className="text-green-500 h-3.5 w-3.5" />
-                <span>{t('account.switchToAntigravity', 'Switch to Antigravity')}</span>
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                <Power className="text-green-500 h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">
+                  {account.is_active_classic
+                    ? t('account.forceApplyToAntigravity', 'Force Apply to Antigravity')
+                    : t('account.switchToAntigravity', 'Switch to Antigravity')}
+                </span>
               </span>
               {account.is_active_classic && (
-                <Badge className="h-4 border-none bg-green-500/20 px-1 text-[9px] font-semibold text-green-600">
-                  Active
+                <Badge className="h-4 shrink-0 border-none bg-green-500/20 px-1 text-[9px] font-semibold text-green-600 hover:bg-green-500/20">
+                  {t('account.active', 'Active')}
                 </Badge>
               )}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => onSwitch(account.id, 'ide')}
-              disabled={isSwitching || account.is_active_ide}
+              disabled={isSwitching}
               className="flex cursor-pointer items-center justify-between py-2 text-xs"
             >
-              <span className="flex items-center gap-2">
-                <Repeat2 className="text-indigo-500 h-3.5 w-3.5" />
-                <span>{t('account.switchToIde', 'Switch to Antigravity IDE')}</span>
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                <Repeat2 className="text-indigo-500 h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">
+                  {account.is_active_ide
+                    ? t('account.forceApplyToIde', 'Force Apply to Antigravity IDE')
+                    : t('account.switchToIde', 'Switch to Antigravity IDE')}
+                </span>
               </span>
               {account.is_active_ide && (
-                <Badge className="h-4 border-none bg-indigo-500/20 px-1 text-[9px] font-semibold text-indigo-600">
-                  Active
+                <Badge className="h-4 shrink-0 border-none bg-indigo-500/20 px-1 text-[9px] font-semibold text-indigo-600 hover:bg-indigo-500/20">
+                  {t('account.active', 'Active')}
                 </Badge>
               )}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => onSwitch(account.id, 'agy')}
-              disabled={isSwitching || account.is_active_agy}
+              disabled={isSwitching}
               className="flex cursor-pointer items-center justify-between py-2 text-xs"
             >
-              <span className="flex items-center gap-2">
-                <Terminal className="text-emerald-500 h-3.5 w-3.5" />
-                <span>{t('account.switchToAgy', 'Switch to Antigravity CLI')}</span>
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                <Terminal className="text-emerald-500 h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">
+                  {account.is_active_agy
+                    ? t('account.forceApplyToAgy', 'Force Apply to Antigravity CLI')
+                    : t('account.switchToAgy', 'Switch to Antigravity CLI')}
+                </span>
               </span>
               {account.is_active_agy && (
-                <Badge className="h-4 border-none bg-emerald-500/20 px-1 text-[9px] font-semibold text-emerald-600">
-                  Active
+                <Badge className="h-4 shrink-0 border-none bg-emerald-500/20 px-1 text-[9px] font-semibold text-emerald-600 hover:bg-emerald-500/20">
+                  {t('account.active', 'Active')}
                 </Badge>
               )}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-muted-foreground px-2 py-1.5 text-[10px] uppercase tracking-wider">
+            <DropdownMenuLabel className="text-muted-foreground px-2 py-1.5 text-[10px] tracking-wider uppercase">
               {t('cloud.markActive.title', 'Mark as In-Use (No restart)')}
             </DropdownMenuLabel>
             <DropdownMenuItem
               onClick={() => onMarkActive?.(account.id, 'classic')}
-              disabled={isSwitching || account.is_active_classic}
+              disabled={isSwitching}
               className="flex cursor-pointer items-center justify-between py-2 text-xs"
             >
-              <span className="flex items-center gap-2">
-                <CheckCircle2 className="text-green-500 h-3.5 w-3.5" />
-                <span>{t('cloud.markActive.antigravity', 'Mark as in-use for Antigravity')}</span>
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                <CheckCircle2 className="text-green-500 h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{t('cloud.markActive.antigravity', 'Mark as in-use for Antigravity')}</span>
               </span>
               {account.is_active_classic && (
-                <Badge className="h-4 border-none bg-green-500/20 px-1 text-[9px] font-semibold text-green-600">
-                  Active
+                <Badge className="h-4 shrink-0 border-none bg-green-500/20 px-1 text-[9px] font-semibold text-green-600 hover:bg-green-500/20">
+                  {t('account.active', 'Active')}
                 </Badge>
               )}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => onMarkActive?.(account.id, 'ide')}
-              disabled={isSwitching || account.is_active_ide}
+              disabled={isSwitching}
               className="flex cursor-pointer items-center justify-between py-2 text-xs"
             >
-              <span className="flex items-center gap-2">
-                <CheckCircle2 className="text-indigo-500 h-3.5 w-3.5" />
-                <span>{t('cloud.markActive.ide', 'Mark as in-use for Antigravity IDE')}</span>
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                <CheckCircle2 className="text-indigo-500 h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{t('cloud.markActive.ide', 'Mark as in-use for Antigravity IDE')}</span>
               </span>
               {account.is_active_ide && (
-                <Badge className="h-4 border-none bg-indigo-500/20 px-1 text-[9px] font-semibold text-indigo-600">
-                  Active
+                <Badge className="h-4 shrink-0 border-none bg-indigo-500/20 px-1 text-[9px] font-semibold text-indigo-600 hover:bg-indigo-500/20">
+                  {t('account.active', 'Active')}
                 </Badge>
               )}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => onMarkActive?.(account.id, 'agy')}
-              disabled={isSwitching || account.is_active_agy}
+              disabled={isSwitching}
               className="flex cursor-pointer items-center justify-between py-2 text-xs"
             >
-              <span className="flex items-center gap-2">
-                <CheckCircle2 className="text-emerald-500 h-3.5 w-3.5" />
-                <span>{t('cloud.markActive.agy', 'Mark as in-use for Antigravity CLI')}</span>
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                <CheckCircle2 className="text-emerald-500 h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{t('cloud.markActive.agy', 'Mark as in-use for Antigravity CLI')}</span>
               </span>
               {account.is_active_agy && (
-                <Badge className="h-4 border-none bg-emerald-500/20 px-1 text-[9px] font-semibold text-emerald-600">
-                  Active
+                <Badge className="h-4 shrink-0 border-none bg-emerald-500/20 px-1 text-[9px] font-semibold text-emerald-600 hover:bg-emerald-500/20">
+                  {t('account.active', 'Active')}
                 </Badge>
               )}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-muted-foreground px-2 py-1 text-[10px] uppercase tracking-wider">
+            <DropdownMenuLabel className="text-muted-foreground px-2 py-1 text-[10px] tracking-wider uppercase">
               {t('cloud.card.actions', 'Actions')}
             </DropdownMenuLabel>
-            <DropdownMenuItem onClick={() => onRefresh(account.id)} disabled={isRefreshing} className="cursor-pointer">
-              <RefreshCw className="mr-2 h-4 w-4" />
-              {t('cloud.card.refresh', 'Refresh Quota')}
+            <DropdownMenuItem onClick={() => onRefresh(account.id)} disabled={isRefreshing} className="flex cursor-pointer items-center py-2 text-xs">
+              <RefreshCw className={cn('mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground', isRefreshing && 'animate-spin')} />
+              <span className="whitespace-nowrap">{t('cloud.card.refresh', 'Refresh Quota')}</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onManageIdentity(account.id)} className="cursor-pointer">
-              <Fingerprint className="mr-2 h-4 w-4" />
-              {t('cloud.card.identityProfile', 'Identity Profile')}
+            <DropdownMenuItem onClick={() => onManageIdentity(account.id)} className="flex cursor-pointer items-center py-2 text-xs">
+              <Fingerprint className="mr-2 h-3.5 w-3.5 shrink-0 text-purple-400" />
+              <span className="whitespace-nowrap">{t('cloud.card.identityProfile', 'Identity Profile')}</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => onDelete(account.id)}
-              className="text-destructive focus:text-destructive cursor-pointer"
+              className="text-destructive focus:text-destructive flex cursor-pointer items-center py-2 text-xs"
               disabled={isDeleting}
             >
-              <Trash className="mr-2 h-4 w-4" />
-              {t('cloud.card.delete', 'Delete Account')}
+              <Trash className="mr-2 h-3.5 w-3.5 shrink-0" />
+              <span className="whitespace-nowrap">{t('cloud.card.delete', 'Delete Account')}</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

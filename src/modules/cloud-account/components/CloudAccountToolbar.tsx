@@ -29,6 +29,7 @@ import {
   ChevronDown,
   Laptop,
   Terminal,
+  Radar,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -431,6 +432,21 @@ export function CloudAccountToolbar({
             <RefreshCcw className={`h-3.5 w-3.5 ${isForcePollPending ? 'animate-spin' : ''}`} />
           </Button>
 
+          {/* Detect Active Environments */}
+          {onDetectActiveAccounts && (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={onDetectActiveAccounts}
+              title={t('cloud.toolbar.detectActive', 'Detect Active Environments')}
+              aria-label={t('cloud.toolbar.detectActive', 'Detect Active Environments')}
+              disabled={isDetectActivePending}
+              className="h-8 w-8 cursor-pointer"
+            >
+              <Radar className={cn('h-3.5 w-3.5', isDetectActivePending && 'animate-spin')} />
+            </Button>
+          )}
+
           {/* Emulation Sandbox */}
           {showEmulationUi && (
             <EmulationManagementDialog
@@ -482,7 +498,7 @@ export function CloudAccountToolbar({
                 <span className="hidden @md:inline @4xl:hidden">Sync</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56" side="bottom" sideOffset={8}>
+            <DropdownMenuContent align="end" className="w-64 min-w-[16rem]" side="bottom" sideOffset={8}>
               <DropdownMenuLabel className="text-muted-foreground px-2 py-1.5 text-[10px] tracking-wider uppercase">
                 {t('cloud.syncSource', 'Sync Source')}
               </DropdownMenuLabel>
@@ -500,6 +516,19 @@ export function CloudAccountToolbar({
               >
                 {t('cloud.syncFromAntigravityIde', 'Antigravity IDE')}
               </DropdownMenuItem>
+              {onDetectActiveAccounts && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    disabled={isDetectActivePending}
+                    onClick={onDetectActiveAccounts}
+                  >
+                    <Radar className={cn('mr-2 h-3.5 w-3.5 shrink-0', isDetectActivePending && 'animate-spin')} />
+                    <span className="whitespace-nowrap">{t('cloud.toolbar.detectActive', 'Detect Active Environments')}</span>
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 

@@ -111,7 +111,11 @@ const zhCn = {
     current: '当前',
     lastUsed: '上次使用 {{time}}',
     switchToAntigravity: '切换到 Antigravity',
-    switchToIde: '切换到 Antigravity IDE',
+    switchToIde: '切换到 IDE',
+    switchToAgy: '切换到 CLI',
+    forceApplyToAntigravity: '强制应用 Antigravity',
+    forceApplyToIde: '强制应用 IDE',
+    forceApplyToAgy: '强制应用 CLI',
   },
   home: {
     title: '账号列表',

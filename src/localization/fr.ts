@@ -131,7 +131,11 @@ const fr = {
     current: 'Actuel',
     lastUsed: 'Derniere utilisation {{time}}',
     switchToAntigravity: 'Basculer vers Antigravity',
-    switchToIde: 'Basculer vers Antigravity IDE',
+    switchToIde: 'Basculer vers IDE',
+    switchToAgy: 'Basculer vers CLI',
+    forceApplyToAntigravity: 'Forcer Antigravity',
+    forceApplyToIde: 'Forcer IDE',
+    forceApplyToAgy: 'Forcer CLI',
   },
   home: {
     title: 'Comptes',
@@ -488,9 +492,9 @@ const fr = {
     autoDetectFailed: 'Échec de la détection auto des comptes actifs',
     markActive: {
       title: 'Marquer comme actif (sans redémarrer)',
-      antigravity: 'Marquer comme actif pour Antigravity',
-      ide: 'Marquer comme actif pour Antigravity IDE',
-      agy: 'Marquer comme actif pour Antigravity CLI',
+      antigravity: 'Marquer Antigravity',
+      ide: 'Marquer IDE',
+      agy: 'Marquer CLI',
       success: 'Compte marqué comme actif pour {{target}}',
       failed: 'Échec du marquage du compte comme actif',
     },
@@ -508,6 +512,7 @@ const fr = {
     toolbar: {
       maskIdentity: 'Masquer le nom et l’e-mail',
       unmaskIdentity: 'Afficher le nom et l’e-mail',
+      detectActive: 'Détecter les environnements actifs',
     },
     emulation: {
       title: 'Émulation de compte et simulation de quota',

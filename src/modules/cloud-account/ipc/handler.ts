@@ -40,6 +40,8 @@ import {
   writeAntigravityCredentialStoreToken,
 } from '@/modules/cloud-account/persistence/antigravityCredentialStore';
 import { writeAgyCliToken } from '@/modules/cloud-account/persistence/agyCliTokenStore';
+import { matchAccountFromCredentialToken } from '@/modules/cloud-account/services/accountTokenMatcher';
+import { IdeAccountImportAdapter } from '@/modules/cloud-account/persistence/ide-account-import-adapter';
 import type { DeviceProfile, DeviceProfilesSnapshot } from '@/modules/identity-profile/types';
 import {
   classifyAccountStatusFromError,
@@ -404,9 +406,35 @@ export async function listCloudAccounts(): Promise<CloudAccount[]> {
   }
   const classicUsesCredentialStore =
     CredentialStoreInjectionAdapter.shouldInjectTokenIntoCredentialStore('classic');
-  const activeClassicAccountId = classicUsesCredentialStore
-    ? CloudAccountSettingsStore.getActiveAccountIdForTarget('classic')
-    : '';
+
+  // 1. Resolve live or effective active classic account
+  let effectiveActiveClassicAccountId = '';
+  if (classicUsesCredentialStore) {
+    try {
+      const credToken = readAntigravityCredentialStoreToken();
+      if (credToken) {
+        const matched = await matchAccountFromCredentialToken(credToken, accounts);
+        if (matched) {
+          effectiveActiveClassicAccountId = matched.id;
+          CloudAccountSettingsStore.setActiveForTarget('classic', matched.id);
+        }
+      }
+    } catch {
+      // Best-effort check
+    }
+  }
+  if (!effectiveActiveClassicAccountId && classicEmail) {
+    const matched = accounts.find((acc) => normalizeAccountEmail(acc.email) === classicEmail);
+    if (matched) {
+      effectiveActiveClassicAccountId = matched.id;
+      CloudAccountSettingsStore.setActiveForTarget('classic', matched.id);
+    }
+  }
+  if (!effectiveActiveClassicAccountId) {
+    effectiveActiveClassicAccountId =
+      CloudAccountSettingsStore.getActiveAccountIdForTarget('classic');
+  }
+
   try {
     const ideInfo = getCurrentAccountInfo('ide');
     if (ideInfo.isAuthenticated) {
@@ -415,58 +443,70 @@ export async function listCloudAccounts(): Promise<CloudAccount[]> {
   } catch (err) {
     logger.warn('Failed to read current ide account info during listing', err);
   }
-  const activeIdeAccountId = ideEmail
-    ? ''
-    : CloudAccountSettingsStore.getActiveAccountIdForTarget('ide');
-  const activeAgyAccountId = CloudAccountSettingsStore.getActiveAccountIdForTarget('agy');
 
-  let effectiveActiveAgyAccountId = activeAgyAccountId;
-  if (!effectiveActiveAgyAccountId) {
+  // 2. Resolve live or effective active IDE account
+  let effectiveActiveIdeAccountId = '';
+  if (ideEmail) {
+    const matched = accounts.find((acc) => normalizeAccountEmail(acc.email) === ideEmail);
+    if (matched) {
+      effectiveActiveIdeAccountId = matched.id;
+      CloudAccountSettingsStore.setActiveForTarget('ide', matched.id);
+    }
+  }
+  if (!effectiveActiveIdeAccountId) {
     try {
-      const cliToken = readAgyCliToken();
-      if (cliToken) {
-        const matched = accounts.find(
-          (acc) =>
-            acc.token.refresh_token === cliToken.refreshToken ||
-            (cliToken.accessToken && acc.token.access_token === cliToken.accessToken),
-        );
-        if (matched) {
-          effectiveActiveAgyAccountId = matched.id;
+      const dbPaths = getAntigravityDbPaths('ide');
+      for (const dbPath of dbPaths) {
+        if (fs.existsSync(dbPath)) {
+          try {
+            const ideToken = IdeAccountImportAdapter.readTokenInfoFromPath(dbPath);
+            if (ideToken) {
+              const matched = await matchAccountFromCredentialToken(ideToken, accounts);
+              if (matched) {
+                effectiveActiveIdeAccountId = matched.id;
+                CloudAccountSettingsStore.setActiveForTarget('ide', matched.id);
+                break;
+              }
+            }
+          } catch {
+            // Best-effort check
+          }
         }
       }
     } catch {
       // Best-effort check
     }
   }
+  if (!effectiveActiveIdeAccountId) {
+    effectiveActiveIdeAccountId = CloudAccountSettingsStore.getActiveAccountIdForTarget('ide');
+  }
 
-  let effectiveActiveIdeAccountId = activeIdeAccountId;
-  if (!ideEmail && !effectiveActiveIdeAccountId) {
-    try {
-      const credToken = readAntigravityCredentialStoreToken();
-      if (credToken) {
-        const matched = accounts.find(
-          (acc) =>
-            acc.token.refresh_token === credToken.refreshToken ||
-            (credToken.accessToken && acc.token.access_token === credToken.accessToken),
-        );
-        if (matched) {
-          effectiveActiveIdeAccountId = matched.id;
-        }
+  // 3. Resolve live or effective active CLI account
+  let effectiveActiveAgyAccountId = '';
+  try {
+    const cliToken = readAgyCliToken();
+    if (cliToken) {
+      const matched = await matchAccountFromCredentialToken(cliToken, accounts);
+      if (matched) {
+        effectiveActiveAgyAccountId = matched.id;
+        CloudAccountSettingsStore.setActiveForTarget('agy', matched.id);
       }
-    } catch {
-      // Best-effort check
     }
+  } catch {
+    // Best-effort check
+  }
+  if (!effectiveActiveAgyAccountId) {
+    effectiveActiveAgyAccountId = CloudAccountSettingsStore.getActiveAccountIdForTarget('agy');
   }
 
   const mappedRealAccounts = accounts.map((account) => {
     const accountEmail = normalizeAccountEmail(account.email);
     const isClassicActive =
-      classicUsesCredentialStore && activeClassicAccountId
-        ? activeClassicAccountId === account.id
-        : classicEmail === accountEmail;
+      effectiveActiveClassicAccountId === account.id ||
+      (!effectiveActiveClassicAccountId && classicEmail === accountEmail);
     const isIdeActive =
-      ideEmail === accountEmail ||
-      (!!effectiveActiveIdeAccountId && effectiveActiveIdeAccountId === account.id);
+      effectiveActiveIdeAccountId === account.id ||
+      (!effectiveActiveIdeAccountId && ideEmail === accountEmail);
     const isAgyActive = effectiveActiveAgyAccountId === account.id;
     return {
       ...account,
@@ -835,13 +875,22 @@ export async function markActiveAccount(
             refresh_token: account.token.refresh_token,
             expiry_timestamp: account.token.expiry_timestamp,
           },
-          { syncGoogleOAuthFiles: true, email: account.email },
+          { syncGoogleOAuthFiles: true, email: account.email, syncAgyCliToken: false },
         );
         logger.info(
           `Synchronized credential store token for marked active account: ${account.email}`,
         );
       } catch (err) {
         logger.warn('Failed to synchronize credential store token for marked account', err);
+      }
+    } else {
+      try {
+        CredentialStoreInjectionAdapter.injectCloudToken(account, normalizedTarget);
+        logger.info(
+          `Synchronized SQLite token for marked active account: ${account.email}`,
+        );
+      } catch (err) {
+        logger.warn('Failed to synchronize SQLite token for marked account', err);
       }
     }
   }
@@ -858,16 +907,6 @@ export async function detectActiveAccounts(): Promise<DetectedActiveAccountsResu
     agy: null,
   };
 
-  const findAccountByRefreshToken = (refreshToken?: string) => {
-    if (!refreshToken) return undefined;
-    return accounts.find((acc) => acc.token.refresh_token === refreshToken);
-  };
-
-  const findAccountByAccessToken = (accessToken?: string) => {
-    if (!accessToken) return undefined;
-    return accounts.find((acc) => acc.token.access_token === accessToken);
-  };
-
   const findAccountByEmail = (email?: string) => {
     if (!email) return undefined;
     const normalized = normalizeAccountEmail(email);
@@ -878,9 +917,7 @@ export async function detectActiveAccounts(): Promise<DetectedActiveAccountsResu
   try {
     const cliToken = readAgyCliToken();
     if (cliToken) {
-      const agyAccount =
-        findAccountByRefreshToken(cliToken.refreshToken) ||
-        findAccountByAccessToken(cliToken.accessToken);
+      const agyAccount = await matchAccountFromCredentialToken(cliToken, accounts);
       if (agyAccount) {
         CloudAccountSettingsStore.setActiveForTarget('agy', agyAccount.id);
         result.agy = { accountId: agyAccount.id, email: agyAccount.email };
@@ -893,21 +930,49 @@ export async function detectActiveAccounts(): Promise<DetectedActiveAccountsResu
   // 2. Detect Antigravity IDE (`ide`)
   try {
     let ideAccount: CloudAccount | undefined;
+    // Step 2a: Check SQLite state first (primary storage for IDE)
     try {
-      const credToken = readAntigravityCredentialStoreToken();
-      if (credToken) {
-        ideAccount =
-          findAccountByRefreshToken(credToken.refreshToken) ||
-          findAccountByAccessToken(credToken.accessToken);
-      }
-    } catch {
-      // Credential store might be unavailable or empty
-    }
-
-    if (!ideAccount) {
       const ideInfo = getCurrentAccountInfo('ide');
       if (ideInfo.isAuthenticated && ideInfo.email) {
         ideAccount = findAccountByEmail(ideInfo.email);
+      }
+    } catch {
+      // ignore
+    }
+
+    // Step 2b: If not resolved by email, check SQLite token directly via IdeAccountImportAdapter
+    if (!ideAccount) {
+      try {
+        const dbPaths = getAntigravityDbPaths('ide');
+        for (const dbPath of dbPaths) {
+          if (fs.existsSync(dbPath)) {
+            try {
+              const ideToken = IdeAccountImportAdapter.readTokenInfoFromPath(dbPath);
+              if (ideToken) {
+                ideAccount = await matchAccountFromCredentialToken(ideToken, accounts);
+                if (ideAccount) {
+                  break;
+                }
+              }
+            } catch {
+              // ignore
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // Step 2c: Fallback to Credential Store only if SQLite has no active account
+    if (!ideAccount) {
+      try {
+        const credToken = readAntigravityCredentialStoreToken();
+        if (credToken) {
+          ideAccount = await matchAccountFromCredentialToken(credToken, accounts);
+        }
+      } catch {
+        // ignore
       }
     }
 
@@ -922,22 +987,36 @@ export async function detectActiveAccounts(): Promise<DetectedActiveAccountsResu
   // 3. Detect Antigravity Classic (`classic`)
   try {
     let classicAccount: CloudAccount | undefined;
-    try {
-      const classicInfo = getCurrentAccountInfo('classic');
-      if (classicInfo.isAuthenticated && classicInfo.email) {
-        classicAccount = findAccountByEmail(classicInfo.email);
+    const classicUsesCredentialStore =
+      CredentialStoreInjectionAdapter.shouldInjectTokenIntoCredentialStore('classic');
+
+    if (classicUsesCredentialStore) {
+      try {
+        const credToken = readAntigravityCredentialStoreToken();
+        if (credToken) {
+          classicAccount = await matchAccountFromCredentialToken(credToken, accounts);
+        }
+      } catch {
+        // Credential store might be unavailable or empty
       }
-    } catch {
-      // SQLite state might not exist
     }
 
     if (!classicAccount) {
       try {
+        const classicInfo = getCurrentAccountInfo('classic');
+        if (classicInfo.isAuthenticated && classicInfo.email) {
+          classicAccount = findAccountByEmail(classicInfo.email);
+        }
+      } catch {
+        // SQLite state might not exist
+      }
+    }
+
+    if (!classicAccount && !classicUsesCredentialStore) {
+      try {
         const credToken = readAntigravityCredentialStoreToken();
         if (credToken) {
-          classicAccount =
-            findAccountByRefreshToken(credToken.refreshToken) ||
-            findAccountByAccessToken(credToken.accessToken);
+          classicAccount = await matchAccountFromCredentialToken(credToken, accounts);
         }
       } catch {
         // ignore
