@@ -1,10 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { isEmpty, isString } from 'lodash-es';
-import { AccountLeaseService } from '../account-lease/account-lease.service';
-import { GeminiClient } from '../gemini/gemini-client.service';
-import { Observable } from 'rxjs';
+import { AccountLeaseService } from '@/modules/proxy-gateway/server/modules/account-lease/account-lease.service';
+import { GeminiClient } from '@/modules/proxy-gateway/server/modules/gemini/gemini-client.service';
+import { Observable, type Subscriber, type Subscription } from 'rxjs';
 import { transformClaudeRequestIn } from '@/modules/proxy-gateway/antigravity/ClaudeRequestMapper';
 import { transformResponse } from '@/modules/proxy-gateway/antigravity/ClaudeResponseMapper';
+import { SignatureStore } from '@/modules/proxy-gateway/antigravity/SignatureStore';
+import { rewriteInvalidThoughtSignatureRequest } from '@/modules/proxy-gateway/antigravity/thought-signature-recovery';
+import type { ResolvedModelVariant } from '@/modules/proxy-gateway/antigravity/model-variant-registry';
+import { normalizeThoughtSignatureModelContext } from '@/modules/proxy-gateway/antigravity/thought-signature-model';
 import {
   PartProcessor,
   StreamingState,
@@ -12,6 +16,8 @@ import {
 import {
   ClaudeRequest,
   ClaudeResponse,
+  GeminiInternalRequest,
+  GeminiResponse,
   type UsageMetadata,
 } from '@/modules/proxy-gateway/antigravity/types';
 import { classifyStreamError } from '@/modules/proxy-gateway/antigravity/stream-error-utils';
@@ -29,6 +35,22 @@ import { BaseProxyService } from '@/modules/proxy-gateway/server/common/base-pro
 import { GenerationConstraintsService } from '@/modules/proxy-gateway/server/shared/services/generation-constraints.service';
 import { ModelRoutingService } from '@/modules/proxy-gateway/server/shared/services/model-routing.service';
 import { ProxyRetryService } from '@/modules/proxy-gateway/server/shared/services/proxy-retry.service';
+import { classifyInvalidThoughtSignatureError } from './invalid-thought-signature-error';
+
+interface AnthropicRecoveryState {
+  attempted: boolean;
+}
+
+interface AnthropicUpstreamResult {
+  body: GeminiInternalRequest;
+  response?: GeminiResponse;
+  stream?: NodeJS.ReadableStream;
+}
+
+const ANTHROPIC_STREAM_IDLE_TIMEOUT_MS = 120_000;
+const ANTHROPIC_STREAM_PING_INTERVAL_MS = 20_000;
+const ANTHROPIC_STREAM_MAX_CONSECUTIVE_PINGS = 5;
+const ANTHROPIC_STREAM_FIRST_EVENT_TIMEOUT_MS = 30_000;
 
 @Injectable()
 export class AnthropicService extends BaseProxyService {
@@ -107,6 +129,10 @@ export class AnthropicService extends BaseProxyService {
 
       const token = await this.selectRetryToken(retryState, targetModel, sessionKey);
       if (!token) {
+        if (lastError !== null) {
+          throw lastError;
+        }
+
         throw new Error('No available accounts');
       }
       const effectiveTargetModel = this.accountLeaseService.resolveDynamicModelForAccount(
@@ -118,100 +144,107 @@ export class AnthropicService extends BaseProxyService {
         effectiveTargetModel,
       );
       const accountRequest = effectiveVariantRequest.request;
+      const registeredToolNames =
+        accountRequest.tools?.map((tool) => tool.name).filter((name) => name.length > 0) ?? [];
       const accountTargetModel = effectiveVariantRequest.variant
         ? accountRequest.model
         : effectiveTargetModel;
+      const signatureFamily =
+        effectiveVariantRequest.variant?.canonicalModel ??
+        normalizeThoughtSignatureModelContext({ model: accountTargetModel })?.family ??
+        null;
+      const recoveryState: AnthropicRecoveryState = { attempted: false };
 
       try {
-        const projectId = token.token.project_id ?? '';
-        const requestUserAgent = await resolveRequestUserAgent();
-        const geminiBody = transformClaudeRequestIn(
-          this.toClaudeRequest(accountRequest, sessionKey),
-          projectId,
-          requestUserAgent,
-          accountTargetModel,
-          'anthropic',
-        );
-        this.applyInternalGenerationConstraints(
-          geminiBody,
-          geminiBody.model,
-          token.id,
-          effectiveVariantRequest.variant ?? undefined,
-        );
-
-        if (request.stream) {
-          const stream = await this.geminiClient.streamGenerateInternal(
-            geminiBody,
-            token.token.access_token,
-            token.token.upstream_proxy_url,
-            extraHeaders,
-          );
-          this.markUpstreamSuccess(token.id, geminiBody.model);
-          return this.processAnthropicInternalStream(
-            stream,
-            geminiBody.model,
+        const execution = await this.executeAnthropicAccountRequest({
+          accountId: token.id,
+          accessToken: token.token.access_token,
+          upstreamProxyUrl: token.token.upstream_proxy_url,
+          extraHeaders,
+          projectId: token.token.project_id ?? '',
+          request: this.toClaudeRequest(accountRequest, sessionKey),
+          targetModel: accountTargetModel,
+          signatureFamily,
+          signatureSessionKey: sessionKey,
+          stream: request.stream === true,
+          recoveryState,
+          variant: effectiveVariantRequest.variant ?? undefined,
+        });
+        if (execution.stream) {
+          const preparedStream = await this.prepareAnthropicInternalStream(
+            execution.stream,
+            execution.body.model,
             sessionKey,
             signatureMessageCount,
+            signatureFamily,
+            accountTargetModel,
+            registeredToolNames,
           );
-        } else {
-          const response = await this.generateInternalWithStreamFallback(
-            geminiBody,
-            token.token.access_token,
-            token.token.upstream_proxy_url,
-            extraHeaders,
-          );
-          this.markUpstreamSuccess(token.id, geminiBody.model);
-          return this.toAnthropicChatResponse(
-            transformResponse(response, sessionKey, signatureMessageCount),
-          );
+          this.markUpstreamSuccess(token.id, execution.body.model);
+          return preparedStream;
         }
+        this.markUpstreamSuccess(token.id, execution.body.model);
+        return this.toAnthropicChatResponse(
+          transformResponse(execution.response!, {
+            model: execution.body.model,
+            family: signatureFamily,
+            familyModel: accountTargetModel,
+            signatureSessionKey: sessionKey,
+            signatureMessageCount,
+            registeredToolNames,
+          }),
+        );
       } catch (error) {
+        if (classifyInvalidThoughtSignatureError(error)) {
+          throw error;
+        }
         if (error instanceof Error && this.isProjectContextError(error.message)) {
           this.logger.warn(
             `Anthropic request hit project context issue, retrying without project: ${error.message}`,
           );
           try {
-            const requestUserAgent = await resolveRequestUserAgent();
-            const fallbackBody = transformClaudeRequestIn(
-              this.toClaudeRequest(accountRequest, sessionKey),
-              '',
-              requestUserAgent,
-              accountTargetModel,
-              'anthropic',
-            );
-            this.applyInternalGenerationConstraints(
-              fallbackBody,
-              fallbackBody.model,
-              token.id,
-              effectiveVariantRequest.variant ?? undefined,
-            );
-            if (request.stream) {
-              const stream = await this.geminiClient.streamGenerateInternal(
-                fallbackBody,
-                token.token.access_token,
-                token.token.upstream_proxy_url,
-                extraHeaders,
-              );
-              this.markUpstreamSuccess(token.id, fallbackBody.model);
-              return this.processAnthropicInternalStream(
-                stream,
-                fallbackBody.model,
+            const execution = await this.executeAnthropicAccountRequest({
+              accountId: token.id,
+              accessToken: token.token.access_token,
+              upstreamProxyUrl: token.token.upstream_proxy_url,
+              extraHeaders,
+              projectId: '',
+              request: this.toClaudeRequest(accountRequest, sessionKey),
+              targetModel: accountTargetModel,
+              signatureFamily,
+              signatureSessionKey: sessionKey,
+              stream: request.stream === true,
+              recoveryState,
+              variant: effectiveVariantRequest.variant ?? undefined,
+            });
+            if (execution.stream) {
+              const preparedStream = await this.prepareAnthropicInternalStream(
+                execution.stream,
+                execution.body.model,
                 sessionKey,
                 signatureMessageCount,
+                signatureFamily,
+                accountTargetModel,
+                registeredToolNames,
               );
-            } else {
-              const response = await this.generateInternalWithStreamFallback(
-                fallbackBody,
-                token.token.access_token,
-                token.token.upstream_proxy_url,
-                extraHeaders,
-              );
-              this.markUpstreamSuccess(token.id, fallbackBody.model);
-              return this.toAnthropicChatResponse(
-                transformResponse(response, sessionKey, signatureMessageCount),
-              );
+              this.markUpstreamSuccess(token.id, execution.body.model);
+              return preparedStream;
             }
+            this.markUpstreamSuccess(token.id, execution.body.model);
+            return this.toAnthropicChatResponse(
+              transformResponse(execution.response!, {
+                model: execution.body.model,
+                family: signatureFamily,
+                familyModel: accountTargetModel,
+                signatureSessionKey: sessionKey,
+                signatureMessageCount,
+                registeredToolNames,
+              }),
+            );
           } catch (fallbackErr) {
+            if (classifyInvalidThoughtSignatureError(fallbackErr)) {
+              throw fallbackErr;
+            }
             lastError = fallbackErr;
           }
         }
@@ -235,51 +268,58 @@ export class AnthropicService extends BaseProxyService {
               },
             });
             const downgradedRequest = this.toClaudeRequest(downgradedVariant.request, sessionKey);
-            const requestUserAgent = await resolveRequestUserAgent();
-            const downgradedBody = transformClaudeRequestIn(
-              downgradedRequest,
-              token.token.project_id ?? '',
-              requestUserAgent,
-              downgradedVariant.request.model,
-              'anthropic',
-            );
-            this.applyInternalGenerationConstraints(
-              downgradedBody,
-              downgradedVariant.request.model,
-              token.id,
-              downgradedVariant.variant ?? undefined,
-            );
-            if (request.stream) {
-              const stream = await this.geminiClient.streamGenerateInternal(
-                downgradedBody,
-                token.token.access_token,
-                token.token.upstream_proxy_url,
-                extraHeaders,
-              );
-              this.markUpstreamSuccess(token.id, downgradedBody.model);
-              return this.processAnthropicInternalStream(
-                stream,
-                downgradedBody.model,
+            const downgradedFamily =
+              downgradedVariant.variant?.canonicalModel ??
+              normalizeThoughtSignatureModelContext({
+                model: downgradedVariant.request.model,
+              })?.family ??
+              null;
+            const execution = await this.executeAnthropicAccountRequest({
+              accountId: token.id,
+              accessToken: token.token.access_token,
+              upstreamProxyUrl: token.token.upstream_proxy_url,
+              extraHeaders,
+              projectId: token.token.project_id ?? '',
+              request: downgradedRequest,
+              targetModel: downgradedVariant.request.model,
+              signatureFamily: downgradedFamily,
+              signatureSessionKey: sessionKey,
+              stream: request.stream === true,
+              recoveryState,
+              variant: downgradedVariant.variant ?? undefined,
+            });
+            if (execution.stream) {
+              const preparedStream = await this.prepareAnthropicInternalStream(
+                execution.stream,
+                execution.body.model,
                 sessionKey,
                 signatureMessageCount,
+                downgradedFamily,
+                downgradedVariant.request.model,
+                registeredToolNames,
               );
-            } else {
-              const response = await this.generateInternalWithStreamFallback(
-                downgradedBody,
-                token.token.access_token,
-                token.token.upstream_proxy_url,
-                extraHeaders,
-              );
-              this.markUpstreamSuccess(token.id, downgradedBody.model);
-              const transformed = this.toAnthropicChatResponse(
-                transformResponse(response, sessionKey, signatureMessageCount),
-              );
-              return {
-                ...transformed,
-                model: request.model,
-              };
+              this.markUpstreamSuccess(token.id, execution.body.model);
+              return preparedStream;
             }
+            this.markUpstreamSuccess(token.id, execution.body.model);
+            const transformed = this.toAnthropicChatResponse(
+              transformResponse(execution.response!, {
+                model: execution.body.model,
+                family: downgradedFamily,
+                familyModel: downgradedVariant.request.model,
+                signatureSessionKey: sessionKey,
+                signatureMessageCount,
+                registeredToolNames,
+              }),
+            );
+            return {
+              ...transformed,
+              model: request.model,
+            };
           } catch (downgradeErr) {
+            if (classifyInvalidThoughtSignatureError(downgradeErr)) {
+              throw downgradeErr;
+            }
             lastError = downgradeErr;
           }
         }
@@ -297,33 +337,216 @@ export class AnthropicService extends BaseProxyService {
     throw lastError || new Error('Request failed after retries');
   }
 
+  private async executeAnthropicAccountRequest(params: {
+    accountId: string;
+    accessToken: string;
+    upstreamProxyUrl?: string;
+    extraHeaders: Record<string, string>;
+    projectId: string;
+    request: ClaudeRequest;
+    targetModel: string;
+    signatureFamily: string | null;
+    signatureSessionKey?: string;
+    stream: boolean;
+    recoveryState: AnthropicRecoveryState;
+    variant?: ResolvedModelVariant;
+  }): Promise<AnthropicUpstreamResult> {
+    const execute = async (
+      request: ClaudeRequest,
+      mode: 'normal' | 'invalid-thought-signature-recovery',
+    ): Promise<AnthropicUpstreamResult> => {
+      const requestUserAgent = await resolveRequestUserAgent();
+      const body = transformClaudeRequestIn(
+        request,
+        params.projectId,
+        requestUserAgent,
+        params.targetModel,
+        'anthropic',
+        {
+          mode,
+          signatureTargetFamily: params.signatureFamily,
+          signatureTargetFamilyModel: params.targetModel,
+        },
+      );
+      this.applyInternalGenerationConstraints(body, body.model, params.accountId, params.variant);
+
+      if (params.stream) {
+        return {
+          body,
+          stream: await this.geminiClient.streamGenerateInternal(
+            body,
+            params.accessToken,
+            params.upstreamProxyUrl,
+            params.extraHeaders,
+          ),
+        };
+      }
+
+      return {
+        body,
+        response: await this.generateAnthropicInternalWithStreamFallback(
+          body,
+          params.accessToken,
+          params.upstreamProxyUrl,
+          params.extraHeaders,
+        ),
+      };
+    };
+
+    try {
+      return await execute(params.request, 'normal');
+    } catch (error) {
+      const classification = classifyInvalidThoughtSignatureError(error);
+      if (!classification || params.recoveryState.attempted) {
+        if (classification) {
+          this.logger.warn(
+            `Invalid thought signature recovery failed: status=400 source=${classification.source} model=${params.targetModel.trim().toLowerCase()} family=${params.signatureFamily ?? 'unbound'} stream=${params.stream} attempt=1 sessionPresent=${Boolean(params.signatureSessionKey)}`,
+          );
+        }
+        throw error;
+      }
+
+      params.recoveryState.attempted = true;
+      SignatureStore.clearRecoveryScope(params.signatureSessionKey);
+      this.logger.warn(
+        `Invalid thought signature recovery triggered: status=400 source=${classification.source} model=${params.targetModel.trim().toLowerCase()} family=${params.signatureFamily ?? 'unbound'} stream=${params.stream} attempt=1 sessionPresent=${Boolean(params.signatureSessionKey)}`,
+      );
+      try {
+        return await execute(
+          rewriteInvalidThoughtSignatureRequest(params.request),
+          'invalid-thought-signature-recovery',
+        );
+      } catch (recoveryError) {
+        const recoveryClassification = classifyInvalidThoughtSignatureError(recoveryError);
+        if (recoveryClassification) {
+          this.logger.warn(
+            `Invalid thought signature recovery failed: status=400 source=${recoveryClassification.source} model=${params.targetModel.trim().toLowerCase()} family=${params.signatureFamily ?? 'unbound'} stream=${params.stream} attempt=1 sessionPresent=${Boolean(params.signatureSessionKey)}`,
+          );
+        }
+        throw recoveryError;
+      }
+    }
+  }
+
+  private async generateAnthropicInternalWithStreamFallback(
+    body: GeminiInternalRequest,
+    accessToken: string,
+    upstreamProxyUrl?: string,
+    extraHeaders?: Record<string, string>,
+  ): Promise<GeminiResponse> {
+    try {
+      return await this.generateInternalWithStreamFallback(
+        body,
+        accessToken,
+        upstreamProxyUrl,
+        extraHeaders,
+      );
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== 'Empty response stream') {
+        throw error;
+      }
+
+      return {
+        candidates: [
+          {
+            content: { role: 'model', parts: [] },
+            finishReason: 'STOP',
+          },
+        ],
+      };
+    }
+  }
+
   private processAnthropicInternalStream(
     upstreamStream: NodeJS.ReadableStream,
-    _model: string,
+    model: string,
     signatureSessionKey?: string,
     signatureMessageCount?: number,
+    signatureFamily?: string | null,
+    signatureFamilyModel?: string | null,
+    registeredToolNames: readonly string[] = [],
   ): Observable<string> {
     return new Observable<string>((subscriber) => {
       const decoder = new TextDecoder();
       let buffer = '';
 
-      const state = new StreamingState(signatureSessionKey, signatureMessageCount);
+      const state = new StreamingState({
+        model,
+        family: signatureFamily,
+        familyModel: signatureFamilyModel,
+        sessionKey: signatureSessionKey,
+        messageCount: signatureMessageCount,
+      });
+      state.setRegisteredToolNames(registeredToolNames);
       const processor = new PartProcessor(state);
 
       let lastFinishReason: string | undefined;
       let lastUsageMetadata: UsageMetadata | undefined;
+      let consecutiveIdlePings = 0;
+      let pingTimer: NodeJS.Timeout | undefined;
+      let terminal = false;
 
-      let receivedData = false;
-      const idleTimer = this.createStreamIdleTimer(upstreamStream, 'Claude-SSE', () => {
+      const clearPingTimer = (): void => {
+        if (pingTimer) {
+          clearTimeout(pingTimer);
+          pingTimer = undefined;
+        }
+      };
+
+      const completeIdleStream = (): void => {
+        if (terminal) {
+          return;
+        }
+        terminal = true;
+        clearPingTimer();
+        idleTimer.clear();
         subscriber.next('data: {"type": "message_stop"}\n\ndata: [DONE]\n\n');
         subscriber.complete();
-      });
+      };
+
+      const idleTimer = this.createStreamIdleTimer(
+        upstreamStream,
+        'Claude-SSE',
+        completeIdleStream,
+        ANTHROPIC_STREAM_IDLE_TIMEOUT_MS,
+      );
+
+      const emitMappedChunk = (chunk: string): void => {
+        if (terminal) {
+          return;
+        }
+        idleTimer.reset();
+        subscriber.next(chunk);
+      };
+
+      const schedulePing = (): void => {
+        clearPingTimer();
+        pingTimer = setTimeout(() => {
+          consecutiveIdlePings += 1;
+          if (consecutiveIdlePings >= ANTHROPIC_STREAM_MAX_CONSECUTIVE_PINGS) {
+            this.logger.error(
+              `[Claude-SSE] Stream idle for ${(consecutiveIdlePings * ANTHROPIC_STREAM_PING_INTERVAL_MS) / 1000}s (${consecutiveIdlePings}x ${ANTHROPIC_STREAM_PING_INTERVAL_MS / 1000}s timeout), terminating`,
+            );
+            completeIdleStream();
+            return;
+          }
+          this.logger.debug(
+            `[Claude-SSE] SSE idle ping #${consecutiveIdlePings}/${ANTHROPIC_STREAM_MAX_CONSECUTIVE_PINGS}`,
+          );
+          emitMappedChunk(': ping\n\n');
+          schedulePing();
+        }, ANTHROPIC_STREAM_PING_INTERVAL_MS);
+      };
 
       idleTimer.reset();
+      schedulePing();
 
       upstreamStream.on('data', (chunk: Buffer) => {
-        receivedData = true; // Mark that we got data
-        idleTimer.reset();
+        if (terminal) {
+          return;
+        }
+        consecutiveIdlePings = 0;
+        schedulePing();
         buffer += decoder.decode(chunk, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
@@ -340,7 +563,7 @@ export class AnthropicService extends BaseProxyService {
           if (decoded.kind === 'invalid') {
             this.logger.error('Stream parse error: invalid v1internal SSE payload');
             const errorChunks = state.handleParseError(dataStr);
-            errorChunks.forEach((c) => subscriber.next(c));
+            errorChunks.forEach(emitMappedChunk);
             continue;
           }
 
@@ -348,7 +571,9 @@ export class AnthropicService extends BaseProxyService {
             const response = decoded.response;
 
             const startMsg = state.emitMessageStart(response);
-            if (startMsg) subscriber.next(startMsg);
+            if (startMsg) {
+              emitMappedChunk(startMsg);
+            }
 
             const candidate = response.candidates?.[0];
             const parts = candidate?.content?.parts;
@@ -364,7 +589,7 @@ export class AnthropicService extends BaseProxyService {
               for (const part of parts) {
                 if (this.isGeminiPart(part)) {
                   const chunks = processor.process(part);
-                  chunks.forEach((c) => subscriber.next(c));
+                  chunks.forEach(emitMappedChunk);
                 }
               }
             }
@@ -374,26 +599,30 @@ export class AnthropicService extends BaseProxyService {
           } catch (e) {
             this.logger.error('Stream parse error', e);
             const errorChunks = state.handleParseError(dataStr);
-            errorChunks.forEach((c) => subscriber.next(c));
+            errorChunks.forEach(emitMappedChunk);
           }
         }
       });
 
       upstreamStream.on('end', () => {
-        idleTimer.clear();
-        if (!receivedData) {
-          this.logger.warn('Empty response stream detected');
-          subscriber.error(new Error('Empty response stream'));
+        if (terminal) {
           return;
         }
-
+        terminal = true;
+        idleTimer.clear();
+        clearPingTimer();
         const finishChunks = state.emitFinish(lastFinishReason, lastUsageMetadata);
         finishChunks.forEach((c) => subscriber.next(c));
         subscriber.complete();
       });
 
       upstreamStream.on('error', (err: unknown) => {
+        if (terminal) {
+          return;
+        }
+        terminal = true;
         idleTimer.clear();
+        clearPingTimer();
         const cleanError = err instanceof Error ? err : new Error(String(err));
         const { type } = classifyStreamError(cleanError);
 
@@ -402,8 +631,118 @@ export class AnthropicService extends BaseProxyService {
       });
 
       return () => {
+        terminal = true;
+        clearPingTimer();
         idleTimer.dispose();
       };
+    });
+  }
+
+  private prepareAnthropicInternalStream(
+    upstreamStream: NodeJS.ReadableStream,
+    model: string,
+    signatureSessionKey?: string,
+    signatureMessageCount?: number,
+    signatureFamily?: string | null,
+    signatureFamilyModel?: string | null,
+    registeredToolNames: readonly string[] = [],
+  ): Promise<Observable<string>> {
+    const mappedStream = this.processAnthropicInternalStream(
+      upstreamStream,
+      model,
+      signatureSessionKey,
+      signatureMessageCount,
+      signatureFamily,
+      signatureFamilyModel,
+      registeredToolNames,
+    );
+
+    return new Promise((resolve, reject) => {
+      const bufferedChunks: string[] = [];
+      let downstream: Subscriber<string> | null = null;
+      let sourceSubscription: Subscription | undefined;
+      let ready = false;
+      let claimed = false;
+      let completed = false;
+      let terminalError: unknown;
+
+      const clearFirstEventTimer = (): void => {
+        clearTimeout(firstEventTimer);
+      };
+
+      const preparedStream = new Observable<string>((subscriber) => {
+        if (claimed) {
+          subscriber.error(new Error('Anthropic stream has already been consumed'));
+          return;
+        }
+        claimed = true;
+        downstream = subscriber;
+        for (const chunk of bufferedChunks.splice(0)) {
+          subscriber.next(chunk);
+        }
+
+        if (terminalError !== undefined) {
+          subscriber.error(terminalError);
+        } else if (completed) {
+          subscriber.complete();
+        } else {
+          upstreamStream.resume();
+        }
+
+        return () => {
+          downstream = null;
+          sourceSubscription?.unsubscribe();
+        };
+      });
+
+      const firstEventTimer = setTimeout(() => {
+        if (ready) {
+          return;
+        }
+        sourceSubscription?.unsubscribe();
+        reject(new Error('Timeout waiting for first Anthropic stream event (30s)'));
+      }, ANTHROPIC_STREAM_FIRST_EVENT_TIMEOUT_MS);
+
+      sourceSubscription = mappedStream.subscribe({
+        next: (chunk) => {
+          if (!ready) {
+            const trimmed = chunk.trim();
+            if (trimmed.length === 0 || trimmed.startsWith(':')) {
+              return;
+            }
+            ready = true;
+            clearFirstEventTimer();
+            upstreamStream.pause();
+            bufferedChunks.push(chunk);
+            resolve(preparedStream);
+            return;
+          }
+
+          if (downstream) {
+            downstream.next(chunk);
+          } else {
+            bufferedChunks.push(chunk);
+          }
+        },
+        error: (error) => {
+          clearFirstEventTimer();
+          if (!ready) {
+            reject(error);
+            return;
+          }
+          terminalError = error;
+          downstream?.error(error);
+        },
+        complete: () => {
+          clearFirstEventTimer();
+          if (!ready) {
+            reject(new Error('Empty Anthropic stream during first-event preflight'));
+            return;
+          }
+          completed = true;
+          downstream?.complete();
+        },
+      });
     });
   }
 

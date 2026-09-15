@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { SignatureStore } from './SignatureStore';
 import { decodeSignature } from './signature-utils';
 import { optimizeApplyPatch, validateApplyPatchV4A } from './ApplyPatchPreflight';
@@ -84,10 +86,14 @@ interface OpenAIResponsesStreamingMapperOptions {
   responseId: string;
   signatureMessageCount?: number;
   signatureSessionKey?: string;
+  signatureSourceModel?: string;
+  signatureSourceFamily?: string | null;
+  signatureSourceFamilyModel?: string | null;
 }
 
 export class OpenAIResponsesStreamingMapper {
   private readonly emittedToolCallIds = new Set<string>();
+  private readonly itemIdPrefix = randomUUID().replaceAll('-', '').slice(0, 16);
   private readonly outputItems: ResponsesOutputItem[] = [];
   private activeMessage: ActiveMessageOutput | null = null;
   private activeThought: ActiveMessageOutput | null = null;
@@ -138,11 +144,7 @@ export class OpenAIResponsesStreamingMapper {
     }
 
     if (signature) {
-      SignatureStore.store(
-        signature,
-        this.options.signatureSessionKey,
-        this.options.signatureMessageCount,
-      );
+      this.storeSignature(signature);
     }
 
     if (part.thought && part.text) {
@@ -232,8 +234,8 @@ export class OpenAIResponsesStreamingMapper {
     this.nextOutputIndex += 1;
     const itemId =
       kind === 'thought'
-        ? `msg_thought_${this.options.responseId}_${this.messageCounter}`
-        : `msg_${this.options.responseId}_${this.messageCounter}`;
+        ? `msg_thought_${this.itemIdPrefix}_${this.messageCounter}`
+        : `msg_${this.itemIdPrefix}_${this.messageCounter}`;
     this.messageCounter += 1;
     const item: ResponsesMessageOutputItem = {
       content: [{ annotations: [], text: '', type: 'output_text' }],
@@ -349,12 +351,7 @@ export class OpenAIResponsesStreamingMapper {
       : splitName.name;
     const callId = functionCall.id || `call_${this.options.responseId}_${this.nextOutputIndex}`;
     if (signature) {
-      SignatureStore.store(
-        signature,
-        this.options.signatureSessionKey,
-        this.options.signatureMessageCount,
-        callId,
-      );
+      this.storeSignature(signature, callId);
     }
     if (functionCall.id && this.emittedToolCallIds.has(callId)) {
       return [];
@@ -481,6 +478,21 @@ export class OpenAIResponsesStreamingMapper {
     );
 
     return events;
+  }
+
+  private storeSignature(signature: string, toolCallId?: string): void {
+    if (!this.options.signatureSourceModel) {
+      return;
+    }
+    SignatureStore.store({
+      signature,
+      model: this.options.signatureSourceModel,
+      family: this.options.signatureSourceFamily,
+      familyModel: this.options.signatureSourceFamilyModel,
+      sessionKey: this.options.signatureSessionKey,
+      messageCount: this.options.signatureMessageCount,
+      toolCallId,
+    });
   }
 
   private processText(text: string): string[] {

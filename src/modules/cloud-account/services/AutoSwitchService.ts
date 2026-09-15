@@ -1,11 +1,21 @@
 import { Notification } from 'electron';
+import { z } from 'zod';
 import { CloudAccountRepo } from '@/modules/cloud-account/persistence/cloudHandler';
 import { CloudAccountSettingsStore } from '@/modules/cloud-account/persistence/cloud-account-settings-store';
-import { CloudAccount } from '@/modules/cloud-account/types';
+import {
+  AutoSwitchModelsConfigSchema,
+  type AutoSwitchModelConfig,
+  type CloudAccount,
+} from '@/modules/cloud-account/types';
 import { markActiveAccount, switchCloudAccount } from '@/modules/cloud-account/ipc/handler';
 import { logger } from '@/shared/logging/logger';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
-import { selectWeeklyQuotaItems } from '@/modules/cloud-account/utils/quota-groups';
+import {
+  applyQuotaLowerBound,
+  collectQuotaGroupBucketPercentages,
+  getMinimumQuotaPercentage,
+  selectWeeklyQuotaItems,
+} from '@/modules/cloud-account/utils/quota-groups';
 
 interface AccountSelectionScore {
   priorityScore: number | null;
@@ -14,6 +24,11 @@ interface AccountSelectionScore {
   fallbackScore: number;
   isSharedWithOtherTarget: boolean;
 }
+
+type QuotaModelEntry = [string, NonNullable<CloudAccount['quota']>['models'][string]];
+
+const BooleanSettingSchema = z.boolean();
+const AUTO_SWITCH_DEPLETION_THRESHOLD_PERCENT = 5;
 
 export class AutoSwitchService {
   /**
@@ -39,9 +54,10 @@ export class AutoSwitchService {
   ): Promise<CloudAccount | null> {
     const accounts = await CloudAccountRepo.getAccounts();
     const config =
-      CloudAccountSettingsStore.getSetting<Record<string, { enabled: boolean; priority: boolean }>>(
+      CloudAccountSettingsStore.getSetting(
         'auto_switch_models',
         {},
+        AutoSwitchModelsConfigSchema,
       ) || {};
 
     // 1. Filter viable candidate accounts
@@ -104,23 +120,21 @@ export class AutoSwitchService {
         }
       }
 
-      return scoreB.fallbackScore - scoreA.fallbackScore;
+      const fallbackDifference = scoreB.fallbackScore - scoreA.fallbackScore;
+      return fallbackDifference !== 0 ? fallbackDifference : candidates.indexOf(a) - candidates.indexOf(b);
     });
 
     return candidatePool[0];
   }
 
-  private static getModelConfig(
-    config: Record<string, { enabled: boolean; priority: boolean }>,
-    modelId: string,
-  ) {
+  private static getModelConfig(config: Record<string, AutoSwitchModelConfig>, modelId: string) {
     const normalizedModelId = modelId.replace(/^models\//i, '');
     return config[modelId] ?? config[normalizedModelId];
   }
 
   private static calculateAccountScore(
     account: CloudAccount,
-    config: Record<string, { enabled: boolean; priority: boolean }>,
+    config: Record<string, AutoSwitchModelConfig>,
     isSharedWithOtherTarget: boolean,
     now: number,
   ): AccountSelectionScore {
@@ -134,29 +148,21 @@ export class AutoSwitchService {
       };
     }
 
-    const entries = Object.entries(account.quota.models);
+    const entries = Object.entries(account.quota.models) as QuotaModelEntry[];
 
     // 1. Priority models score
     const priorityEntries = entries.filter(([modelId]) => {
       const modelConfig = this.getModelConfig(config, modelId);
       return modelConfig?.enabled && modelConfig?.priority;
     });
-    const priorityScore =
-      priorityEntries.length > 0
-        ? priorityEntries.reduce((acc, [, model]) => acc + model.percentage, 0) /
-          priorityEntries.length
-        : null;
+    const priorityScore = this.calculateCohortScore(account, priorityEntries);
 
-    // 2. Fallback all-enabled models score
-    const enabledEntries = entries.filter(([modelId]) => {
+    // 2. Score the enabled non-priority cohort independently.
+    const fallbackEntries = entries.filter(([modelId]) => {
       const modelConfig = this.getModelConfig(config, modelId);
-      return modelConfig ? modelConfig.enabled : true;
+      return modelConfig ? modelConfig.enabled && !modelConfig.priority : true;
     });
-    const fallbackScore =
-      enabledEntries.length > 0
-        ? enabledEntries.reduce((acc, [, model]) => acc + model.percentage, 0) /
-          enabledEntries.length
-        : 0;
+    const fallbackScore = this.calculateCohortScore(account, fallbackEntries) ?? 0;
 
     // 3. Weekly Quota Urgency Score: prioritize accounts nearing reset with plenty of quota
     let weeklyUrgencyScore = 0;
@@ -179,6 +185,10 @@ export class AutoSwitchService {
 
     // 4. 5h Block Quota Urgency Score: prioritize accounts nearing block reset with high quota
     let block5hUrgencyScore = 0;
+    const enabledEntries = entries.filter(([modelId]) => {
+      const modelConfig = this.getModelConfig(config, modelId);
+      return modelConfig ? modelConfig.enabled : true;
+    });
     for (const [, model] of enabledEntries) {
       if (!model.resetTime) continue;
       const resetTimestamp = Date.parse(model.resetTime);
@@ -201,6 +211,54 @@ export class AutoSwitchService {
       fallbackScore,
       isSharedWithOtherTarget,
     };
+  }
+
+  private static calculateCohortScore(
+    account: CloudAccount,
+    entries: QuotaModelEntry[],
+  ): number | null {
+    if (entries.length === 0) {
+      return null;
+    }
+
+    const modelScore =
+      entries.reduce((total, [, model]) => total + model.percentage, 0) / entries.length;
+    const matchTokens = this.getQuotaGroupMatchTokens(entries.map(([modelId]) => modelId));
+    const groupScore = getMinimumQuotaPercentage(
+      collectQuotaGroupBucketPercentages(account.quota?.quota_groups, matchTokens),
+    );
+
+    return applyQuotaLowerBound(modelScore, groupScore);
+  }
+
+  private static getQuotaGroupMatchTokens(modelIds: string[]): string[] {
+    const tokens = new Set<string>();
+
+    for (const modelId of modelIds) {
+      const normalizedModelId = modelId
+        .replace(/^models\//i, '')
+        .trim()
+        .toLowerCase();
+      if (!normalizedModelId) {
+        continue;
+      }
+
+      tokens.add(normalizedModelId);
+      if (normalizedModelId.startsWith('gemini-')) {
+        tokens.add('gemini');
+      } else if (
+        normalizedModelId.startsWith('claude-') ||
+        /(?:^|-)(?:opus|sonnet|haiku)(?:-|$)/.test(normalizedModelId)
+      ) {
+        tokens.add('claude');
+        tokens.add('3p');
+      } else if (normalizedModelId.startsWith('gpt-')) {
+        tokens.add('gpt');
+        tokens.add('3p');
+      }
+    }
+
+    return [...tokens];
   }
 
   /**
@@ -292,12 +350,12 @@ export class AutoSwitchService {
 
   static isAccountDepleted(account: CloudAccount): boolean {
     if (!account.quota) return false;
-    const THRESHOLD = 5;
 
     const config =
-      CloudAccountSettingsStore.getSetting<Record<string, { enabled: boolean; priority: boolean }>>(
+      CloudAccountSettingsStore.getSetting(
         'auto_switch_models',
         {},
+        AutoSwitchModelsConfigSchema,
       ) || {};
 
     const enabledModels = Object.entries(account.quota.models).filter(([modelId]) => {
@@ -338,7 +396,7 @@ export class AutoSwitchService {
     }
 
     const anyQuotaGroupDepleted = [...maxPercentageByQuotaGroup.values()].some(
-      (percentage) => percentage < THRESHOLD,
+      (percentage) => percentage <= AUTO_SWITCH_DEPLETION_THRESHOLD_PERCENT,
     );
     if (anyQuotaGroupDepleted) {
       return true;
@@ -347,10 +405,10 @@ export class AutoSwitchService {
     // Check quota groups
     const depletedGroups = (account.quota.quota_groups || []).filter((g) => {
       const lowestBucket = g.buckets.reduce(
-        (min, b) => Math.min(min, b.remaining_fraction * 100),
+        (min, b) => Math.min(min, Math.round(b.remaining_fraction * 100)),
         100,
       );
-      return lowestBucket < THRESHOLD;
+      return lowestBucket <= AUTO_SWITCH_DEPLETION_THRESHOLD_PERCENT;
     });
 
     if (depletedGroups.length > 0) {

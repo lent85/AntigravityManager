@@ -1,5 +1,14 @@
-import { Inject, Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
-import { CloudAccount } from '@/modules/cloud-account/types';
+import {
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+  Optional,
+} from '@nestjs/common';
+import type { CloudAccount, CloudAccountHealth } from '@/modules/cloud-account/types';
 import { RateLimitTrackerService } from '../../shared/services/rate-limit-tracker.service';
 import {
   ACCOUNT_LEASE_ACCOUNT_STORE,
@@ -11,7 +20,10 @@ import {
 } from './interfaces/account-lease-adapters';
 import { AccountLeaseQuotaRefreshPolicy } from './policies/account-lease-quota-refresh.policy';
 import { AccountLeaseTokenCache } from './stores/account-lease-token.store';
-import { AccountLeaseHydrationPolicy } from './policies/account-lease-hydration.policy';
+import {
+  AccountLeaseHydrationPolicy,
+  AccountLeaseRefreshRejectedError,
+} from './policies/account-lease-hydration.policy';
 import { AccountLeaseFulfillmentPolicy } from './policies/account-lease-fulfillment.policy';
 import { AccountLeaseSelectionPolicy } from './policies/account-lease-selection.policy';
 import { AccountLeaseModelPolicy } from './policies/account-lease-model.policy';
@@ -24,6 +36,16 @@ import {
   type AccountLeaseUpstreamErrorParams,
 } from './policies/account-lease-limit.policy';
 import { AccountLeaseConfigPolicy } from './policies/account-lease-config.policy';
+import { normalizeTrustedGoogleValidationUrl } from '@/modules/cloud-account/utils/google-validation-url';
+import {
+  ModelAvailabilityService,
+  proxyModelAvailabilityStore,
+} from '../../shared/services/model-availability.service';
+import {
+  ImageAccountPermit,
+  ImageAccountSchedulerService,
+} from './image-account-scheduler.service';
+import { getServerConfig } from '@/server/server-config';
 
 interface GetNextTokenOptions {
   sessionKey?: string;
@@ -31,11 +53,39 @@ interface GetNextTokenOptions {
   model?: string;
 }
 
+export interface GetNextImageTokenOptions extends GetNextTokenOptions {
+  signal?: AbortSignal;
+}
+
+export interface ImageTokenLease {
+  permit: ImageAccountPermit;
+  token: CloudAccount;
+}
+
+export class ImageQueueTimeoutError extends HttpException {
+  constructor() {
+    super('Image queue wait timed out', HttpStatus.TOO_MANY_REQUESTS);
+  }
+}
+
+export class ImageAccountUnavailableError extends HttpException {
+  constructor() {
+    super('No available image accounts', HttpStatus.SERVICE_UNAVAILABLE);
+  }
+}
+
+export class ImageQueueAbortedError extends Error {
+  constructor() {
+    super('Image request was aborted');
+    this.name = 'AbortError';
+  }
+}
+
 type TokenData = AccountLeaseTokenData;
 type TokenEntry = [string, TokenData];
 
 @Injectable()
-export class AccountLeaseService implements OnModuleInit {
+export class AccountLeaseService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AccountLeaseService.name);
   private readonly stickySessionTtlMs = 10 * 60 * 1000;
   private readonly rateLimitCooldownMs = 5 * 60 * 1000;
@@ -63,6 +113,12 @@ export class AccountLeaseService implements OnModuleInit {
     @Optional()
     @Inject(RateLimitTrackerService)
     private readonly rateLimitTrackerService: RateLimitTrackerService = new RateLimitTrackerService(),
+    @Optional()
+    @Inject(ModelAvailabilityService)
+    private readonly modelAvailability: ModelAvailabilityService = proxyModelAvailabilityStore,
+    @Optional()
+    @Inject(ImageAccountSchedulerService)
+    private readonly imageScheduler: ImageAccountSchedulerService = new ImageAccountSchedulerService(),
   ) {
     this.quotaRefreshPolicy = new AccountLeaseQuotaRefreshPolicy({
       accountStore: this.accountStore,
@@ -89,7 +145,6 @@ export class AccountLeaseService implements OnModuleInit {
     });
     this.fulfillmentPolicy = new AccountLeaseFulfillmentPolicy({
       hydrationPolicy: this.hydrationPolicy,
-      markRateLimitSuccess: (accountId) => this.rateLimitTracker.markSuccess(accountId),
       bindSession: (sessionKey, accountId, expiresAt) =>
         this.selectionPolicy.bindSession(sessionKey, accountId, expiresAt),
       stickySessionTtlMs: this.stickySessionTtlMs,
@@ -132,22 +187,36 @@ export class AccountLeaseService implements OnModuleInit {
 
   async onModuleInit() {
     await this.loadAccounts();
+    this.restorePersistedLongImageLimits();
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.hydrationPolicy.drainBackgroundPersistence();
   }
 
   async loadAccounts(): Promise<number> {
-    return this.tokenCache.loadAccounts();
+    try {
+      return await this.tokenCache.loadAccounts();
+    } finally {
+      this.syncImageSchedulerAccounts();
+    }
   }
 
   async reloadAllAccounts(): Promise<number> {
     const count = await this.loadAccounts();
-    this.clearAllRateLimits();
+    this.resetRateLimitsFromPersistence();
     this.clearAllSessions();
     return count;
   }
 
   async reloadAllAccountsOrThrow(): Promise<number> {
-    const count = await this.tokenCache.loadAccountsOrThrow();
-    this.clearAllRateLimits();
+    let count: number;
+    try {
+      count = await this.tokenCache.loadAccountsOrThrow();
+    } finally {
+      this.syncImageSchedulerAccounts();
+    }
+    this.resetRateLimitsFromPersistence();
     this.clearAllSessions();
     return count;
   }
@@ -156,8 +225,35 @@ export class AccountLeaseService implements OnModuleInit {
     this.selectionPolicy.clearSessions();
   }
 
+  evictAccount(accountId: string): boolean {
+    this.selectionPolicy.clearAccountSessions(accountId);
+    const deleted = this.tokens.delete(accountId);
+    this.syncImageSchedulerAccounts();
+    return deleted;
+  }
+
+  updateAccountOAuthHealth(accountId: string, oauthHealth: CloudAccountHealth['oauth']): boolean {
+    const tokenData = this.tokens.get(accountId);
+    if (!tokenData) {
+      return false;
+    }
+    tokenData.oauth_health = oauthHealth;
+    return true;
+  }
+
   clearAllRateLimits(): void {
     this.limitPolicy.clearAllRateLimits();
+  }
+
+  private resetRateLimitsFromPersistence(): void {
+    this.clearAllRateLimits();
+    this.restorePersistedLongImageLimits();
+  }
+
+  private restorePersistedLongImageLimits(): void {
+    for (const entry of this.modelAvailability.getActiveSnapshot()) {
+      this.rateLimitTracker.restorePersistedLongImageLimit(entry);
+    }
   }
 
   recordParityError(): void {
@@ -196,6 +292,42 @@ export class AccountLeaseService implements OnModuleInit {
     await this.limitPolicy.markFromUpstreamError(params);
   }
 
+  markImageRateLimitFast(params: AccountLeaseUpstreamErrorParams): boolean {
+    return this.limitPolicy.markImageRateLimitFast(params);
+  }
+
+  async reconcileImageRateLimit(params: AccountLeaseUpstreamErrorParams): Promise<void> {
+    await this.limitPolicy.reconcileImageRateLimit(params);
+  }
+
+  async markValidationRequired(params: {
+    accountId: string;
+    verificationUrl?: string;
+    description?: string;
+  }): Promise<void> {
+    const now = Date.now();
+    const nextProbeAt = now + 10 * 60 * 1000;
+    const updateHealth = (health: CloudAccount['health']): CloudAccount['health'] => ({
+      ...health,
+      validation: {
+        status: 'requires_action',
+        reason: 'VALIDATION_REQUIRED',
+        detected_at_ms: now,
+        next_probe_at_ms: nextProbeAt,
+        verification_url: normalizeTrustedGoogleValidationUrl(params.verificationUrl),
+        description: params.description?.trim().slice(0, 500) || undefined,
+      },
+    });
+
+    await this.accountStore.mutateHealth(params.accountId, updateHealth);
+
+    const tokenData = this.tokens.get(params.accountId);
+    if (tokenData) {
+      tokenData.validation_blocked_until_ms = nextProbeAt;
+    }
+    this.selectionPolicy.clearAccountSessions(params.accountId);
+  }
+
   async getNextToken(options?: GetNextTokenOptions): Promise<CloudAccount | null> {
     try {
       if (this.tokens.size === 0) {
@@ -213,7 +345,11 @@ export class AccountLeaseService implements OnModuleInit {
 
       this.rateLimitTracker.cleanupExpired();
 
-      const fullAccountPool = Array.from(this.tokens.entries());
+      const fullAccountPool = Array.from(this.tokens.entries()).filter(
+        ([, tokenData]) =>
+          tokenData.validation_blocked_until_ms === undefined ||
+          now >= tokenData.validation_blocked_until_ms,
+      );
       const modelCapableAccountPool = this.selectModelCapableAccounts(fullAccountPool, model);
       if (modelCapableAccountPool.length === 0) {
         this.logger.warn(`No account advertises requested model: ${model ?? 'unknown'}`);
@@ -223,41 +359,138 @@ export class AccountLeaseService implements OnModuleInit {
       const filteredAccountPool = modelCapableAccountPool.filter(
         ([accountId]) => !excludedAccountIds.has(accountId),
       );
-      const candidateAccountPool =
-        filteredAccountPool.length > 0 ? filteredAccountPool : modelCapableAccountPool;
-
       if (filteredAccountPool.length === 0 && excludedAccountIds.size > 0) {
-        this.logger.warn(
-          'Exclusion filter removed all accounts; retrying with the full account pool',
-        );
+        this.logger.warn('Exclusion filter removed all accounts');
       }
 
-      if (candidateAccountPool.length === 0) {
+      if (filteredAccountPool.length === 0) {
         this.logger.warn('No eligible account found after exclusion filtering');
         return null;
       }
 
-      const selectedTokenEntry = await this.selectionPolicy.selectCandidate({
-        allTokens: candidateAccountPool,
-        sessionKey,
-        model,
-        now,
-        accountCooldowns: this.accountCooldowns,
-        rateLimitTracker: this.rateLimitTracker,
-        config: this.configPolicy.getSelectionConfig(),
-        logger: this.logger,
-      });
+      let remainingAccountPool = filteredAccountPool;
+      for (let attempt = 0; attempt < filteredAccountPool.length; attempt += 1) {
+        const selectedTokenEntry = await this.selectionPolicy.selectCandidate({
+          allTokens: remainingAccountPool,
+          sessionKey,
+          model,
+          now,
+          accountCooldowns: this.accountCooldowns,
+          rateLimitTracker: this.rateLimitTracker,
+          config: this.configPolicy.getSelectionConfig(),
+          logger: this.logger,
+        });
 
-      if (!selectedTokenEntry) {
-        return null;
+        if (!selectedTokenEntry) {
+          return null;
+        }
+
+        const [accountId, tokenData] = selectedTokenEntry;
+        try {
+          return await this.finalizeSelectedToken(accountId, tokenData, nowSeconds, sessionKey);
+        } catch (error) {
+          if (!(error instanceof AccountLeaseRefreshRejectedError)) {
+            throw error;
+          }
+          remainingAccountPool = remainingAccountPool.filter(([id]) => id !== accountId);
+        }
       }
 
-      const [accountId, tokenData] = selectedTokenEntry;
-      return this.finalizeSelectedToken(accountId, tokenData, nowSeconds, sessionKey);
+      return null;
     } catch (error) {
       this.logger.error('Failed to select the next account token', error);
       return null;
     }
+  }
+
+  async getNextImageToken(options: GetNextImageTokenOptions = {}): Promise<ImageTokenLease> {
+    this.syncImageSchedulerAccounts();
+    const timeoutMs = Math.max(1, (getServerConfig()?.request_timeout ?? 120) * 1000);
+    const deadline = Date.now() + timeoutMs;
+
+    while (true) {
+      this.throwIfImageSelectionAborted(options.signal);
+      const busyAccountIds = new Set<string>();
+
+      while (true) {
+        const remainingMs = deadline - Date.now();
+        if (remainingMs <= 0) {
+          throw new ImageQueueTimeoutError();
+        }
+
+        const token = this.getNextToken({
+          sessionKey: options.sessionKey,
+          model: options.model,
+          excludeAccountIds: [...(options.excludeAccountIds ?? []), ...busyAccountIds],
+        });
+        const selected = await this.waitForImageSelection(token, remainingMs, options.signal);
+        if (selected === null) {
+          if (busyAccountIds.size === 0) {
+            throw new ImageAccountUnavailableError();
+          }
+          break;
+        }
+
+        const permit = this.imageScheduler.tryAcquire(selected.id);
+        if (permit) {
+          return { token: selected, permit };
+        }
+        busyAccountIds.add(selected.id);
+      }
+
+      const waitResult = await this.imageScheduler.waitForChange(
+        deadline - Date.now(),
+        options.signal,
+      );
+      if (waitResult === 'aborted') {
+        throw new ImageQueueAbortedError();
+      }
+      if (Date.now() >= deadline) {
+        throw new ImageQueueTimeoutError();
+      }
+    }
+  }
+
+  private async waitForImageSelection(
+    selection: Promise<CloudAccount | null>,
+    remainingMs: number,
+    signal?: AbortSignal,
+  ): Promise<CloudAccount | null> {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (value: CloudAccount | null): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
+        resolve(value);
+      };
+      const fail = (error: unknown): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
+        reject(error);
+      };
+      const onAbort = (): void => fail(new ImageQueueAbortedError());
+      const timer = setTimeout(() => fail(new ImageQueueTimeoutError()), remainingMs);
+      signal?.addEventListener('abort', onAbort, { once: true });
+      void selection.then(finish, fail);
+    });
+  }
+
+  private throwIfImageSelectionAborted(signal?: AbortSignal): void {
+    if (signal?.aborted) {
+      throw new ImageQueueAbortedError();
+    }
+  }
+
+  private syncImageSchedulerAccounts(): void {
+    this.imageScheduler.syncAccounts(this.tokens.keys());
   }
 
   private selectModelCapableAccounts(allTokens: TokenEntry[], model?: string): TokenEntry[] {

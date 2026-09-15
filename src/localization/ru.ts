@@ -517,6 +517,7 @@ const ru = {
       validationRiskControlled: 'Риск / Ограничение',
       validationOAuthReauthRequired: 'Требуется повторный OAuth',
       validationRequired: 'Требуется проверка',
+      completeValidation: 'Пройти проверку',
       left: 'ост.',
       used: 'Исп.',
       unknown: 'Неизвестный',
@@ -719,6 +720,9 @@ const ru = {
       api_key: 'API Ключ',
       auto_start: 'Автозапуск',
       auto_start_desc: 'Запускать прокси при старте приложения',
+      'allow-local-video-paths': 'Разрешить локальные пути к видео',
+      'allow-local-video-paths-desc':
+        'Разрешает API-запросам читать через video_url локальные файлы, доступные вашей учетной записи. Включайте только для доверенных клиентов прокси.',
       local_access: 'Доступ из локальной сети:',
       select_ip: 'Выбрать IP',
       no_token_warning: '⚠️ API ключ не установлен. Доступ открыт всем!',

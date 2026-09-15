@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AccountLeaseFulfillmentPolicy } from '@/modules/proxy-gateway/server/modules/account-lease/policies/account-lease-fulfillment.policy';
 import type { AccountLeaseHydrationPolicy } from '@/modules/proxy-gateway/server/modules/account-lease/policies/account-lease-hydration.policy';
+import { AccountLeaseRefreshRejectedError } from '@/modules/proxy-gateway/server/modules/account-lease/policies/account-lease-hydration.policy';
 import type { AccountLeaseTokenData } from '@/modules/proxy-gateway/server/modules/account-lease/interfaces/account-lease-token-types';
 
 function createToken(overrides: Partial<AccountLeaseTokenData> = {}): AccountLeaseTokenData {
@@ -26,18 +27,16 @@ function createToken(overrides: Partial<AccountLeaseTokenData> = {}): AccountLea
 }
 
 describe('AccountLeaseFulfillmentPolicy', () => {
-  it('hydrates the selected token, records success, binds session, and returns a cloud account lease', async () => {
+  it('hydrates the selected token, binds the session, and returns a cloud account lease', async () => {
     const hydrationPolicy = {
       hydrateSelectedToken: vi.fn().mockResolvedValue('resolved-project'),
     } as unknown as AccountLeaseHydrationPolicy;
-    const markRateLimitSuccess = vi.fn();
     const bindSession = vi.fn();
     const logger = {
       error: vi.fn(),
     };
     const policy = new AccountLeaseFulfillmentPolicy({
       hydrationPolicy,
-      markRateLimitSuccess,
       bindSession,
       stickySessionTtlMs: 600_000,
       resolveFallbackProjectId: () => 'fallback-project',
@@ -59,7 +58,6 @@ describe('AccountLeaseFulfillmentPolicy', () => {
       nowSeconds: 100,
       fallbackProjectId: 'fallback-project',
     });
-    expect(markRateLimitSuccess).toHaveBeenCalledWith('acc-1');
     expect(bindSession).toHaveBeenCalledWith('openai:user-1', 'acc-1', expect.any(Number));
     expect(lease).toEqual(
       expect.objectContaining({
@@ -84,7 +82,6 @@ describe('AccountLeaseFulfillmentPolicy', () => {
     };
     const policy = new AccountLeaseFulfillmentPolicy({
       hydrationPolicy,
-      markRateLimitSuccess: vi.fn(),
       bindSession: vi.fn(),
       stickySessionTtlMs: 600_000,
       resolveFallbackProjectId: () => 'fallback-project',
@@ -102,5 +99,27 @@ describe('AccountLeaseFulfillmentPolicy', () => {
       'Failed to finalize selected account token',
       expect.any(Error),
     );
+  });
+
+  it('rethrows the typed refresh rejection for account rotation', async () => {
+    const rejection = new AccountLeaseRefreshRejectedError('acc-1', 'invalid_grant');
+    const hydrationPolicy = {
+      hydrateSelectedToken: vi.fn().mockRejectedValue(rejection),
+    } as unknown as AccountLeaseHydrationPolicy;
+    const policy = new AccountLeaseFulfillmentPolicy({
+      hydrationPolicy,
+      bindSession: vi.fn(),
+      stickySessionTtlMs: 600_000,
+      resolveFallbackProjectId: () => 'fallback-project',
+      logger: { error: vi.fn() },
+    });
+
+    await expect(
+      policy.finalizeSelectedToken({
+        accountId: 'acc-1',
+        tokenData: createToken(),
+        nowSeconds: 100,
+      }),
+    ).rejects.toBe(rejection);
   });
 });

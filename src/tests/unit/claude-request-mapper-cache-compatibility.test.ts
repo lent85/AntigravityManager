@@ -73,6 +73,95 @@ describe('ClaudeRequestMapper cache compatibility', () => {
     expect(request.messages[0]?.role).toBe('system');
   });
 
+  it('normalizes a standalone Claude Agent SDK identity before cache sanitization', () => {
+    const body = transformClaudeRequestIn(
+      createRequest({
+        system: "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+      }),
+      'project-a',
+      'test-agent',
+    );
+    const systemInstruction = body.request.systemInstruction?.parts[0]?.text;
+
+    expect(systemInstruction).toContain(
+      "You are Claude Code, Anthropic's official CLI for Claude.",
+    );
+    expect(systemInstruction).not.toContain(
+      "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+    );
+    expect(systemInstruction).toContain('You are Antigravity');
+  });
+
+  it('normalizes only the matching text block in a Claude system array', () => {
+    const body = transformClaudeRequestIn(
+      createRequest({
+        system: [
+          {
+            type: 'text',
+            text: "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+          },
+          { type: 'text', text: 'Keep this instruction unchanged.' },
+        ],
+      }),
+      'project-a',
+      'test-agent',
+    );
+    const systemInstruction = body.request.systemInstruction?.parts[0]?.text;
+
+    expect(systemInstruction).toContain(
+      "You are Claude Code, Anthropic's official CLI for Claude.",
+    );
+    expect(systemInstruction).toContain('Keep this instruction unchanged.');
+    expect(systemInstruction).not.toContain(
+      "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+    );
+  });
+
+  it('does not normalize mentions or whitespace-padded identity text', () => {
+    const identity = "You are a Claude agent, built on Anthropic's Claude Agent SDK.";
+    const mentioned = transformClaudeRequestIn(
+      createRequest({ system: `Compatibility note: ${identity}` }),
+      'project-a',
+      'test-agent',
+    );
+    const padded = transformClaudeRequestIn(
+      createRequest({ system: `  ${identity}  ` }),
+      'project-a',
+      'test-agent',
+    );
+
+    expect(mentioned.request.systemInstruction?.parts[0]?.text).toContain(
+      `Compatibility note: ${identity}`,
+    );
+    expect(padded.request.systemInstruction?.parts[0]?.text).toContain(identity);
+    expect(mentioned.request.systemInstruction?.parts[0]?.text).not.toContain(
+      "You are Claude Code, Anthropic's official CLI for Claude.",
+    );
+    expect(padded.request.systemInstruction?.parts[0]?.text).not.toContain(
+      "You are Claude Code, Anthropic's official CLI for Claude.",
+    );
+  });
+
+  it('does not normalize an identity extracted from an embedded system message', () => {
+    const identity = "You are a Claude agent, built on Anthropic's Claude Agent SDK.";
+    const body = transformClaudeRequestIn(
+      createRequest({
+        messages: [
+          { role: 'system', content: identity },
+          { role: 'user', content: 'Help me fix the issue.' },
+        ],
+      }),
+      'project-a',
+      'test-agent',
+    );
+    const systemInstruction = body.request.systemInstruction?.parts[0]?.text;
+
+    expect(systemInstruction).toContain(identity);
+    expect(systemInstruction).not.toContain(
+      "You are Claude Code, Anthropic's official CLI for Claude.",
+    );
+  });
+
   it('preserves an explicit Codex identity without injecting Antigravity', () => {
     const body = transformClaudeRequestIn(
       createRequest({
@@ -320,6 +409,38 @@ describe('ClaudeRequestMapper cache compatibility', () => {
     expect(jsonSchemaMocks.normalizeObjectJsonSchema).toHaveBeenCalledTimes(1);
 
     transformClaudeRequestIn(request, 'project-a', 'test-agent');
+    expect(jsonSchemaMocks.normalizeObjectJsonSchema).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns a fresh tool declaration copy from the cache', () => {
+    const request = createRequest({
+      tools: [
+        {
+          name: 'cache_copy_probe_tool',
+          input_schema: {
+            type: 'object',
+            properties: {
+              query: { type: 'string' },
+            },
+          },
+        },
+      ],
+    });
+
+    const first = transformClaudeRequestIn(request, 'project-a', 'test-agent');
+    const firstDeclaration = first.request.tools?.[0]?.functionDeclarations?.[0];
+    expect(firstDeclaration).toBeDefined();
+    if (!firstDeclaration) {
+      throw new Error('Expected a function declaration for the cached tool.');
+    }
+
+    firstDeclaration.name = 'mutated_tool_name';
+
+    const second = transformClaudeRequestIn(request, 'project-a', 'test-agent');
+
+    expect(second.request.tools?.[0]?.functionDeclarations?.[0]?.name).toBe(
+      'cache_copy_probe_tool',
+    );
     expect(jsonSchemaMocks.normalizeObjectJsonSchema).toHaveBeenCalledTimes(1);
   });
 });

@@ -40,6 +40,10 @@ interface PreparedInternalRequest {
   cacheKey?: string;
 }
 
+interface InternalEndpointRetryPolicy {
+  allowProjectHeaderDowngrade: boolean;
+}
+
 const PROJECT_HEADER_ATTEMPT_COUNT = 2;
 
 @Injectable()
@@ -147,15 +151,20 @@ export class GeminiClient {
           validateStatus: () => true,
         },
         'weekly-warmup',
+        undefined,
+        { allowProjectHeaderDowngrade: false },
       );
     };
     try {
       let response: AxiosResponse<Readable>;
       try {
         response = await send(':streamGenerateContent?alt=sse');
-      } catch {
+      } catch (error) {
         if (signal.aborted) {
           throw new Error('Weekly warmup cancelled');
+        }
+        if (error instanceof UpstreamRequestError && error.status !== undefined) {
+          throw error;
         }
         response = await send(':generateContent');
       }
@@ -174,6 +183,7 @@ export class GeminiClient {
     accessToken: string,
     upstreamProxyUrl?: string,
     extraHeaders?: Record<string, string>,
+    signal?: AbortSignal,
   ): Promise<NodeJS.ReadableStream> {
     const response = await this.executeInternalWithExplicitContextCache<NodeJS.ReadableStream>(
       ':streamGenerateContent?alt=sse',
@@ -182,6 +192,7 @@ export class GeminiClient {
       upstreamProxyUrl,
       {
         responseType: 'stream',
+        signal,
       },
       'stream-generate',
       extraHeaders,
@@ -195,6 +206,7 @@ export class GeminiClient {
     accessToken: string,
     upstreamProxyUrl?: string,
     extraHeaders?: Record<string, string>,
+    signal?: AbortSignal,
   ): Promise<GeminiResponse> {
     const response = await this.executeInternalWithExplicitContextCache<
       GeminiResponse | { response: GeminiResponse }
@@ -203,7 +215,7 @@ export class GeminiClient {
       body,
       accessToken,
       upstreamProxyUrl,
-      {},
+      { signal },
       'generate-content',
       extraHeaders,
     );
@@ -521,11 +533,13 @@ export class GeminiClient {
     config: AxiosRequestConfig,
     operation: string,
     extraHeaders?: Record<string, string>,
+    retryPolicy: InternalEndpointRetryPolicy = { allowProjectHeaderDowngrade: true },
   ): Promise<AxiosResponse<T>> {
     const baseUrls = this.getInternalBaseUrls();
     const timeout = this.getInternalTimeoutMs();
     const requestUserAgent = await resolveRequestUserAgent();
     const axiosProxy = this.resolveUpstreamAxiosProxy(upstreamProxyUrl);
+    const isContentRequest = /^:(?:generateContent|streamGenerateContent)(?:\?|$)/.test(path);
     let lastError: unknown = null;
     let lastEndpoint = '';
     let hasTriggeredProjectHeaderDowngrade = false;
@@ -536,9 +550,10 @@ export class GeminiClient {
       projectHeaderAttempt++
     ) {
       let shouldRetryWithoutProjectHeader = false;
-      const projectHeaders = hasTriggeredProjectHeaderDowngrade
-        ? {}
-        : this.createProjectHeaders(body);
+      const projectHeaders =
+        hasTriggeredProjectHeaderDowngrade || isContentRequest
+          ? {}
+          : this.createProjectHeaders(body);
 
       for (let index = 0; index < baseUrls.length; index++) {
         if (config.signal?.aborted) {
@@ -549,19 +564,31 @@ export class GeminiClient {
         lastEndpoint = url;
 
         try {
+          const headers: Record<string, string> = {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            'User-Agent': requestUserAgent,
+            ...projectHeaders,
+            ...(extraHeaders ?? {}),
+          };
+          if (isContentRequest) {
+            for (const headerName of Object.keys(headers)) {
+              if (headerName.toLowerCase() === 'x-goog-user-project') {
+                delete headers[headerName];
+              }
+            }
+          }
           const response = await axios.post<T>(url, this.createInternalRequestBody(path, body), {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-              'User-Agent': requestUserAgent,
-              ...projectHeaders,
-              ...(extraHeaders ?? {}),
-            },
+            headers,
             timeout,
             proxy: axiosProxy,
             ...config,
           });
-          if (response.status === 403 && Boolean(projectHeaders['x-goog-user-project'])) {
+          if (
+            retryPolicy.allowProjectHeaderDowngrade &&
+            response.status === 403 &&
+            Boolean(projectHeaders['x-goog-user-project'])
+          ) {
             if (response.data instanceof Readable) {
               response.data.destroy();
             }
@@ -579,7 +606,10 @@ export class GeminiClient {
           }
           lastError = error;
 
-          if (this.shouldRetryWithoutProjectHeader(error, projectHeaders)) {
+          if (
+            retryPolicy.allowProjectHeaderDowngrade &&
+            this.shouldRetryWithoutProjectHeader(error, projectHeaders)
+          ) {
             this.logger.warn(
               `[${operation}] received 403 with x-goog-user-project; retrying without project header.`,
             );

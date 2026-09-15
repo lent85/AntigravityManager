@@ -7,6 +7,11 @@ export const UpstreamProxyConfigSchema = z.object({
 
 export const ProxyExperimentalConfigSchema = z.object({
   enable_cloud_code_meta: z.boolean().default(false),
+  allow_local_video_paths: z.boolean().default(false),
+});
+
+export const ImageSchedulerConfigSchema = z.object({
+  per_account_concurrency: z.number().int().nonnegative().default(4),
 });
 
 /**
@@ -45,9 +50,13 @@ export const ProxyConfigSchema = z.object({
   custom_mapping: z.record(z.string(), z.string()).default({}),
   anthropic_mapping: z.record(z.string(), z.string()), // Mapping table
   request_timeout: z.number().default(120), // Timeout in seconds
+  image_scheduler: ImageSchedulerConfigSchema.default({
+    per_account_concurrency: 4,
+  }),
   upstream_proxy: UpstreamProxyConfigSchema,
   experimental: ProxyExperimentalConfigSchema.default({
     enable_cloud_code_meta: false,
+    allow_local_video_paths: false,
   }),
 });
 
@@ -147,12 +156,16 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     custom_mapping: {},
     anthropic_mapping: {},
     request_timeout: 120,
+    image_scheduler: {
+      per_account_concurrency: 4,
+    },
     upstream_proxy: {
       enabled: false,
       url: '',
     },
     experimental: {
       enable_cloud_code_meta: false,
+      allow_local_video_paths: false,
     },
   },
 };

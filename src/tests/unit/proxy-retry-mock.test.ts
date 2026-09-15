@@ -1,7 +1,10 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import axios, { AxiosError } from 'axios';
 import { EventEmitter } from 'events';
-import { Readable } from 'node:stream';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { PassThrough, Readable } from 'node:stream';
 import { AnthropicService } from '../../modules/proxy-gateway/server/modules/anthropic/anthropic.service';
 import { GeminiService } from '../../modules/proxy-gateway/server/modules/gemini/gemini.service';
 import { OpenAIService } from '../../modules/proxy-gateway/server/modules/openai/openai.service';
@@ -16,6 +19,7 @@ import { GenerationConstraintsService } from '../../modules/proxy-gateway/server
 import { ModelRoutingService } from '../../modules/proxy-gateway/server/shared/services/model-routing.service';
 import { ProxyRetryService } from '../../modules/proxy-gateway/server/shared/services/proxy-retry.service';
 import { proxyModelAvailabilityStore } from '../../modules/proxy-gateway/server/shared/services/model-availability.service';
+import type { OpenAIChatRequest } from '@/modules/proxy-gateway/server/common/interfaces/request-interfaces';
 
 // The three services the protocol services used to build for themselves. Real instances:
 // these tests drive the retry path, so a placeholder would change what is under test.
@@ -167,17 +171,18 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     expect(geminiHeaders).toEqual({});
   });
 
-  it('should emit error when stream ends without data', async () => {
+  it('recovers a stream that ends without data as a minimal Anthropic response', async () => {
     const service = new TestableAnthropicService();
     const stream = new EventEmitter();
 
     const resultObservable = service.testProcessStream(stream);
 
     let errorReceived: Error | undefined;
+    const receivedChunks: string[] = [];
 
     const promise = new Promise<void>((resolve) => {
       resultObservable.subscribe({
-        next: () => {},
+        next: (chunk) => receivedChunks.push(chunk),
         error: (err) => {
           errorReceived = err;
           resolve();
@@ -191,8 +196,8 @@ describe('ProxyService Empty Stream Retry Logic', () => {
 
     await promise;
 
-    expect(errorReceived).toBeDefined();
-    expect(errorReceived?.message).toBe('Empty response stream');
+    expect(errorReceived).toBeUndefined();
+    expect(receivedChunks.join('')).toContain('"content_block":{"type":"text","text":"."}');
   });
 
   it('should NOT emit error when stream has data', async () => {
@@ -239,16 +244,31 @@ describe('ProxyService Empty Stream Retry Logic', () => {
 
   it('preserves every part from a multi-part Anthropic stream event', async () => {
     const service = new TestableAnthropicService();
-    const stream = new EventEmitter();
+    const stream = new PassThrough();
     mockAccountLeaseService.getNextToken.mockResolvedValue(createToken());
     mockGeminiClient.streamGenerateInternal.mockResolvedValue(stream);
 
-    const result = (await service.handleAnthropicMessages({
+    const resultPromise = service.handleAnthropicMessages({
       model: 'gemini-3.5-flash',
       stream: true,
       max_tokens: 256,
       messages: [{ role: 'user', content: 'hello' }],
-    } as any)) as Observable<string>;
+    } as any);
+
+    const payload = JSON.stringify({
+      response: {
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'reasoning', thought: true }, { text: 'final answer' }],
+            },
+            finishReason: 'STOP',
+          },
+        ],
+      },
+    });
+    stream.end(Buffer.from(`data: ${payload}\n\n`));
+    const result = (await resultPromise) as Observable<string>;
     const receivedChunks: string[] = [];
     const done = new Promise<void>((resolve, reject) => {
       result.subscribe({
@@ -257,19 +277,6 @@ describe('ProxyService Empty Stream Retry Logic', () => {
         complete: resolve,
       });
     });
-
-    const payload = JSON.stringify({
-      candidates: [
-        {
-          content: {
-            parts: [{ text: 'reasoning', thought: true }, { text: 'final answer' }],
-          },
-          finishReason: 'STOP',
-        },
-      ],
-    });
-    stream.emit('data', Buffer.from(`data: ${payload}\n\n`));
-    stream.emit('end');
     await done;
 
     const response = receivedChunks.join('');
@@ -279,24 +286,16 @@ describe('ProxyService Empty Stream Retry Logic', () => {
 
   it('preserves text from wrapped Anthropic stream events', async () => {
     const service = new TestableAnthropicService();
-    const stream = new EventEmitter();
+    const stream = new PassThrough();
     mockAccountLeaseService.getNextToken.mockResolvedValue(createToken());
     mockGeminiClient.streamGenerateInternal.mockResolvedValue(stream);
 
-    const result = (await service.handleAnthropicMessages({
+    const resultPromise = service.handleAnthropicMessages({
       model: 'gemini-3.5-flash',
       stream: true,
       max_tokens: 256,
       messages: [{ role: 'user', content: 'hello' }],
-    } as any)) as Observable<string>;
-    const receivedChunks: string[] = [];
-    const done = new Promise<void>((resolve, reject) => {
-      result.subscribe({
-        next: (chunk) => receivedChunks.push(chunk),
-        error: reject,
-        complete: resolve,
-      });
-    });
+    } as any);
 
     const payload = JSON.stringify({
       response: {
@@ -308,8 +307,16 @@ describe('ProxyService Empty Stream Retry Logic', () => {
         ],
       },
     });
-    stream.emit('data', Buffer.from(`data: ${payload}\n\n`));
-    stream.emit('end');
+    stream.end(Buffer.from(`data: ${payload}\n\n`));
+    const result = (await resultPromise) as Observable<string>;
+    const receivedChunks: string[] = [];
+    const done = new Promise<void>((resolve, reject) => {
+      result.subscribe({
+        next: (chunk) => receivedChunks.push(chunk),
+        error: reject,
+        complete: resolve,
+      });
+    });
     await done;
 
     expect(receivedChunks.join('')).toContain('"text":"wrapped answer"');
@@ -541,6 +548,58 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     ]);
   });
 
+  it('hot-reloads local video path access on the real OpenAI service path', async () => {
+    const service = new TestableOpenAIService();
+    const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'agm-openai-video-wire-'));
+    const videoPath = path.join(tempDirectory, 'sample.webm');
+    const videoBytes = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x01, 0x02, 0x03]);
+    fs.writeFileSync(videoPath, videoBytes);
+    mockAccountLeaseService.getNextToken.mockResolvedValue(createToken('acc-1'));
+    mockGeminiClient.generateInternal.mockResolvedValue({
+      candidates: [{ content: { parts: [{ text: 'ok' }] }, finishReason: 'STOP' }],
+      usageMetadata: { totalTokenCount: 5 },
+    });
+    const request: OpenAIChatRequest = {
+      model: 'gemini-3-flash',
+      stream: false,
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'video_url', video_url: { url: videoPath } }],
+        },
+      ],
+    };
+
+    try {
+      await service.handleChatCompletions(request);
+      expect(mockGeminiClient.generateInternal.mock.calls[0][0].request.contents).toEqual([
+        { role: 'user', parts: [{ text: 'Continue' }] },
+      ]);
+
+      mockGeminiClient.generateInternal.mockClear();
+      const enabledConfig = createProxyConfig();
+      enabledConfig.experimental.allow_local_video_paths = true;
+      setServerConfig(enabledConfig);
+
+      await service.handleChatCompletions(request);
+      expect(mockGeminiClient.generateInternal.mock.calls[0][0].request.contents).toEqual([
+        {
+          role: 'user',
+          parts: [
+            {
+              inlineData: {
+                mimeType: 'video/webm',
+                data: videoBytes.toString('base64'),
+              },
+            },
+          ],
+        },
+      ]);
+    } finally {
+      fs.rmSync(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
   it('keeps the web-search fallback selected by the request mapper', async () => {
     setServerConfig(
       createProxyConfig({
@@ -565,6 +624,162 @@ describe('ProxyService Empty Stream Retry Logic', () => {
 
     const internalRequest = mockGeminiClient.generateInternal.mock.calls[0][0];
     expect(internalRequest.model).toBe('gemini-3-flash');
+  });
+
+  it('keeps OpenAI signature provenance on the physical model after web-search remapping', async () => {
+    const service = new TestableOpenAIService();
+    const sessionKey = 'openai:openai-remap';
+    const staleSignature = 'gpt-oss-signature'.repeat(4);
+    const returnedSignature = 'gemini-signature'.repeat(4);
+    SignatureStore.store({
+      signature: staleSignature,
+      model: 'gpt-oss-120b-medium',
+      family: 'gpt-oss-120b-medium',
+      familyModel: 'gpt-oss-120b-medium',
+      sessionKey,
+      toolCallId: 'call_old',
+    });
+    mockAccountLeaseService.getNextToken.mockResolvedValue(createToken('acc-1'));
+    mockGeminiClient.generateInternal.mockResolvedValue({
+      candidates: [
+        {
+          content: {
+            role: 'model',
+            parts: [
+              {
+                functionCall: { id: 'call_new', name: 'lookup', args: {} },
+                thoughtSignature: returnedSignature,
+              },
+            ],
+          },
+          finishReason: 'STOP',
+        },
+      ],
+    });
+
+    try {
+      await service.handleChatCompletions({
+        model: 'gpt-oss-120b-medium',
+        stream: false,
+        extra: { user_id: 'openai-remap' },
+        messages: [
+          {
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+              {
+                id: 'call_old',
+                type: 'function',
+                function: { name: 'lookup', arguments: '{}' },
+              },
+            ],
+          },
+        ],
+        tools: [{ type: 'web_search_20250305' }],
+      } as any);
+
+      const internalRequest = mockGeminiClient.generateInternal.mock.calls[0][0];
+      const historicalToolCall = internalRequest.request.contents
+        .flatMap((content: { parts: Array<{ functionCall?: unknown }> }) => content.parts)
+        .find((part: { functionCall?: unknown }) => part.functionCall);
+      expect(internalRequest.model).toBe('gemini-3-flash');
+      expect(historicalToolCall?.thoughtSignature).not.toBe(staleSignature);
+      expect(
+        SignatureStore.getAt({ model: 'gpt-oss-120b-medium', sessionKey, messageCount: 2 }),
+      ).toBeNull();
+      expect(SignatureStore.getAt({ model: 'gemini-3-flash', sessionKey, messageCount: 2 })).toBe(
+        returnedSignature,
+      );
+    } finally {
+      SignatureStore.clear();
+    }
+  });
+
+  it('reads a Responses parent signature and writes the child signature under the child id', async () => {
+    const service = new TestableOpenAIService();
+    const parentSessionKey = 'openai:resp_parent';
+    const childSessionKey = 'openai:resp_child';
+    const parentSignature = 'parent-signature'.repeat(4);
+    const childSignature = 'child-signature'.repeat(4);
+    SignatureStore.store({
+      signature: parentSignature,
+      model: 'gemini-3-flash',
+      sessionKey: parentSessionKey,
+      toolCallId: 'call_parent',
+    });
+    mockAccountLeaseService.getNextToken.mockResolvedValue(createToken('acc-1'));
+    mockGeminiClient.generateInternal.mockResolvedValue({
+      candidates: [
+        {
+          content: {
+            role: 'model',
+            parts: [
+              {
+                functionCall: { id: 'call_child', name: 'lookup', args: {} },
+                thoughtSignature: childSignature,
+              },
+            ],
+          },
+          finishReason: 'STOP',
+        },
+      ],
+    });
+
+    try {
+      await service.handleChatCompletions(
+        {
+          model: 'gemini-3-flash',
+          stream: false,
+          extra: { user_id: 'must-not-win' },
+          messages: [
+            {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_parent',
+                  type: 'function',
+                  function: { name: 'lookup', arguments: '{}' },
+                },
+              ],
+            },
+          ],
+        } as any,
+        'responses',
+        undefined,
+        {
+          requestSessionId: 'resp_parent',
+          responseId: 'resp_child',
+          routingSessionId: 'routing_root',
+        },
+      );
+
+      const internalRequest = mockGeminiClient.generateInternal.mock.calls[0][0];
+      const historicalToolCall = internalRequest.request.contents
+        .flatMap((content: { parts: Array<{ functionCall?: unknown }> }) => content.parts)
+        .find((part: { functionCall?: unknown }) => part.functionCall);
+      expect(internalRequest).not.toHaveProperty('sessionId');
+      expect(historicalToolCall?.thoughtSignature).toBe(parentSignature);
+      expect(mockAccountLeaseService.getNextToken).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionKey: 'openai:routing_root' }),
+      );
+      expect(
+        SignatureStore.getAt({
+          model: 'gemini-3-flash',
+          sessionKey: childSessionKey,
+          messageCount: 2,
+        }),
+      ).toBe(childSignature);
+      expect(
+        SignatureStore.getForToolCall({
+          model: 'gemini-3-flash',
+          sessionKey: parentSessionKey,
+          toolCallId: 'call_parent',
+        }),
+      ).toBe(parentSignature);
+    } finally {
+      SignatureStore.clear();
+    }
   });
 
   it('retries Anthropic flow with the same error classification matrix', async () => {
@@ -835,6 +1050,7 @@ describe('GeminiClient internal request parity', () => {
     expect(postSpy).toHaveBeenCalledOnce();
     expect(postSpy.mock.calls[0][1]).toBe(JSON.stringify({ project: 'project-1', request: {} }));
     expect(postSpy.mock.calls[0][1]).not.toBeInstanceOf(Readable);
+    expect(postSpy.mock.calls[0][2]?.headers).not.toHaveProperty('x-goog-user-project');
   });
 
   it('uses stream body only for streamGenerateContent internal requests', async () => {
@@ -851,9 +1067,10 @@ describe('GeminiClient internal request parity', () => {
 
     expect(postSpy).toHaveBeenCalledOnce();
     expect(postSpy.mock.calls[0][1]).toBeInstanceOf(Readable);
+    expect(postSpy.mock.calls[0][2]?.headers).not.toHaveProperty('x-goog-user-project');
   });
 
-  it('retries from the first endpoint without x-goog-user-project after project-header 403', async () => {
+  it('omits x-goog-user-project without removing body.project or retrying a content 403', async () => {
     const forbidden = new AxiosError(
       'Request failed with status code 403',
       undefined,
@@ -867,40 +1084,59 @@ describe('GeminiClient internal request parity', () => {
         config: {} as any,
       },
     );
-    const postSpy = vi
-      .spyOn(axios, 'post')
-      .mockRejectedValueOnce(forbidden)
-      .mockResolvedValueOnce({
-        data: {
-          candidates: [{ content: { parts: [{ text: 'ok' }] } }],
-        },
-      });
+    const postSpy = vi.spyOn(axios, 'post').mockRejectedValue(forbidden);
     const client = new GeminiClient(new Upstream4xxCaptureService());
 
-    await client.generateInternal({ project: 'project-1', request: {} } as any, 'access-token');
+    await expect(
+      client.generateInternal({ project: 'project-1', request: {} } as any, 'access-token'),
+    ).rejects.toMatchObject({ status: 403 });
 
-    expect(postSpy).toHaveBeenCalledTimes(2);
-    expect(postSpy.mock.calls[1][0]).toBe(postSpy.mock.calls[0][0]);
-    expect(postSpy.mock.calls[0][2]?.headers?.['x-goog-user-project']).toBe('project-1');
-    expect(postSpy.mock.calls[1][2]?.headers).not.toHaveProperty('x-goog-user-project');
+    expect(postSpy).toHaveBeenCalledOnce();
+    expect(postSpy.mock.calls[0][1]).toBe(JSON.stringify({ project: 'project-1', request: {} }));
+    expect(postSpy.mock.calls[0][2]?.headers).not.toHaveProperty('x-goog-user-project');
   });
 
-  it('retries an accepted warmup 403 without x-goog-user-project', async () => {
-    const postSpy = vi
-      .spyOn(axios, 'post')
-      .mockResolvedValueOnce({ status: 403, data: Readable.from([]) })
-      .mockResolvedValueOnce({ status: 200, data: Readable.from([]) });
+  it('removes case-insensitive quota-project reinjection while preserving other extra headers', async () => {
+    const postSpy = vi.spyOn(axios, 'post').mockResolvedValue({
+      data: {
+        candidates: [{ content: { parts: [{ text: 'ok' }] } }],
+      },
+    });
     const client = new GeminiClient(new Upstream4xxCaptureService());
 
-    await client.warmupInternal({ project: 'project-1', request: {} } as any, 'access-token');
+    await client.generateInternal(
+      { project: 'project-1', request: {} } as any,
+      'access-token',
+      undefined,
+      {
+        'anthropic-beta': 'prompt-caching-2024-07-31',
+        'X-Goog-User-Project': 'reinjected-project',
+        'x-goog-user-project': 'second-reinjection',
+      },
+    );
 
-    expect(postSpy).toHaveBeenCalledTimes(2);
-    expect(postSpy.mock.calls[1][0]).toBe(postSpy.mock.calls[0][0]);
-    expect(postSpy.mock.calls[0][2]?.headers?.['x-goog-user-project']).toBe('project-1');
-    expect(postSpy.mock.calls[1][2]?.headers).not.toHaveProperty('x-goog-user-project');
+    const headers = postSpy.mock.calls[0][2]?.headers as Record<string, string>;
+    expect(Object.keys(headers).map((name) => name.toLowerCase())).not.toContain(
+      'x-goog-user-project',
+    );
+    expect(headers['anthropic-beta']).toBe('prompt-caching-2024-07-31');
   });
 
-  it('removes x-goog-user-project at most once and preserves the final 403', async () => {
+  it('rejects an accepted warmup 403 without sending a downgrade generation', async () => {
+    const postSpy = vi
+      .spyOn(axios, 'post')
+      .mockResolvedValueOnce({ status: 403, data: Readable.from([]) });
+    const client = new GeminiClient(new Upstream4xxCaptureService());
+
+    await expect(
+      client.warmupInternal({ project: 'project-1', request: {} } as any, 'access-token'),
+    ).rejects.toThrow('Weekly warmup rejected with HTTP 403');
+
+    expect(postSpy).toHaveBeenCalledOnce();
+    expect(postSpy.mock.calls[0][2]?.headers).not.toHaveProperty('x-goog-user-project');
+  });
+
+  it('rejects an Axios warmup 403 without sending a non-streaming fallback generation', async () => {
     const forbidden = new AxiosError(
       'Request failed with status code 403',
       undefined,
@@ -918,7 +1154,33 @@ describe('GeminiClient internal request parity', () => {
     const client = new GeminiClient(new Upstream4xxCaptureService());
 
     await expect(
-      client.generateInternal({ project: 'project-1', request: {} } as any, 'access-token'),
+      client.warmupInternal({ project: 'project-1', request: {} } as any, 'access-token'),
+    ).rejects.toMatchObject({ status: 403 });
+
+    expect(postSpy).toHaveBeenCalledOnce();
+    expect(postSpy.mock.calls[0][0]).toContain(':streamGenerateContent?alt=sse');
+    expect(postSpy.mock.calls[0][2]?.headers).not.toHaveProperty('x-goog-user-project');
+  });
+
+  it('retains one-time project-header downgrade for non-content internal methods', async () => {
+    const forbidden = new AxiosError(
+      'Request failed with status code 403',
+      undefined,
+      undefined,
+      undefined,
+      {
+        data: { error: { message: 'PERMISSION_DENIED' } },
+        status: 403,
+        statusText: 'Forbidden',
+        headers: {},
+        config: {} as any,
+      },
+    );
+    const postSpy = vi.spyOn(axios, 'post').mockRejectedValue(forbidden);
+    const client = new GeminiClient(new Upstream4xxCaptureService());
+
+    await expect(
+      client.postV1InternalRaw('loadCodeAssist', { project: 'project-1' }, 'access-token'),
     ).rejects.toMatchObject({ status: 403 });
 
     expect(postSpy).toHaveBeenCalledTimes(2);
@@ -1106,6 +1368,7 @@ describe('ProxyService Protocol Parity Fixtures', () => {
       undefined,
       sessionKey,
       6,
+      'gemini-3-flash',
     );
 
     const chunks: string[] = [];
@@ -1192,8 +1455,10 @@ describe('ProxyService Protocol Parity Fixtures', () => {
       completion_tokens: 4,
       total_tokens: 14,
     });
-    expect(SignatureStore.get(sessionKey)).toBe('stable signature');
-    expect(SignatureStore.getAt(sessionKey, 6)).toBe('stable signature');
+    expect(SignatureStore.get({ model: 'gemini-3-flash', sessionKey })).toBe('stable signature');
+    expect(SignatureStore.getAt({ model: 'gemini-3-flash', sessionKey, messageCount: 6 })).toBe(
+      'stable signature',
+    );
     expect(chunks.filter((chunk) => chunk.includes('data: [DONE]'))).toHaveLength(1);
 
     SignatureStore.clear(sessionKey);
@@ -1204,6 +1469,7 @@ describe('ProxyService Protocol Parity Fixtures', () => {
       createProxyConfig({
         experimental: {
           enable_cloud_code_meta: true,
+          allow_local_video_paths: false,
         },
       }),
     );

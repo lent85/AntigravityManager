@@ -3,8 +3,11 @@ import { logger } from '@/shared/logging/logger';
 import {
   CloudAccount,
   CloudAccountSchema,
+  CloudAccountHealthSchema,
   CloudQuotaDataSchema,
   CloudTokenDataSchema,
+  type CloudQuotaData,
+  type CloudTokenData,
 } from '@/modules/cloud-account/types';
 import {
   decryptWithMigration,
@@ -52,7 +55,7 @@ function createMigrationStats(): MigrationStats {
 async function decryptAndMigrateField(
   orm: DrizzleExecutor,
   accountId: string,
-  field: 'tokenJson' | 'quotaJson',
+  field: 'tokenJson' | 'quotaJson' | 'healthJson',
   value: string | null,
 ): Promise<{ value: string | null; migrated: boolean; usedFallback?: KeySource }> {
   if (!value) {
@@ -67,10 +70,16 @@ async function decryptAndMigrateField(
         .set({ tokenJson: result.reencrypted })
         .where(eq(accounts.id, accountId))
         .run();
-    } else {
+    } else if (field === 'quotaJson') {
       orm
         .update(accounts)
         .set({ quotaJson: result.reencrypted })
+        .where(eq(accounts.id, accountId))
+        .run();
+    } else {
+      orm
+        .update(accounts)
+        .set({ healthJson: result.reencrypted })
         .where(eq(accounts.id, accountId))
         .run();
     }
@@ -113,19 +122,39 @@ function parseCloudQuota(
   }
 }
 
+function parseCloudHealth(
+  accountId: string,
+  value: string | null,
+): CloudAccount['health'] | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    return CloudAccountHealthSchema.parse(JSON.parse(value));
+  } catch (error) {
+    logger.error(`Invalid health data for account ${accountId}`, error);
+    throw error;
+  }
+}
+
 export class CloudAccountRepo {
   private static versionFailureLogged = false;
 
   static async init(): Promise<void> {
     const { raw, orm } = getCloudDb();
     const rows = orm
-      .select({ tokenJson: accounts.tokenJson, quotaJson: accounts.quotaJson })
+      .select({
+        tokenJson: accounts.tokenJson,
+        quotaJson: accounts.quotaJson,
+        healthJson: accounts.healthJson,
+      })
       .from(accounts)
       .all();
     raw.close();
 
     const encryptedSamples = rows.flatMap((row) => {
-      return [row.tokenJson, row.quotaJson].filter(isEncryptedPayloadCandidate);
+      return [row.tokenJson, row.quotaJson, row.healthJson].filter(isEncryptedPayloadCandidate);
     });
     await initializeMasterKey({
       encryptedSamples,
@@ -142,6 +171,7 @@ export class CloudAccountRepo {
           id: accounts.id,
           tokenJson: accounts.tokenJson,
           quotaJson: accounts.quotaJson,
+          healthJson: accounts.healthJson,
         })
         .from(accounts)
         .all();
@@ -150,6 +180,7 @@ export class CloudAccountRepo {
         let changed = false;
         let newToken = row.tokenJson;
         let newQuota = row.quotaJson;
+        let newHealth = row.healthJson;
 
         // Check if plain text (starts with {)
         if (newToken && newToken.startsWith('{')) {
@@ -160,11 +191,15 @@ export class CloudAccountRepo {
           newQuota = await encrypt(newQuota);
           changed = true;
         }
+        if (newHealth && newHealth.startsWith('{')) {
+          newHealth = await encrypt(newHealth);
+          changed = true;
+        }
 
         if (changed) {
           orm
             .update(accounts)
-            .set({ tokenJson: newToken, quotaJson: newQuota })
+            .set({ tokenJson: newToken, quotaJson: newQuota, healthJson: newHealth })
             .where(eq(accounts.id, row.id))
             .run();
           logger.info(`Migrated account ${row.id} to encrypted storage`);
@@ -186,6 +221,7 @@ export class CloudAccountRepo {
     try {
       const tokenEncrypted = await encrypt(JSON.stringify(account.token));
       const quotaEncrypted = account.quota ? await encrypt(JSON.stringify(account.quota)) : null;
+      const healthEncrypted = account.health ? await encrypt(JSON.stringify(account.health)) : null;
       const values = {
         id: account.id,
         provider: account.provider,
@@ -194,6 +230,7 @@ export class CloudAccountRepo {
         avatarUrl: account.avatar_url ?? null,
         tokenJson: tokenEncrypted,
         quotaJson: quotaEncrypted,
+        healthJson: healthEncrypted,
         deviceProfileJson: serializeDeviceProfile(account.device_profile),
         deviceHistoryJson: serializeDeviceHistory(account.device_history),
         createdAt: account.created_at,
@@ -298,6 +335,26 @@ export class CloudAccountRepo {
             quotaResult = { value: null, migrated: false }; // Quota is optional, proceed
           }
 
+          let healthResult: DecryptFieldResult;
+          try {
+            healthResult = await decryptAndMigrateField(
+              orm,
+              normalizedRow.id,
+              'healthJson',
+              normalizedRow.healthJson,
+            );
+          } catch (error) {
+            if (getAppErrorData(error)?.appErrorCode === 'MASTER_KEY_UNAVAILABLE') {
+              throw error;
+            }
+            migrationStats.failedFields += 1;
+            logger.error(
+              `Failed to decrypt health for account ${normalizedRow.id}; excluding account`,
+              error,
+            );
+            continue;
+          }
+
           if (!tokenResult.value) {
             logger.warn(`Missing token data for account ${normalizedRow.id}`);
             continue;
@@ -328,6 +385,18 @@ export class CloudAccountRepo {
               migrationStats.migratedBySource[quotaResult.usedFallback] += 1;
             }
           }
+          if (healthResult.value) {
+            migrationStats.totalFields += 1;
+          }
+          if (healthResult.usedFallback) {
+            migrationStats.fallbackUsedFields += 1;
+          }
+          if (healthResult.migrated) {
+            migrationStats.migratedFields += 1;
+            if (healthResult.usedFallback) {
+              migrationStats.migratedBySource[healthResult.usedFallback] += 1;
+            }
+          }
 
           cloudAccounts.push({
             id: normalizedRow.id,
@@ -337,6 +406,7 @@ export class CloudAccountRepo {
             avatar_url: normalizedRow.avatarUrl ?? undefined,
             token: parseCloudToken(normalizedRow.id, tokenResult.value),
             quota: parseCloudQuota(normalizedRow.id, quotaResult.value),
+            health: parseCloudHealth(normalizedRow.id, healthResult.value),
             device_profile: parseDeviceProfileColumn(normalizedRow.deviceProfileJson),
             device_history: parseDeviceHistoryColumn(normalizedRow.deviceHistoryJson),
             created_at: normalizedRow.createdAt,
@@ -433,6 +503,13 @@ export class CloudAccountRepo {
         quotaResult = { value: null, migrated: false };
       }
 
+      const healthResult = await decryptAndMigrateField(
+        orm,
+        normalizedRow.id,
+        'healthJson',
+        normalizedRow.healthJson,
+      );
+
       const tokenValue = tokenResult.value;
       if (!tokenValue) {
         return undefined;
@@ -449,6 +526,7 @@ export class CloudAccountRepo {
         avatar_url: normalizedRow.avatarUrl ?? undefined,
         token: parsedToken,
         quota: parsedQuota,
+        health: parseCloudHealth(normalizedRow.id, healthResult.value),
         device_profile: parseDeviceProfileColumn(normalizedRow.deviceProfileJson),
         device_history: parseDeviceHistoryColumn(normalizedRow.deviceHistoryJson),
         created_at: normalizedRow.createdAt,
@@ -474,7 +552,7 @@ export class CloudAccountRepo {
     }
   }
 
-  static async updateToken(id: string, token: any): Promise<void> {
+  static async updateToken(id: string, token: CloudTokenData): Promise<void> {
     // Validate token data before encryption
     CloudTokenDataSchema.parse(token);
 
@@ -495,7 +573,7 @@ export class CloudAccountRepo {
     }
   }
 
-  static async updateQuota(id: string, quota: any): Promise<void> {
+  static async updateQuota(id: string, quota: CloudQuotaData): Promise<void> {
     // Validate quota data before encryption
     CloudQuotaDataSchema.parse(quota);
 
@@ -510,6 +588,20 @@ export class CloudAccountRepo {
         .run();
       if (result.changes === 0) {
         logger.warn(`updateQuota: No account found with ID ${id}`);
+      }
+    } finally {
+      raw.close();
+    }
+  }
+
+  static async updateHealth(id: string, health: CloudAccount['health']): Promise<void> {
+    const parsedHealth = health === undefined ? undefined : CloudAccountHealthSchema.parse(health);
+    const { raw, orm } = getCloudDb();
+    try {
+      const healthJson = parsedHealth ? await encrypt(JSON.stringify(parsedHealth)) : null;
+      const result = orm.update(accounts).set({ healthJson }).where(eq(accounts.id, id)).run();
+      if (result.changes === 0) {
+        throw new Error(`updateHealth: No account found with ID ${id}`);
       }
     } finally {
       raw.close();

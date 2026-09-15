@@ -24,16 +24,31 @@ import {
   splitNamespaceToolName,
 } from '@/modules/proxy-gateway/antigravity/ToolNamespace';
 import { ClaudeRequest, ClaudeResponse } from '@/modules/proxy-gateway/antigravity/types';
+import { resolveOpenAIImageUrl } from '../openai-image-url';
+import { parseOpenAIInputAudio } from './openai-input-audio';
+import { resolveOpenAIVideoUrl } from './openai-video-url';
 import {
   AnthropicChatRequest,
   AnthropicContent,
   OpenAIChatRequest,
   OpenAIChatResponse,
+  OpenAIContentPart,
 } from '@/modules/proxy-gateway/server/common/interfaces/request-interfaces';
+
+export interface OpenAIConversionOptions {
+  allowLocalVideoPaths?: boolean;
+}
+
+interface OpenAIPartsConversionOptions extends OpenAIConversionOptions {
+  remoteImageFallback?: (url: string) => string;
+  unreadableAudioFallback?: () => string;
+  unreadableVideoFallback?: () => string;
+}
 
 export function convertOpenAIToClaude(
   request: OpenAIChatRequest,
   signatureSessionKey?: string,
+  options: OpenAIConversionOptions = {},
 ): ClaudeRequest {
   const messages = request.messages || [];
   const systemPromptParts: string[] = [];
@@ -58,14 +73,41 @@ export function convertOpenAIToClaude(
     }
 
     if (msg.role === 'tool') {
-      const toolResultText = extractOpenAITextContent(msg.content) || '';
+      const toolContent = convertOpenAIPartsToAnthropicContent(msg.content, {
+        allowLocalVideoPaths: options.allowLocalVideoPaths,
+        remoteImageFallback: () => '[image link]',
+        unreadableAudioFallback: () => '[audio]',
+        unreadableVideoFallback: () => '[video]',
+      });
+      const toolResultText = toolContent
+        .filter(
+          (block): block is Extract<AnthropicContent, { type: 'text' }> => block.type === 'text',
+        )
+        .map((block) => block.text)
+        .join('\n');
+      const toolMedia = toolContent.filter(
+        (block) =>
+          block.type === 'image' ||
+          block.type === 'audio' ||
+          block.type === 'video' ||
+          block.type === 'document',
+      );
+      const toolResultContent: string | AnthropicContent[] =
+        toolMedia.length === 0
+          ? toolResultText
+          : [
+              ...(toolResultText === ''
+                ? []
+                : ([{ type: 'text', text: toolResultText }] satisfies AnthropicContent[])),
+              ...toolMedia,
+            ];
       anthropicMessages.push({
         role: 'user',
         content: [
           {
             type: 'tool_result',
             tool_use_id: msg.tool_call_id || msg.name || `tool-result-${uuidv4()}`,
-            content: toolResultText,
+            content: toolResultContent,
             is_error: false,
           },
         ],
@@ -73,7 +115,9 @@ export function convertOpenAIToClaude(
       continue;
     }
 
-    const contentBlocks = convertOpenAIPartsToAnthropicContent(msg.content);
+    const contentBlocks = convertOpenAIPartsToAnthropicContent(msg.content, {
+      allowLocalVideoPaths: options.allowLocalVideoPaths,
+    });
 
     if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
       for (const toolCall of msg.tool_calls) {
@@ -96,10 +140,20 @@ export function convertOpenAIToClaude(
       }
     }
 
+    if (contentBlocks.length === 0) {
+      continue;
+    }
+
     anthropicMessages.push({
       role: msg.role === 'assistant' ? 'assistant' : 'user',
-      content: contentBlocks.length > 0 ? contentBlocks : '',
+      content: contentBlocks,
     });
+  }
+
+  if (anthropicMessages.length === 0) {
+    anthropicMessages.push({ role: 'user', content: 'Continue' });
+  } else if (anthropicMessages[0]?.role === 'assistant') {
+    anthropicMessages.unshift({ role: 'user', content: 'Continue the task.' });
   }
 
   const systemPrompt = systemPromptParts.length > 0 ? systemPromptParts.join('\n') : undefined;
@@ -135,6 +189,7 @@ export function convertOpenAIToClaude(
 
 export function convertOpenAIPartsToAnthropicContent(
   content: OpenAIChatRequest['messages'][number]['content'],
+  options: OpenAIPartsConversionOptions = {},
 ): AnthropicContent[] {
   if (isString(content)) {
     return content.trim() ? [{ type: 'text', text: content }] : [];
@@ -150,24 +205,126 @@ export function convertOpenAIPartsToAnthropicContent(
       continue;
     }
 
-    if (part.type === 'image_url' && part.image_url?.url) {
-      const url = part.image_url.url;
-      const dataUri = url.match(/^data:(?<mime>[^;]+);base64,(?<data>.+)$/);
-      if (dataUri?.groups?.mime && dataUri.groups.data) {
+    const imageUrl = part.type === 'image_url' ? resolveOpenAIImageUrl(part.image_url) : null;
+    if (imageUrl) {
+      const url = imageUrl;
+      const dataUri = parseBase64DataUrl(url, 'image/');
+      if (dataUri) {
         blocks.push({
           type: 'image',
           source: {
             type: 'base64',
-            media_type: dataUri.groups.mime,
-            data: dataUri.groups.data,
+            media_type: dataUri.mimeType,
+            data: dataUri.data,
           },
         });
       } else {
-        blocks.push({ type: 'text', text: `[image_url] ${url}` });
+        blocks.push({
+          type: 'text',
+          text: (options.remoteImageFallback ?? ((fallbackUrl) => `[image_url] ${fallbackUrl}`))(
+            url,
+          ),
+        });
+      }
+      continue;
+    }
+
+    if (part.type === 'audio_url') {
+      const audio = resolveOpenAIAudioUrl(part.audio_url);
+      if (audio) {
+        blocks.push({ type: 'audio', source: audio });
+      } else {
+        const fallback = options.unreadableAudioFallback?.() ?? '';
+        if (fallback) {
+          blocks.push({ type: 'text', text: fallback });
+        }
+      }
+      continue;
+    }
+
+    if (part.type === 'input_audio' || part.type === 'audio') {
+      const audio = parseOpenAIInputAudio(part);
+      blocks.push({
+        type: 'audio',
+        source: { type: 'base64', media_type: audio.mimeType, data: audio.data },
+      });
+      continue;
+    }
+
+    if (part.type === 'video_url') {
+      const video = resolveOpenAIVideoUrl(part.video_url, {
+        allowLocalPaths: options.allowLocalVideoPaths,
+      });
+      if (video) {
+        blocks.push({ type: 'video', source: video });
+      } else {
+        const fallback = options.unreadableVideoFallback?.() ?? '';
+        if (fallback) {
+          blocks.push({ type: 'text', text: fallback });
+        }
       }
     }
   }
   return blocks;
+}
+
+function parseBase64DataUrl(
+  value: string,
+  mimePrefix: string,
+): { data: string; mimeType: string } | null {
+  if (!value.startsWith('data:')) {
+    return null;
+  }
+  const separator = value.indexOf(',');
+  if (separator < 0) {
+    return null;
+  }
+  const metadataParts = value.slice('data:'.length, separator).split(';');
+  const mimeType = metadataParts[0] ?? '';
+  if (
+    !mimeType.toLowerCase().startsWith(mimePrefix) ||
+    !metadataParts.slice(1).some((part) => part.toLowerCase() === 'base64')
+  ) {
+    return null;
+  }
+  const data = value.slice(separator + 1);
+  return data === '' ? null : { data, mimeType };
+}
+
+function resolveOpenAIAudioUrl(
+  value: OpenAIContentPart['audio_url'],
+): Extract<AnthropicContent, { type: 'audio' }>['source'] | null {
+  if (!value || !isString(value.url) || value.url.trim() === '') {
+    return null;
+  }
+  const url = value.url.trim();
+  const inline = parseBase64DataUrl(url, 'audio/');
+  if (inline) {
+    return { type: 'base64', media_type: inline.mimeType, data: inline.data };
+  }
+  if (!/^https?:\/\//iu.test(url)) {
+    return null;
+  }
+  const extension = url.split(/[?#]/u, 1)[0]?.split('.').pop()?.toLowerCase();
+  const inferredMime =
+    extension === 'wav'
+      ? 'audio/wav'
+      : extension === 'ogg'
+        ? 'audio/ogg'
+        : extension === 'flac'
+          ? 'audio/flac'
+          : extension === 'm4a' || extension === 'mp4'
+            ? 'audio/mp4'
+            : extension === 'aac'
+              ? 'audio/aac'
+              : 'audio/mpeg';
+  const declared = (value.mime_type ?? value.mimeType ?? value.format)?.trim();
+  const mediaType = declared
+    ? declared.includes('/')
+      ? declared.toLowerCase()
+      : `audio/${declared.toLowerCase()}`
+    : inferredMime;
+  return { type: 'url', media_type: mediaType, url };
 }
 
 export function extractOpenAITextContent(

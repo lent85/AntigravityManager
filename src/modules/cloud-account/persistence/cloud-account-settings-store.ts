@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import { z } from 'zod';
 import {
   type AntigravityAppTarget,
   resolveAntigravityAppTarget,
@@ -8,6 +9,8 @@ import { settings } from '@/shared/persistence/database/schema';
 import { getCloudDb } from './cloud-account-db';
 
 const ACTIVE_ACCOUNT_SETTING_PREFIX = 'active_cloud_account';
+const StringSettingSchema = z.string();
+const BooleanSettingSchema = z.boolean();
 
 export class CloudAccountSettingsStore {
   /** Missing settings use the default; corrupt or unavailable storage must remain an error. */
@@ -19,25 +22,34 @@ export class CloudAccountSettingsStore {
         .from(settings)
         .where(eq(settings.key, key))
         .get();
-      return row ? JSON.parse(row.value) : undefined;
+      if (!row) {
+        return undefined;
+      }
+      const rawSetting: unknown = JSON.parse(row.value);
+      return rawSetting;
     } finally {
       raw.close();
     }
   }
 
-  static getSetting<T>(key: string, defaultValue: T): T {
+  static getSetting<T>(key: string, defaultValue: T, schema: z.ZodType<T>): T {
     const { raw, orm } = getCloudDb();
     try {
-      const rows = orm
+      const row = orm
         .select({ value: settings.value })
         .from(settings)
         .where(eq(settings.key, key))
-        .all();
-      const row = rows[0];
+        .get();
       if (!row) {
         return defaultValue;
       }
-      return JSON.parse(row.value) as T;
+      const rawSetting: unknown = JSON.parse(row.value);
+      const parsed = schema.safeParse(rawSetting);
+      if (!parsed.success) {
+        logger.warn(`Ignored invalid setting ${key}; using default value`, parsed.error);
+        return defaultValue;
+      }
+      return parsed.data;
     } catch (error) {
       logger.error(`Failed to get setting ${key}`, error);
       return defaultValue;
@@ -71,7 +83,7 @@ export class CloudAccountSettingsStore {
   static getActiveAccountIdForTarget(target: AntigravityAppTarget | undefined): string {
     const normalizedTarget = resolveAntigravityAppTarget(target);
     const key = `${ACTIVE_ACCOUNT_SETTING_PREFIX}.${normalizedTarget}`;
-    const value = this.getSetting<unknown>(key, '');
+    const value = this.getSetting(key, '', StringSettingSchema);
 
     if (typeof value !== 'string') {
       logger.warn(`Ignored invalid active account setting ${key}: expected a string`);
@@ -83,7 +95,7 @@ export class CloudAccountSettingsStore {
 
   static getAutoSwitchEnabledForTarget(target?: AntigravityAppTarget | null): boolean {
     if (!target) {
-      return this.getSetting<boolean>('auto_switch_enabled', false);
+      return this.getSetting<boolean>('auto_switch_enabled', false, BooleanSettingSchema);
     }
     const normalizedTarget = resolveAntigravityAppTarget(target);
     const targetKey = `auto_switch_enabled.${normalizedTarget}`;
@@ -91,7 +103,7 @@ export class CloudAccountSettingsStore {
     if (typeof targetSetting === 'boolean') {
       return targetSetting;
     }
-    return this.getSetting<boolean>('auto_switch_enabled', false);
+    return this.getSetting<boolean>('auto_switch_enabled', false, BooleanSettingSchema);
   }
 
   static setAutoSwitchEnabledForTarget(
@@ -110,7 +122,7 @@ export class CloudAccountSettingsStore {
   }
 
   static isNoRestartEnabled(): boolean {
-    return this.getSetting<boolean>('auto_switch_no_restart', false);
+    return this.getSetting<boolean>('auto_switch_no_restart', false, BooleanSettingSchema);
   }
 
   static setNoRestartEnabled(enabled: boolean): void {

@@ -10,6 +10,14 @@ import {
 import { decodeSignature } from './signature-utils';
 import { toAnthropicMessageId } from './anthropic-message-id';
 import { SignatureStore } from './SignatureStore';
+import type { ThoughtSignatureModelContext } from './thought-signature-model';
+import { logger } from '@/shared/logging/logger';
+
+export interface ClaudeResponseMapperOptions extends Partial<ThoughtSignatureModelContext> {
+  registeredToolNames?: readonly string[];
+  signatureSessionKey?: string;
+  signatureMessageCount?: number;
+}
 
 /**
  * Non-streaming response processor (Gemini -> Claude)
@@ -23,10 +31,7 @@ class NonStreamingProcessor {
   private trailingSignature: string | null = null;
   private hasToolCall: boolean = false;
 
-  constructor(
-    private readonly signatureSessionKey?: string,
-    private readonly signatureMessageCount?: number,
-  ) {}
+  constructor(private readonly options: ClaudeResponseMapperOptions = {}) {}
 
   public process(geminiResponse: GeminiResponse): ClaudeResponse {
     const candidate = geminiResponse.candidates?.[0];
@@ -84,12 +89,7 @@ class NonStreamingProcessor {
       const toolId = fc.id || `${fc.name}-${uuidv4()}`;
 
       if (signature) {
-        SignatureStore.store(
-          signature,
-          this.signatureSessionKey,
-          this.signatureMessageCount,
-          toolId,
-        );
+        this.storeSignature(signature, toolId);
       }
 
       const toolUse: ContentBlock = {
@@ -105,7 +105,7 @@ class NonStreamingProcessor {
     }
 
     if (signature) {
-      SignatureStore.store(signature, this.signatureSessionKey, this.signatureMessageCount);
+      this.storeSignature(signature);
     }
 
     // 2. Handle Text / Thinking
@@ -179,6 +179,21 @@ class NonStreamingProcessor {
     }
   }
 
+  private storeSignature(signature: string, toolCallId?: string): void {
+    if (!this.options.model) {
+      return;
+    }
+    SignatureStore.store({
+      signature,
+      model: this.options.model,
+      family: this.options.family,
+      familyModel: this.options.familyModel,
+      sessionKey: this.options.signatureSessionKey,
+      messageCount: this.options.signatureMessageCount,
+      toolCallId,
+    });
+  }
+
   private processGrounding(grounding: GroundingMetadata) {
     let groundingText = '';
 
@@ -210,12 +225,77 @@ class NonStreamingProcessor {
   }
 
   private flushText() {
-    if (!this.textBuilder) return;
+    if (!this.textBuilder) {
+      return;
+    }
+
+    const text = this.textBuilder;
+    this.textBuilder = '';
+    const recoveredToolCall = this.recoverLeakedToolCall(text);
+    if (recoveredToolCall) {
+      this.contentBlocks.push(recoveredToolCall);
+      this.hasToolCall = true;
+      return;
+    }
+
     this.contentBlocks.push({
       type: 'text',
-      text: this.textBuilder,
+      text,
     });
-    this.textBuilder = '';
+  }
+
+  private recoverLeakedToolCall(text: string): ContentBlock | null {
+    const registeredToolNames = this.options.registeredToolNames;
+    if (!registeredToolNames || registeredToolNames.length === 0) {
+      return null;
+    }
+
+    const prefix = 'call:default_api:';
+    const trimmed = text.trim();
+    if (!trimmed.startsWith(prefix)) {
+      return null;
+    }
+
+    const rest = trimmed.slice(prefix.length);
+    const delimiterIndex = rest.search(/[({]/u);
+    const toolNameEnd = delimiterIndex === -1 ? rest.length : delimiterIndex;
+    const toolName = rest.slice(0, toolNameEnd).trim();
+    if (!toolName) {
+      return null;
+    }
+
+    const argumentText = rest.slice(toolNameEnd).trim();
+    if (argumentText && !argumentText.startsWith('{') && !argumentText.startsWith('(')) {
+      return null;
+    }
+
+    const registeredToolName = registeredToolNames.find(
+      (candidate) => candidate.toLowerCase() === toolName.toLowerCase(),
+    );
+    if (!registeredToolName) {
+      return null;
+    }
+
+    let input: Record<string, unknown> = {};
+    if (argumentText) {
+      try {
+        const parsed: unknown = JSON.parse(argumentText);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          return null;
+        }
+        input = parsed as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    }
+
+    logger.warn(`[Claude-Response] Recovered leaked tool call for ${registeredToolName}`);
+    return {
+      type: 'tool_use',
+      id: `${registeredToolName}-${uuidv4()}`,
+      name: registeredToolName,
+      input,
+    };
   }
 
   private flushThinking() {
@@ -269,6 +349,10 @@ class NonStreamingProcessor {
         0,
     };
 
+    if (this.contentBlocks.length === 0) {
+      this.contentBlocks.push({ type: 'text', text: '.' });
+    }
+
     return {
       id: toAnthropicMessageId(geminiResponse.responseId),
       type: 'message',
@@ -287,9 +371,8 @@ class NonStreamingProcessor {
  */
 export function transformResponse(
   geminiResponse: GeminiResponse,
-  signatureSessionKey?: string,
-  signatureMessageCount?: number,
+  options: ClaudeResponseMapperOptions = {},
 ): ClaudeResponse {
-  const processor = new NonStreamingProcessor(signatureSessionKey, signatureMessageCount);
+  const processor = new NonStreamingProcessor(options);
   return processor.process(geminiResponse);
 }

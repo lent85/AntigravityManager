@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { isEmpty, isPlainObject, isString, sortBy } from 'lodash-es';
 import { mapClaudeModelToGemini, normalizeGeminiModelAlias } from './ModelMapping';
 import { getMaxOutputTokens, getThinkingBudget } from './ModelSpecs';
-import { cleanJsonSchema, normalizeObjectJsonSchema } from './JsonSchemaUtils';
+import { normalizeObjectJsonSchema, type JsonSchemaMap } from './JsonSchemaUtils';
 import { SignatureStore } from './SignatureStore';
 import {
   isGeminiFlashModel,
@@ -15,6 +15,11 @@ import { buildOfficialSystemInstruction } from './OfficialSystemInstruction';
 import { parseMarkdownImagesToGeminiParts } from './MarkdownImageParts';
 import { enhanceGeminiSkillsPrompt } from './SkillPromptEnhancer';
 import { toSnakeToolConfig } from './GeminiToolConfigCompat';
+import {
+  IMAGE_GENERATION_SAFETY_SETTINGS,
+  resolveImageGenerationConfig,
+  type ImageGenerationConfigInput,
+} from './ImageGenerationConfig';
 import { logger } from '@/shared/logging/logger';
 import {
   ClaudeRequest,
@@ -52,6 +57,15 @@ interface ResolvedRequestConfig {
   imageConfig: ImageConfig | null;
 }
 
+export type ClaudeRequestMapperMode = 'normal' | 'invalid-thought-signature-recovery';
+
+export interface ClaudeRequestMapperOptions {
+  imageRequest?: ImageGenerationConfigInput;
+  mode?: ClaudeRequestMapperMode;
+  signatureTargetFamily?: string | null;
+  signatureTargetFamilyModel?: string | null;
+}
+
 type RequestType = 'agent' | 'web_search' | 'image_gen';
 
 const AGENT_CREDIT_TYPES = ['GOOGLE_ONE_AI'];
@@ -59,6 +73,8 @@ const TOOL_SCHEMA_CACHE_LIMIT = 100;
 const TOOL_SCHEMA_CACHE_TTL_MS = 30 * 60 * 1000;
 let placeholderSignatureUsageCount = 0;
 
+const CLAUDE_AGENT_SDK_IDENTITY = "You are a Claude agent, built on Anthropic's Claude Agent SDK.";
+const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.";
 /**
  * How often the proxy fell back to the placeholder instead of a real thought
  * signature, counted once per request that used it at least once (not once per
@@ -82,7 +98,7 @@ const SAFETY_SETTINGS: SafetySetting[] = [
 ];
 
 interface ToolSchemaCacheEntry {
-  declarationsJson: string;
+  declarations: FunctionDeclaration[];
   hitCount: number;
   timestamp: number;
 }
@@ -101,6 +117,7 @@ export function transformClaudeRequestIn(
   userAgent?: string,
   resolvedModel?: string,
   source: 'anthropic' | 'openai' = 'anthropic',
+  options: ClaudeRequestMapperOptions = {},
 ): GeminiInternalRequest {
   const { extraSystemMessages, messages } = extractEmbeddedSystemMessages(claudeReq.messages);
   const signatureSessionKey = isString(claudeReq.metadata?.signature_session_key)
@@ -121,16 +138,30 @@ export function transformClaudeRequestIn(
 
   // Map model name
   const mappedModel = resolvedModel
-    ? normalizeGeminiModelAlias(resolvedModel)
+    ? resolvedModel.toLowerCase().includes('-image')
+      ? resolvedModel
+      : normalizeGeminiModelAlias(resolvedModel)
     : mapClaudeModelToGemini(claudeReq.model);
 
   // Convert Claude tools to Tool array for networking detection
   const normalizedTools: Tool[] | undefined = claudeReq.tools
-    ? (JSON.parse(JSON.stringify(claudeReq.tools)) as Tool[])
+    ? structuredClone(claudeReq.tools)
     : undefined;
 
   // Resolve grounding config
-  const requestConfig = resolveRequestConfig(claudeReq.model, mappedModel, normalizedTools);
+  const requestConfig = resolveRequestConfig(
+    claudeReq.model,
+    mappedModel,
+    normalizedTools,
+    options.imageRequest,
+    resolvedModel !== undefined,
+  );
+  const mapperMode = options.mode ?? 'normal';
+  const signatureTarget = {
+    model: requestConfig.finalModel,
+    family: options.signatureTargetFamily,
+    familyModel: options.signatureTargetFamilyModel,
+  };
 
   const allowDummyThought = requestConfig.finalModel.startsWith('gemini-');
 
@@ -149,7 +180,10 @@ export function transformClaudeRequestIn(
   }
 
   if (isThinkingEnabled) {
-    const sessionSignature = SignatureStore.get(signatureSessionKey);
+    const sessionSignature =
+      mapperMode === 'normal'
+        ? SignatureStore.get({ ...signatureTarget, sessionKey: signatureSessionKey })
+        : null;
     const hasFunctionCalls = messages.some((m) => {
       if (Array.isArray(m.content)) {
         return m.content.some((b) => b.type === 'tool_use');
@@ -183,6 +217,9 @@ export function transformClaudeRequestIn(
     allowDummyThought,
     requestConfig.finalModel,
     signatureSessionKey,
+    options.signatureTargetFamily,
+    options.signatureTargetFamilyModel,
+    mapperMode,
   );
 
   // 3. Tools
@@ -226,6 +263,7 @@ export function transformClaudeRequestIn(
     delete innerRequest.tools;
     // 2. Remove systemInstruction (image generation does not support system prompts)
     delete innerRequest.systemInstruction;
+    innerRequest.safetySettings = [...IMAGE_GENERATION_SAFETY_SETTINGS];
 
     // 3. Clean generationConfig
     const imageGenerationConfig = innerRequest.generationConfig || {};
@@ -364,14 +402,19 @@ function resolveRequestConfig(
   originalModel: string,
   mappedModel: string,
   tools?: Tool[],
+  imageRequest?: ImageGenerationConfigInput,
+  preserveMappedImageModel = false,
 ): ResolvedRequestConfig {
   // 1. Image Generation Check
   if (isGeminiImageModel(mappedModel)) {
-    const { imageConfig, parsedBaseModel } = parseImageConfig(originalModel);
+    const { imageConfig } = resolveImageGenerationConfig(originalModel, imageRequest);
+    const { parsedBaseModel } = resolveImageGenerationConfig(mappedModel);
     return {
       requestType: 'image_gen',
       injectGoogleSearch: false,
-      finalModel: parsedBaseModel,
+      finalModel: preserveMappedImageModel
+        ? parsedBaseModel
+        : normalizeGeminiModelAlias(parsedBaseModel),
       imageConfig,
     };
   }
@@ -417,40 +460,6 @@ function supportsWebSearchModel(modelName: string): boolean {
     normalized.includes('claude-opus') ||
     normalized.includes('claude-4')
   );
-}
-
-/**
- * Parses image generation configuration
- * Extracts aspect ratio and resolution settings from model name
- */
-function parseImageConfig(modelName: string): {
-  imageConfig: ImageConfig;
-  parsedBaseModel: string;
-} {
-  const normalizedModel = modelName.toLowerCase();
-  let aspectRatio = '1:1';
-  if (modelName.includes('-16x9')) aspectRatio = '16:9';
-  else if (modelName.includes('-9x16')) aspectRatio = '9:16';
-  else if (modelName.includes('-4x3')) aspectRatio = '4:3';
-  else if (modelName.includes('-3x4')) aspectRatio = '3:4';
-  else if (modelName.includes('-1x1')) aspectRatio = '1:1';
-
-  const isHd = modelName.includes('-4k') || modelName.includes('-hd');
-
-  const config: ImageConfig = { aspectRatio };
-  if (isHd) {
-    config.imageSize = '4K';
-  }
-
-  const parsedBaseModel =
-    normalizedModel.startsWith('gemini-3.1-flash-image') ||
-    normalizedModel.startsWith('gemini-3-flash-image')
-      ? 'gemini-3.1-flash-image'
-      : normalizedModel.startsWith('gemini-3.1-pro-image')
-        ? 'gemini-3.1-pro-image'
-        : 'gemini-3-pro-image';
-
-  return { imageConfig: config, parsedBaseModel };
 }
 
 function isGeminiImageModel(modelName: string): boolean {
@@ -521,7 +530,7 @@ function resolveAdaptiveThinkingLevel(claudeReq: ClaudeRequest): 'low' | 'medium
   return 'high';
 }
 
-function toToolSchema(schema: unknown): Record<string, unknown> {
+function toToolSchema(schema: unknown): JsonSchemaMap {
   return normalizeObjectJsonSchema(schema);
 }
 
@@ -602,6 +611,11 @@ function injectGoogleSearchTool(body: { tools?: GeminiToolDeclaration[] }, mappe
  * Builds system instruction
  * Converts Claude system prompts to Gemini format with a default assistant identity directive.
  */
+
+function normalizeClaudeClientIdentity(text: string): string {
+  return text === CLAUDE_AGENT_SDK_IDENTITY ? CLAUDE_CODE_IDENTITY : text;
+}
+
 function buildSystemInstruction(
   system: ClaudeRequest['system'],
   extraSystemMessages: string[],
@@ -616,11 +630,13 @@ function buildSystemInstruction(
 
   if (system) {
     if (isString(system)) {
-      instructions.push(sanitizeSystemInstructionForCache(system));
+      instructions.push(sanitizeSystemInstructionForCache(normalizeClaudeClientIdentity(system)));
     } else if (Array.isArray(system)) {
       for (const block of system) {
         if (block.type === 'text') {
-          instructions.push(sanitizeSystemInstructionForCache(block.text));
+          instructions.push(
+            sanitizeSystemInstructionForCache(normalizeClaudeClientIdentity(block.text)),
+          );
         }
       }
     }
@@ -688,6 +704,9 @@ function buildContents(
   allowDummyThought: boolean,
   mappedModel: string,
   signatureSessionKey?: string,
+  signatureTargetFamily?: string | null,
+  signatureTargetFamilyModel?: string | null,
+  mapperMode: ClaudeRequestMapperMode = 'normal',
 ): GeminiContent[] {
   const contents: GeminiContent[] = [];
   let lastThoughtSignature: string | null = null;
@@ -710,32 +729,58 @@ function buildContents(
         }
       } else if (block.type === 'thinking') {
         const part: GeminiPart = { text: block.thinking, thought: true };
-        cleanJsonSchema(part);
         if (block.signature) {
           lastThoughtSignature = block.signature;
           part.thoughtSignature = block.signature;
           part.thought_signature = block.signature;
         }
         parts.push(part);
-      } else if (block.type === 'image' || block.type === 'document') {
-        // Images and documents differ only in what the client called them; the
-        // provider takes both as one inline part carrying its own MIME type.
-        if (block.source.type === 'base64')
+      } else if (
+        block.type === 'image' ||
+        block.type === 'document' ||
+        block.type === 'audio' ||
+        block.type === 'video'
+      ) {
+        // Media blocks differ only in what the client called them; the provider
+        // takes inline bytes in one part carrying its own MIME type.
+        if (block.source.type === 'base64') {
           parts.push({
             inlineData: { mimeType: block.source.media_type, data: block.source.data },
           });
+        } else if (
+          (block.type === 'audio' || block.type === 'video') &&
+          block.source.type === 'url'
+        ) {
+          parts.push({
+            fileData: { mimeType: block.source.media_type, fileUri: block.source.url },
+          });
+        }
       } else if (block.type === 'tool_use') {
         const part: GeminiPart = {
           functionCall: { name: block.name, args: block.input, id: block.id },
         };
-        cleanJsonSchema(part);
         toolIdToName.set(block.id, block.name);
+        const signatureTarget = {
+          model: mappedModel,
+          family: signatureTargetFamily,
+          familyModel: signatureTargetFamilyModel,
+        };
         const finalSig =
           block.signature ||
-          SignatureStore.getForToolCall(block.id, signatureSessionKey) ||
-          lastThoughtSignature ||
-          SignatureStore.getAt(signatureSessionKey, i) ||
-          SignatureStore.get(signatureSessionKey);
+          (mapperMode === 'normal'
+            ? SignatureStore.getForToolCall({
+                ...signatureTarget,
+                toolCallId: block.id,
+                sessionKey: signatureSessionKey,
+              }) ||
+              lastThoughtSignature ||
+              SignatureStore.getAt({
+                ...signatureTarget,
+                sessionKey: signatureSessionKey,
+                messageCount: i,
+              }) ||
+              SignatureStore.get({ ...signatureTarget, sessionKey: signatureSessionKey })
+            : lastThoughtSignature);
         if (finalSig) {
           part.thoughtSignature = finalSig;
           part.thought_signature = finalSig;
@@ -751,17 +796,47 @@ function buildContents(
       } else if (block.type === 'tool_result') {
         const funcName = toolIdToName.get(block.tool_use_id) || block.tool_use_id;
         let mergedContent = '';
-        if (isString(block.content)) mergedContent = block.content;
-        else if (Array.isArray(block.content))
+        const extraParts: GeminiPart[] = [];
+        if (isString(block.content)) {
+          mergedContent = block.content;
+        } else if (Array.isArray(block.content)) {
           mergedContent = block.content
-            .filter((b: any) => b.type === 'text')
-            .map((b: any) => b.text)
+            .filter((content): content is { type: 'text'; text: string } => content.type === 'text')
+            .map((content) => content.text)
             .join('\n');
-        if (isEmpty(mergedContent.trim()))
+          for (const content of block.content) {
+            if (
+              (content.type === 'image' ||
+                content.type === 'document' ||
+                content.type === 'audio' ||
+                content.type === 'video') &&
+              content.source.type === 'base64'
+            ) {
+              extraParts.push({
+                inlineData: {
+                  mimeType: content.source.media_type,
+                  data: content.source.data,
+                },
+              });
+            } else if (
+              (content.type === 'audio' || content.type === 'video') &&
+              content.source.type === 'url'
+            ) {
+              extraParts.push({
+                fileData: {
+                  mimeType: content.source.media_type,
+                  fileUri: content.source.url,
+                },
+              });
+            }
+          }
+        }
+        if (isEmpty(mergedContent.trim()) && extraParts.length === 0) {
           mergedContent = block.is_error
             ? 'Tool execution failed with no output.'
             : 'Command executed successfully.';
-        const part: any = {
+        }
+        const part: GeminiPart = {
           functionResponse: {
             name: funcName,
             response: { result: mergedContent },
@@ -773,6 +848,7 @@ function buildContents(
           part.thought_signature = lastThoughtSignature;
         }
         parts.push(part);
+        parts.push(...extraParts);
       } else if (block.type === 'redacted_thinking') {
         parts.push({ text: `[Redacted Thinking: ${block.data}]`, thought: true });
       }
@@ -781,7 +857,13 @@ function buildContents(
       const hasThought = parts.some((p) => p.thought === true);
       if (!hasThought) parts.unshift({ text: 'Thinking...', thought: true });
     }
-    if (parts.length > 0) contents.push({ role, parts });
+    if (parts.length > 0) {
+      contents.push({ role, parts });
+    } else if (role === 'user') {
+      // Gemini requires user/model role rotation. Preserve an otherwise empty
+      // user turn after unsupported or blocked content is removed.
+      contents.push({ role, parts: [{ text: ' ' }] });
+    }
   }
 
   if (placeholderUsage) {
@@ -886,16 +968,11 @@ function lookupToolSchemaCache(key: string): FunctionDeclaration[] | null {
   }
 
   try {
-    const declarations = JSON.parse(entry.declarationsJson) as FunctionDeclaration[];
-    if (!Array.isArray(declarations)) {
-      toolSchemaCache.delete(key);
-      return null;
-    }
     entry.hitCount += 1;
     logger.debug(
-      `[ToolSchemaCache] HIT hash=${key.slice(0, 16)} hitCount=${entry.hitCount} declarations=${declarations.length}`,
+      `[ToolSchemaCache] HIT hash=${key.slice(0, 16)} hitCount=${entry.hitCount} declarations=${entry.declarations.length}`,
     );
-    return declarations;
+    return structuredClone(entry.declarations);
   } catch {
     toolSchemaCache.delete(key);
     return null;
@@ -905,7 +982,7 @@ function lookupToolSchemaCache(key: string): FunctionDeclaration[] | null {
 function cacheToolSchemas(key: string, declarations: FunctionDeclaration[]): void {
   try {
     toolSchemaCache.set(key, {
-      declarationsJson: JSON.stringify(declarations),
+      declarations: structuredClone(declarations),
       hitCount: 0,
       timestamp: Date.now(),
     });
@@ -974,8 +1051,12 @@ function buildGenerationConfig(
 
   // JSON mode is a request-shaping flag, not an OpenAI-only nicety: whoever asks for it parses
   // the answer, so the model has to be told before it answers rather than corrected afterwards.
-  if (String(claudeReq.response_format?.type ?? '').toLowerCase() === 'json_object') {
+  const responseFormatType = String(claudeReq.response_format?.type ?? '').toLowerCase();
+  if (responseFormatType === 'json_object') {
     config.responseMimeType = 'application/json';
+  } else if (responseFormatType === 'json_schema' && claudeReq.response_format?.json_schema) {
+    config.responseMimeType = 'application/json';
+    config.responseSchema = normalizeObjectJsonSchema(claudeReq.response_format.json_schema.schema);
   }
 
   if (isOpenAIPath) {

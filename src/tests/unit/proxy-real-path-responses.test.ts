@@ -212,4 +212,226 @@ describe('real request path, Responses input compatibility', () => {
     ]);
     expect(input).toEqual(before);
   });
+
+  it.each([false, true])(
+    'preserves tool-result text and image through the real Responses path with stream=%s',
+    async (stream) => {
+      const upstream = createUpstream({
+        generate: geminiTextResponse('ok'),
+        streamFrames: [geminiStreamFrame(geminiTextResponse('ok'))],
+      });
+      const lease = createLease([createAccount('acc-1')]);
+      const controller = new OpenAIOperations(createGateway(upstream, lease).openAIService);
+      const reply = createReply();
+
+      await controller.responses(
+        {
+          model: 'gemini-3-flash',
+          stream,
+          store: false,
+          input: [
+            { role: 'user', content: 'Generate an image.' },
+            {
+              type: 'function_call',
+              call_id: 'call_image',
+              name: 'view_image',
+              arguments: '{}',
+            },
+            {
+              type: 'function_call_output',
+              call_id: 'call_image',
+              output: [
+                { type: 'input_text', text: 'image generated' },
+                {
+                  type: 'input_image',
+                  image_url: 'data:image/webp;name=source;BASE64,AQ==',
+                },
+              ],
+            },
+          ],
+        },
+        reply as never,
+      );
+      if (stream) {
+        if (!(reply.body instanceof Observable)) {
+          throw new Error('Expected a Responses stream');
+        }
+        await collect(reply.body);
+      }
+
+      const toolParts = upstream.calls[0]?.body.request.contents[2]?.parts;
+      expect(toolParts).toEqual([
+        expect.objectContaining({
+          functionResponse: {
+            name: 'view_image',
+            response: { result: 'image generated' },
+            id: 'call_image',
+          },
+        }),
+        { inlineData: { mimeType: 'image/webp', data: 'AQ==' } },
+      ]);
+      expect(JSON.stringify(toolParts?.[0])).not.toContain('data:image/');
+    },
+  );
+
+  it('maps Responses message audio_url to provider-readable media', async () => {
+    const upstream = createUpstream({ generate: geminiTextResponse('ok') });
+    const lease = createLease([createAccount('acc-1')]);
+    const controller = new OpenAIOperations(createGateway(upstream, lease).openAIService);
+    const reply = createReply();
+
+    await controller.responses(
+      {
+        model: 'gemini-3-flash',
+        stream: false,
+        store: false,
+        input: [
+          {
+            type: 'message',
+            role: 'user',
+            content: [
+              {
+                type: 'audio_url',
+                audio_url: { url: 'https://example.com/sample.wav', mimeType: 'audio/wav' },
+              },
+            ],
+          },
+        ],
+      },
+      reply as never,
+    );
+
+    expect(reply.statusCode).toBe(200);
+    expect(upstream.calls[0]?.body.request.contents).toEqual([
+      {
+        role: 'user',
+        parts: [
+          {
+            fileData: { fileUri: 'https://example.com/sample.wav', mimeType: 'audio/wav' },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('uses the Responses tool audio_url fallback for an unreadable source', async () => {
+    const upstream = createUpstream({ generate: geminiTextResponse('ok') });
+    const lease = createLease([createAccount('acc-1')]);
+    const controller = new OpenAIOperations(createGateway(upstream, lease).openAIService);
+    const reply = createReply();
+
+    await controller.responses(
+      {
+        model: 'gemini-3-flash',
+        stream: false,
+        store: false,
+        input: [
+          { role: 'user', content: 'Inspect the audio.' },
+          {
+            type: 'function_call',
+            call_id: 'call_audio',
+            name: 'inspect_audio',
+            arguments: '{}',
+          },
+          {
+            type: 'function_call_output',
+            call_id: 'call_audio',
+            output: [{ type: 'audio_url', audio_url: { url: 'unresolvable-audio' } }],
+          },
+        ],
+      },
+      reply as never,
+    );
+
+    expect(upstream.calls[0]?.body.request.contents[2]?.parts).toEqual([
+      expect.objectContaining({
+        functionResponse: {
+          name: 'inspect_audio',
+          response: { result: '[audio]' },
+          id: 'call_audio',
+        },
+      }),
+    ]);
+  });
+
+  it.each([false, true])(
+    'restores a stored parent for store:false without retaining the transient response, stream=%s',
+    async (stream) => {
+      let generateCount = 0;
+      const upstream = createUpstream({
+        generate: () => geminiTextResponse(generateCount++ === 0 ? 'root answer' : 'next answer'),
+        streamFrames: [geminiStreamFrame(geminiTextResponse('next answer'))],
+      });
+      const lease = createLease([createAccount('acc-1')]);
+      const controller = new OpenAIOperations(createGateway(upstream, lease).openAIService);
+      const rootReply = createReply();
+
+      await controller.responses(
+        {
+          model: 'gemini-3-flash',
+          input: 'root request',
+          instructions: 'Stay concise.',
+          tools: [
+            {
+              type: 'function',
+              function: { name: 'lookup', parameters: { type: 'object' } },
+            },
+          ],
+        },
+        rootReply as never,
+      );
+      const rootResponseId = z.object({ id: z.string().min(1) }).parse(rootReply.body).id;
+      const replayWithoutIds = (
+        OpenAIResponsesSessionStore.get(rootResponseId)?.inputItems ?? []
+      ).map((item) => {
+        const copy = structuredClone(item);
+        if (typeof copy === 'object' && copy !== null && !Array.isArray(copy)) {
+          Reflect.deleteProperty(copy, 'id');
+        }
+        return copy;
+      });
+      const transientReply = createReply();
+      await controller.responses(
+        {
+          input: [...replayWithoutIds, { type: 'message', role: 'user', content: 'next request' }],
+          previous_response_id: rootResponseId,
+          store: false,
+          stream,
+        },
+        transientReply as never,
+      );
+
+      let transientResponseId: string;
+      if (stream) {
+        if (!(transientReply.body instanceof Observable)) {
+          throw new Error('Expected a Responses stream');
+        }
+        const events = (await collect(transientReply.body))
+          .split('\n')
+          .filter((line) => line.startsWith('data: {'))
+          .map((line) => JSON.parse(line.slice(6)) as Record<string, unknown>);
+        const completed = events.find((event) => event.type === 'response.completed');
+        transientResponseId = z
+          .object({ response: z.object({ id: z.string().min(1) }) })
+          .parse(completed).response.id;
+      } else {
+        transientResponseId = z.object({ id: z.string().min(1) }).parse(transientReply.body).id;
+      }
+
+      expect(upstream.calls[1]?.body.request.contents).toEqual([
+        { role: 'user', parts: [{ text: 'root request' }] },
+        { role: 'model', parts: [{ text: 'root answer' }] },
+        { role: 'user', parts: [{ text: 'next request' }] },
+      ]);
+      expect(upstream.calls[1]?.body.request.systemInstruction).toMatchObject({
+        parts: [{ text: expect.stringContaining('Stay concise.') }],
+      });
+      expect(JSON.stringify(upstream.calls[1]?.body.request.tools)).toContain('lookup');
+      expect(OpenAIResponsesSessionStore.get(transientResponseId)).toBeNull();
+      expect(lease.getNextToken).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ sessionKey: `openai:${rootResponseId}` }),
+      );
+    },
+  );
 });

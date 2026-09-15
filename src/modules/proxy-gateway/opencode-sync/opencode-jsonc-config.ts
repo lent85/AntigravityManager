@@ -57,6 +57,14 @@ function isUnknownRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function toJsoncObject(value: object): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    result[key] = child;
+  }
+  return result;
+}
+
 function buildThinkingVariant(
   budget: number,
   includeTopLevelBudget = false,
@@ -75,6 +83,10 @@ function buildThinkingVariant(
     variant.budgetTokens = budget;
   }
   return variant;
+}
+
+function buildGemini3EffortVariant(tier: 'low' | 'medium' | 'high'): Record<string, unknown> {
+  return { effort: tier };
 }
 
 const CLAUDE_VARIANTS = {
@@ -97,8 +109,22 @@ const MODEL_CATALOG: Record<string, OpenCodeModelDefinition> = {
     reasoning: true,
     variants: CLAUDE_VARIANTS,
   },
+  'claude-opus-4-5': {
+    name: 'Claude Opus 4.5',
+    limit: { context: 200000, output: 64000 },
+    modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
+    reasoning: true,
+    variants: CLAUDE_VARIANTS,
+  },
   'claude-opus-4-5-thinking': {
     name: 'Claude Opus 4.5 Thinking',
+    limit: { context: 200000, output: 64000 },
+    modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
+    reasoning: true,
+    variants: CLAUDE_VARIANTS,
+  },
+  'claude-opus-4-6': {
+    name: 'Claude Opus 4.6',
     limit: { context: 200000, output: 64000 },
     modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
     reasoning: true,
@@ -117,8 +143,22 @@ const MODEL_CATALOG: Record<string, OpenCodeModelDefinition> = {
     modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
     reasoning: true,
     variants: {
-      low: buildThinkingVariant(1001, true),
-      high: buildThinkingVariant(10001, true),
+      low: buildGemini3EffortVariant('low'),
+      medium: { disabled: true },
+      high: buildGemini3EffortVariant('high'),
+      max: { disabled: true },
+    },
+  },
+  'gemini-3.7-flash': {
+    name: 'Gemini 3.7 Flash',
+    limit: { context: 1000000, output: 65536 },
+    modalities: { input: ['text', 'image', 'audio', 'video', 'pdf'], output: ['text'] },
+    reasoning: true,
+    variants: {
+      low: buildGemini3EffortVariant('low'),
+      medium: buildGemini3EffortVariant('medium'),
+      high: buildGemini3EffortVariant('high'),
+      max: { disabled: true },
     },
   },
   'gemini-3.5-flash': {
@@ -127,9 +167,10 @@ const MODEL_CATALOG: Record<string, OpenCodeModelDefinition> = {
     modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
     reasoning: true,
     variants: {
-      low: buildThinkingVariant(1000, true),
-      medium: buildThinkingVariant(4000, true),
-      high: buildThinkingVariant(10000, true),
+      low: buildGemini3EffortVariant('low'),
+      medium: buildGemini3EffortVariant('medium'),
+      high: buildGemini3EffortVariant('high'),
+      max: { disabled: true },
     },
   },
   'gemini-3.1-flash-lite': {
@@ -522,7 +563,7 @@ export function updateOpenCodeConfigJsonc(
     updated = mergeJsoncObject(
       updated,
       [...PROVIDER_PATH, 'models', model.id],
-      definition as unknown as Record<string, unknown>,
+      toJsoncObject(definition),
       formattingOptions,
     );
   }

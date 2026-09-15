@@ -44,6 +44,11 @@ import {
 } from '@/modules/cloud-account/actions/cloud';
 import type { EmulationState } from '@/modules/cloud-account/emulation/types';
 
+type SetAccountProxyInput = Parameters<typeof setAccountProxy>[0];
+type SetAccountProxyResult = Awaited<ReturnType<typeof setAccountProxy>>;
+type ImportCloudAccountsInput = Parameters<typeof importCloudAccounts>[0];
+type ImportCloudAccountsResult = Awaited<ReturnType<typeof importCloudAccounts>>;
+
 export const QUERY_KEYS = {
   cloudAccounts: ['cloudAccounts'],
   securityStatus: ['cloudAccountSecurityStatus'],
@@ -271,12 +276,12 @@ export { startAuthFlow };
 
 export function useSetAccountProxy() {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<SetAccountProxyResult, Error, SetAccountProxyInput>({
     mutationFn: setAccountProxy,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cloudAccounts });
     },
-    onError: (error: any) => {
+    onError: (error) => {
       console.error('[Mutation] setAccountProxy failed:', error);
     },
   });
@@ -290,16 +295,12 @@ export function useExportCloudAccounts() {
 
 export function useImportCloudAccounts() {
   const queryClient = useQueryClient();
-  return useMutation<
-    { imported: number; skipped: number; updated: number; errors: string[] },
-    Error,
-    { jsonContent: string; strategy?: 'merge' | 'overwrite' | 'skip-existing' }
-  >({
+  return useMutation<ImportCloudAccountsResult, Error, ImportCloudAccountsInput>({
     mutationFn: importCloudAccounts,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cloudAccounts });
     },
-    onError: (error: any) => {
+    onError: (error) => {
       console.error('[Mutation] importCloudAccounts failed:', error);
     },
   });

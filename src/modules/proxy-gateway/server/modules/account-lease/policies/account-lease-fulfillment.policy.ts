@@ -1,5 +1,6 @@
 import type { CloudAccount } from '@/modules/cloud-account/types';
 import type { AccountLeaseHydrationPolicy } from './account-lease-hydration.policy';
+import { AccountLeaseRefreshRejectedError } from './account-lease-hydration.policy';
 import type { AccountLeaseTokenData } from '../interfaces/account-lease-token-types';
 
 interface AccountLeaseFulfillmentLogger {
@@ -8,7 +9,6 @@ interface AccountLeaseFulfillmentLogger {
 
 interface AccountLeaseFulfillmentPolicyOptions {
   hydrationPolicy: AccountLeaseHydrationPolicy;
-  markRateLimitSuccess: (accountId: string) => void;
   bindSession: (sessionKey: string | undefined, accountId: string, expiresAt: number) => void;
   stickySessionTtlMs: number;
   resolveFallbackProjectId: () => string;
@@ -36,7 +36,6 @@ export class AccountLeaseFulfillmentPolicy {
         fallbackProjectId: this.options.resolveFallbackProjectId(),
       });
 
-      this.options.markRateLimitSuccess(accountId);
       this.options.bindSession(sessionKey, accountId, Date.now() + this.options.stickySessionTtlMs);
 
       const timestamp = Date.now();
@@ -60,6 +59,9 @@ export class AccountLeaseFulfillmentPolicy {
         last_used: timestamp,
       };
     } catch (error) {
+      if (error instanceof AccountLeaseRefreshRejectedError) {
+        throw error;
+      }
       this.options.logger.error('Failed to finalize selected account token', error);
       return null;
     }

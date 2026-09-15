@@ -66,11 +66,15 @@ export class AccountEmulationService {
   private static tickerTimer: ReturnType<typeof setInterval> | null = null;
 
   static getState(): EmulationState {
-    const raw = CloudAccountSettingsStore.getSetting<unknown>(EMULATION_SETTING_KEY, {
-      enabled: false,
-      tickIntervalSeconds: 5,
-      accounts: [],
-    });
+    const raw = CloudAccountSettingsStore.getSetting(
+      EMULATION_SETTING_KEY,
+      {
+        enabled: false,
+        tickIntervalSeconds: 5,
+        accounts: [],
+      },
+      EmulationStateSchema,
+    );
 
     const parsed = EmulationStateSchema.safeParse(raw);
     if (!parsed.success) {

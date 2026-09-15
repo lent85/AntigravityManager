@@ -38,6 +38,7 @@ import {
   Crown,
   Users,
   UserMinus,
+  ExternalLink,
 } from 'lucide-react';
 import {
   useFamilyGroups,
@@ -61,10 +62,10 @@ import { useQuery } from '@tanstack/react-query';
 import { ipc } from '@/ipc/manager';
 import { useSetAccountProxy } from '@/modules/cloud-account/hooks/useCloudAccounts';
 import { isValidProxyUrl } from '@/shared/utils/url';
-import { getValidationBlockedStatusLabel } from '@/modules/cloud-account/utils/accountValidationStatus';
+import { getCloudAccountBlockedStatusLabel } from '@/modules/cloud-account/utils/accountValidationStatus';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
 import { AccountTierBadge } from '@/modules/cloud-account/components/AccountTierBadge';
-import { aggregateVisibleQuotaModelFamilies } from '@/modules/cloud-account/utils/quota-model-families';
+import { getVisibleQuotaModelsForPresentation } from '@/modules/cloud-account/utils/quota-model-families';
 import {
   selectWeeklyQuotaItems,
   type QuotaWindow,
@@ -79,6 +80,7 @@ import {
   maskName,
 } from '@/modules/cloud-account/utils/identity-masking';
 import { QuotaIndicatorTooltip } from '@/modules/cloud-account/components/QuotaIndicatorTooltip';
+import { openAccountValidationLink } from '@/modules/cloud-account/actions/cloud';
 
 type ModelQuotaEntry = [string, CloudQuotaModelInfo];
 type LiveModelAvailability = Awaited<
@@ -166,6 +168,18 @@ function getAvailabilityModelCandidates(modelName: string): Set<string> {
     candidates.add('gemini-3.5-flash-extra-low');
     candidates.add('gemini-3.5-flash-low');
     candidates.add('gemini-3-flash-agent');
+  }
+
+  if (normalized === 'gemini-3.7-flash') {
+    candidates.add('gemini-3.7-flash-low');
+    candidates.add('gemini-3.7-flash-medium');
+    candidates.add('gemini-3.7-flash-high');
+    candidates.add('gemini-3.7-flash-tiered');
+    candidates.add('gemini-3.6-flash');
+    candidates.add('gemini-3.6-flash-low');
+    candidates.add('gemini-3.6-flash-medium');
+    candidates.add('gemini-3.6-flash-high');
+    candidates.add('gemini-3.6-flash-tiered');
   }
 
   if (normalized === 'gemini-3.1-flash-image' || normalized === 'gemini-3-flash-image') {
@@ -289,7 +303,7 @@ export function CloudAccountCard({
 
   const allModelEntries = Object.entries(account.quota?.models || {}) as ModelQuotaEntry[];
 
-  const mergedModelQuotas = aggregateVisibleQuotaModelFamilies(
+  const mergedModelQuotas = getVisibleQuotaModelsForPresentation(
     account.quota?.models || {},
     config?.model_visibility || {},
   );
@@ -534,11 +548,7 @@ export function CloudAccountCard({
   const shouldShowAiCredits =
     !!aiCredits && Number.isFinite(aiCredits.credits) && aiCredits.credits >= 0;
 
-  const validationBlockedStatusLabel = getValidationBlockedStatusLabel(
-    account.status,
-    account.status_reason,
-    t,
-  );
+  const validationBlockedStatusLabel = getCloudAccountBlockedStatusLabel(account, t);
 
   return (
     <Card
@@ -636,6 +646,17 @@ export function CloudAccountCard({
               <span className="text-destructive bg-destructive/10 border-destructive/20 rounded border px-1.5 py-0 text-[10px] font-semibold h-5 flex items-center">
                 {validationBlockedStatusLabel}
               </span>
+            )}
+            {account.health?.validation?.verification_url && (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-6 gap-1 px-2 text-[10px]"
+                onClick={() => openAccountValidationLink({ accountId: account.id })}
+              >
+                <ExternalLink className="h-3 w-3" />
+                {t('cloud.card.completeValidation')}
+              </Button>
             )}
 
             {account.is_active_classic && (
@@ -1259,7 +1280,7 @@ export function CompactCloudAccountCard({
     return QUOTA_BAR_COLOR_CLASS_BY_STATUS[quotaStatus];
   };
 
-  const mergedModelQuotas = aggregateVisibleQuotaModelFamilies(
+  const mergedModelQuotas = getVisibleQuotaModelsForPresentation(
     account.quota?.models || {},
     config?.model_visibility || {},
   );
@@ -1273,11 +1294,7 @@ export function CompactCloudAccountCard({
   const shouldShowAiCredits =
     !!aiCredits && Number.isFinite(aiCredits.credits) && aiCredits.credits >= 0;
 
-  const validationBlockedStatusLabel = getValidationBlockedStatusLabel(
-    account.status,
-    account.status_reason,
-    t,
-  );
+  const validationBlockedStatusLabel = getCloudAccountBlockedStatusLabel(account, t);
   const gemini5hModels = compactModels.filter(([name]) => !name.toLowerCase().includes('claude'));
   const claude5hModels = compactModels.filter(([name]) => name.toLowerCase().includes('claude'));
 
@@ -1400,6 +1417,16 @@ export function CompactCloudAccountCard({
             <span className="text-destructive shrink-0 font-medium text-[10px]">
               {validationBlockedStatusLabel}
             </span>
+          )}
+          {account.health?.validation?.verification_url && (
+            <button
+              type="button"
+              className="text-destructive inline-flex shrink-0 items-center gap-1 text-xs font-semibold"
+              onClick={() => openAccountValidationLink({ accountId: account.id })}
+            >
+              <ExternalLink className="h-3 w-3" />
+              {t('cloud.card.completeValidation')}
+            </button>
           )}
 
           {shouldShowAiCredits && aiCredits && (

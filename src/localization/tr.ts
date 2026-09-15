@@ -522,6 +522,7 @@ const tr = {
       validationRiskControlled: 'Risk / Hız Sınırı',
       validationOAuthReauthRequired: 'OAuth Yeniden Yetkilendirme Gerekiyor',
       validationRequired: 'Doğrulama Gerekiyor',
+      completeValidation: 'Doğrulamayı tamamla',
       left: 'kaldı',
       used: 'Kullanılan',
       unknown: 'Bilinmeyen Kullanıcı',
@@ -710,6 +711,9 @@ const tr = {
       api_key: 'API Anahtarı',
       auto_start: 'Uygulama ile Otomatik Başlat',
       auto_start_desc: 'Uygulama başlatıldığında proxy hizmetini de başlat',
+      'allow-local-video-paths': 'Yerel video yollarına izin ver',
+      'allow-local-video-paths-desc':
+        'API isteklerinin video_url aracılığıyla kullanıcı hesabınızın erişebildiği yerel dosyaları okumasına izin verir. Yalnızca tüm proxy istemcilerine güveniyorsanız etkinleştirin.',
       local_access: 'Yerel ağ erişimi:',
       select_ip: 'IP Seç',
       no_token_warning: '⚠️ API anahtarı ayarlanmadı. Erişim herkese açık!',

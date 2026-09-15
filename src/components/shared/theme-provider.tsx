@@ -1,19 +1,19 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { ipc } from '@/ipc/manager';
-import { ThemeMode } from '@/modules/app-shell/types/theme-mode';
+import { parseThemeMode, ThemeMode } from '@/modules/app-shell/types/theme-mode';
 import { LOCAL_STORAGE_KEYS } from '@/shared/constants';
 
 export type Theme = ThemeMode;
 
 type ThemeProviderProps = {
   children: React.ReactNode;
-  defaultTheme?: Theme;
+  defaultTheme?: ThemeMode;
   storageKey?: string;
 };
 
 type ThemeProviderState = {
-  theme: Theme;
-  setTheme: (theme: Theme) => void;
+  theme: ThemeMode;
+  setTheme: (theme: ThemeMode) => void;
 };
 
 const initialState: ThemeProviderState = {
@@ -25,9 +25,9 @@ const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 
 export function ThemeProvider(props: ThemeProviderProps) {
   const { children, defaultTheme = 'system', storageKey = LOCAL_STORAGE_KEYS.THEME } = props;
-  const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem(storageKey) as Theme) || defaultTheme,
-  );
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    return parseThemeMode(localStorage.getItem(storageKey)) ?? defaultTheme;
+  });
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -52,14 +52,17 @@ export function ThemeProvider(props: ThemeProviderProps) {
     applyTheme(theme);
   }, [theme]);
 
-  const value = {
-    theme,
-    setTheme: (newTheme: Theme) => {
-      localStorage.setItem(storageKey, newTheme);
-      setTheme(newTheme);
-      ipc.client.theme.setThemeMode(newTheme);
-    },
-  };
+  const value = useMemo<ThemeProviderState>(
+    () => ({
+      theme,
+      setTheme: (newTheme: ThemeMode) => {
+        localStorage.setItem(storageKey, newTheme);
+        setTheme(newTheme);
+        ipc.client.theme.setThemeMode(newTheme);
+      },
+    }),
+    [storageKey, theme],
+  );
 
   return (
     <ThemeProviderContext.Provider value={value} {...props}>

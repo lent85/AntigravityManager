@@ -21,7 +21,7 @@ export class FamilyGroupStore {
    * Retrieves all registered family groups.
    */
   static getFamilyGroups(): AccountFamilyGroup[] {
-    const raw = CloudAccountSettingsStore.getSetting<unknown[]>(FAMILY_GROUPS_SETTING_KEY, []);
+    const raw = CloudAccountSettingsStore.getSetting<unknown[]>(FAMILY_GROUPS_SETTING_KEY, [], z.array(z.unknown()));
     if (!Array.isArray(raw)) {
       return [];
     }

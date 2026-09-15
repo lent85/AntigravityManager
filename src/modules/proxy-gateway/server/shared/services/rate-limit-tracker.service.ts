@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { isEmpty, isNumber, isObjectLike, isString } from 'lodash-es';
+import { isEmpty, isNumber, isString } from 'lodash-es';
+import { z } from 'zod';
 import { getQuotaModelFamilyId } from '@/modules/cloud-account/utils/quota-model-families';
+import { normalizeGeminiModelAlias } from '@/modules/proxy-gateway/antigravity/ModelMapping';
 
 export enum RateLimitReason {
   QuotaExhausted = 'quota_exhausted',
@@ -10,11 +12,29 @@ export enum RateLimitReason {
   Unknown = 'unknown',
 }
 
-interface RateLimitInfo {
+export interface RateLimitInfo {
   resetTimeMs: number;
   retryAfterSec: number;
   reason: RateLimitReason;
   model?: string;
+  preservesLongImageQuota: boolean;
+}
+
+export type RetryDelaySource = 'retry-after' | 'structured' | 'text';
+
+export interface ParsedRetryDelay {
+  delayMs: number;
+  source: RetryDelaySource;
+}
+
+export interface PersistedModelRateLimit {
+  accountId: string;
+  modelId: string;
+  reason: string;
+  unavailableUntil: number;
+  detectedAt: number;
+  status?: number;
+  message?: string;
 }
 
 type FailureCountEntry = {
@@ -22,28 +42,43 @@ type FailureCountEntry = {
   lastFailureMs: number;
 };
 
-interface GoogleErrorDetail {
-  reason?: string;
-  retryDelay?: string;
-  metadata?: {
-    quotaResetDelay?: string;
-    retryDelay?: string;
-  };
-}
+const GoogleErrorMetadataSchema = z.object({
+  quotaResetDelay: z.string().optional().catch(undefined),
+  retryDelay: z.string().optional().catch(undefined),
+});
 
-interface ParsedGoogleErrorBody {
-  error?: {
-    status?: string;
-    details?: GoogleErrorDetail[];
-    retry_after?: number;
-  };
-}
+const GoogleErrorDetailSchema = z.object({
+  reason: z.string().optional().catch(undefined),
+  retryDelay: z.string().optional().catch(undefined),
+  metadata: GoogleErrorMetadataSchema.optional().catch(undefined),
+});
+
+const GoogleErrorEnvelopeSchema = z
+  .object({
+    status: z.string().optional(),
+    details: z.array(z.unknown()).optional(),
+    retry_after: z.number().optional(),
+  })
+  .passthrough();
+
+const GoogleErrorBodySchema = z
+  .object({
+    error: GoogleErrorEnvelopeSchema.optional(),
+  })
+  .passthrough();
+
+const ParsedGoogleErrorBodySchema = z.union([GoogleErrorBodySchema, z.array(z.unknown())]);
+
+type GoogleErrorDetail = z.infer<typeof GoogleErrorDetailSchema>;
+type GoogleErrorEnvelope = z.infer<typeof GoogleErrorEnvelopeSchema>;
+type ParsedGoogleErrorBody = z.infer<typeof ParsedGoogleErrorBodySchema>;
 
 const FAILURE_COUNT_EXPIRY_MS = 60 * 60 * 1000;
 const MAX_RETRY_DELAY_SEARCH_DEPTH = 8;
 const MAX_LOCKOUT_SECONDS = 300;
-const GRACE_RETRY_WINDOW_MS = 2000;
-export const GRACE_RETRY_BUFFER_MS = 1500;
+const GRACE_RETRY_WINDOW_MS = 5000;
+export const STRUCTURED_GRACE_RETRY_BUFFER_MS = 200;
+export const TEXT_GRACE_RETRY_BUFFER_MS = 1000;
 const DURATION_UNIT_TO_MS = {
   ms: 1,
   s: 1000,
@@ -57,8 +92,18 @@ const QUOTA_RETRY_PATTERNS = [
   /quotaResetDelay["'=:\s]+([^\s,"}\]]+)/i,
 ];
 
+type DurationUnit = keyof typeof DURATION_UNIT_TO_MS;
+
 function toLowerText(value: string | undefined): string {
   return (value ?? '').toLowerCase();
+}
+
+function isDurationUnit(value: string): value is DurationUnit {
+  return value === 'ms' || value === 's' || value === 'm' || value === 'h';
+}
+
+function isUnknownRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export function hasGenericResourceExhaustedSignal(body: string | undefined): boolean {
@@ -82,6 +127,34 @@ export function hasExplicitQuotaExhaustedSignal(body: string | undefined): boole
   );
 }
 
+export function hasStrictQuotaExhaustedMarker(body: string | undefined): boolean {
+  return toLowerText(body).includes('quota_exhausted');
+}
+
+export function isGeminiImageModel(model: string | undefined): boolean {
+  if (!model) {
+    return false;
+  }
+  const family = getQuotaModelFamilyId(model);
+  return family === 'gemini-pro-image' || family === 'gemini-flash-image';
+}
+
+const LONG_IMAGE_QUOTA_MODELS = new Set([
+  'gemini-3-pro-image',
+  'gemini-3.1-pro-image',
+  'gemini-3.1-flash-image',
+]);
+
+export function isRecognizedGeminiImageModel(model: string | undefined): boolean {
+  if (!model) {
+    return false;
+  }
+  const normalized = normalizeGeminiModelAlias(
+    model.trim().replace(/^models\//i, ''),
+  ).toLowerCase();
+  return LONG_IMAGE_QUOTA_MODELS.has(normalized);
+}
+
 function parseDurationToMilliseconds(text: string): number | null {
   const durationRegex = /([\d.]+)\s*(ms|s|m|h)/gi;
   let totalMs = 0;
@@ -94,7 +167,10 @@ function parseDurationToMilliseconds(text: string): number | null {
       return null;
     }
 
-    const unit = match[2].toLowerCase() as keyof typeof DURATION_UNIT_TO_MS;
+    const unit = match[2]?.toLowerCase();
+    if (!unit || !isDurationUnit(unit)) {
+      return null;
+    }
     totalMs += value * DURATION_UNIT_TO_MS[unit];
   }
 
@@ -120,14 +196,25 @@ function tryParseGoogleErrorBody(body: string | undefined): ParsedGoogleErrorBod
   }
 
   try {
-    const parsed = JSON.parse(trimmed) as ParsedGoogleErrorBody;
-    if (!isObjectLike(parsed)) {
-      return null;
-    }
-    return parsed;
+    const rawBody: unknown = JSON.parse(trimmed);
+    const parsedBody = ParsedGoogleErrorBodySchema.safeParse(rawBody);
+    return parsedBody.success ? parsedBody.data : null;
   } catch {
     return null;
   }
+}
+
+function getGoogleErrorEnvelope(
+  parsedBody: ParsedGoogleErrorBody | null,
+): GoogleErrorEnvelope | undefined {
+  return parsedBody && !Array.isArray(parsedBody) ? parsedBody.error : undefined;
+}
+
+function getGoogleErrorDetails(error: GoogleErrorEnvelope | undefined): GoogleErrorDetail[] {
+  return (error?.details ?? []).flatMap((detail) => {
+    const parsedDetail = GoogleErrorDetailSchema.safeParse(detail);
+    return parsedDetail.success ? [parsedDetail.data] : [];
+  });
 }
 
 function mapGoogleReasonToTrackerReason(reason: string): RateLimitReason | null {
@@ -149,13 +236,12 @@ function normalizeRetryHintKey(key: string): string {
 }
 
 function parseStructuredDurationObject(value: unknown): number | null {
-  if (!isObjectLike(value)) {
+  if (!isUnknownRecord(value)) {
     return null;
   }
 
-  const obj = value as Record<string, unknown>;
-  const seconds = Number(obj.seconds ?? obj.Seconds ?? 0);
-  const nanos = Number(obj.nanos ?? obj.Nanos ?? 0);
+  const seconds = Number(value.seconds ?? value.Seconds ?? 0);
+  const nanos = Number(value.nanos ?? value.Nanos ?? 0);
 
   if ((!Number.isFinite(seconds) || seconds <= 0) && (!Number.isFinite(nanos) || nanos <= 0)) {
     return null;
@@ -182,7 +268,7 @@ function extractStructuredDelayRecursive(value: unknown, depth: number): number 
   }
 
   if (isString(value)) {
-    return parseDurationToMilliseconds(value);
+    return null;
   }
 
   if (Array.isArray(value)) {
@@ -195,16 +281,11 @@ function extractStructuredDelayRecursive(value: unknown, depth: number): number 
     return null;
   }
 
-  if (!isObjectLike(value)) {
+  if (!isUnknownRecord(value)) {
     return null;
   }
 
-  const durationObjectDelay = parseStructuredDurationObject(value);
-  if (durationObjectDelay !== null) {
-    return durationObjectDelay;
-  }
-
-  for (const [key, childValue] of Object.entries(value as Record<string, unknown>)) {
+  for (const [key, childValue] of Object.entries(value)) {
     if (RETRY_HINT_KEYS.has(normalizeRetryHintKey(key))) {
       const hintedDelay = parseStructuredDurationValue(childValue);
       if (hintedDelay !== null) {
@@ -221,11 +302,96 @@ function extractStructuredDelayRecursive(value: unknown, depth: number): number 
   return null;
 }
 
-export function parseRetryDelayMilliseconds(errorText: string | undefined): number | null {
+function extractBaselineStructuredDelayRecursive(value: unknown, depth: number): number | null {
+  if (depth > MAX_RETRY_DELAY_SEARCH_DEPTH) {
+    return null;
+  }
+  if (isString(value)) {
+    return parseDurationToMilliseconds(value);
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const delay = extractBaselineStructuredDelayRecursive(item, depth + 1);
+      if (delay !== null) {
+        return delay;
+      }
+    }
+    return null;
+  }
+  if (!isUnknownRecord(value)) {
+    return null;
+  }
+  const durationObjectDelay = parseStructuredDurationObject(value);
+  if (durationObjectDelay !== null) {
+    return durationObjectDelay;
+  }
+  for (const childValue of Object.values(value)) {
+    const delay = extractBaselineStructuredDelayRecursive(childValue, depth + 1);
+    if (delay !== null) {
+      return delay;
+    }
+  }
+  return null;
+}
+
+function parseRetryAfterHeaderMilliseconds(retryAfter: string | undefined): number | null {
+  const rawValue = retryAfter?.trim() ?? '';
+  if (rawValue === '') {
+    return null;
+  }
+
+  const seconds = Number(rawValue);
+  if (Number.isFinite(seconds) && seconds > 0) {
+    return Math.round(seconds * 1000);
+  }
+
+  const deadline = Date.parse(rawValue);
+  if (!Number.isFinite(deadline)) {
+    return null;
+  }
+  return Math.max(0, deadline - Date.now());
+}
+
+export function parseRetryDelay(
+  errorText: string | undefined,
+  retryAfter?: string,
+): ParsedRetryDelay | null {
+  const headerDelay = parseRetryAfterHeaderMilliseconds(retryAfter);
+  if (headerDelay !== null && headerDelay > 0) {
+    return { delayMs: headerDelay, source: 'retry-after' };
+  }
+
   if (!errorText) {
     return null;
   }
 
+  const parsedBody = tryParseGoogleErrorBody(errorText);
+  const structuredDelay = parsedBody ? extractStructuredDelayRecursive(parsedBody, 0) : null;
+  if (structuredDelay !== null) {
+    return { delayMs: structuredDelay, source: 'structured' };
+  }
+
+  for (const pattern of QUOTA_RETRY_PATTERNS) {
+    const match = errorText.match(pattern);
+    if (match?.[1]) {
+      const delay = parseDurationToMilliseconds(match[1]);
+      if (delay !== null) {
+        return { delayMs: delay, source: 'text' };
+      }
+    }
+  }
+
+  return null;
+}
+
+export function parseRetryDelayMilliseconds(errorText: string | undefined): number | null {
+  return parseRetryDelay(errorText)?.delayMs ?? null;
+}
+
+export function parseBaselineRetryDelayMilliseconds(errorText: string | undefined): number | null {
+  if (!errorText) {
+    return null;
+  }
   for (const pattern of QUOTA_RETRY_PATTERNS) {
     const match = errorText.match(pattern);
     if (match?.[1]) {
@@ -235,10 +401,8 @@ export function parseRetryDelayMilliseconds(errorText: string | undefined): numb
       }
     }
   }
-
   const parsedBody = tryParseGoogleErrorBody(errorText);
-  const delay = parsedBody ? extractStructuredDelayRecursive(parsedBody, 0) : null;
-  return delay;
+  return parsedBody ? extractBaselineStructuredDelayRecursive(parsedBody, 0) : null;
 }
 
 export function shouldGraceRetry(delayMs: number): boolean {
@@ -252,7 +416,8 @@ export class RateLimitTrackerService {
 
   private buildLockoutKey(accountId: string, model?: string): string {
     if (!isEmpty(model?.trim() ?? '')) {
-      return `${accountId}:${model}`;
+      const lockoutModel = isGeminiImageModel(model) ? getQuotaModelFamilyId(model ?? '') : model;
+      return `${accountId}:${lockoutModel}`;
     }
     return accountId;
   }
@@ -312,19 +477,45 @@ export class RateLimitTrackerService {
     resetTimeMs: number,
     reason: RateLimitReason,
     model?: string,
+    preservesLongImageQuota = false,
   ): void {
     const now = Date.now();
-    const retryAfterSec = Math.min(
-      MAX_LOCKOUT_SECONDS,
-      Math.max(2, Math.ceil((resetTimeMs - now) / 1000)),
-    );
+    const rawRetryAfterSec = Math.max(2, Math.ceil((resetTimeMs - now) / 1000));
+    const retryAfterSec = preservesLongImageQuota
+      ? rawRetryAfterSec
+      : Math.min(MAX_LOCKOUT_SECONDS, rawRetryAfterSec);
     const key = !isEmpty(model?.trim() ?? '') ? this.buildLockoutKey(accountId, model) : accountId;
     this.lockoutByKey.set(key, {
       resetTimeMs: now + retryAfterSec * 1000,
       retryAfterSec,
       reason,
       model,
+      preservesLongImageQuota,
     });
+  }
+
+  restorePersistedLongImageLimit(entry: PersistedModelRateLimit): boolean {
+    const now = Date.now();
+    if (
+      entry.status !== 429 ||
+      entry.reason !== 'quota_exhausted' ||
+      !isRecognizedGeminiImageModel(entry.modelId) ||
+      !hasStrictQuotaExhaustedMarker(entry.message) ||
+      entry.unavailableUntil <= now ||
+      entry.unavailableUntil - entry.detectedAt <= MAX_LOCKOUT_SECONDS * 1000 ||
+      (parseRetryDelayMilliseconds(entry.message) ?? 0) <= MAX_LOCKOUT_SECONDS * 1000
+    ) {
+      return false;
+    }
+
+    this.setLockoutUntil(
+      entry.accountId,
+      entry.unavailableUntil,
+      RateLimitReason.QuotaExhausted,
+      entry.modelId,
+      true,
+    );
+    return true;
   }
 
   clear(accountId: string): boolean {
@@ -351,7 +542,10 @@ export class RateLimitTrackerService {
         continue;
       }
 
-      if (recoveredFamilies.has(getQuotaModelFamilyId(info.model))) {
+      if (
+        recoveredFamilies.has(getQuotaModelFamilyId(info.model)) &&
+        !(info.preservesLongImageQuota && info.resetTimeMs > Date.now())
+      ) {
         this.lockoutByKey.delete(key);
         deleted += 1;
       }
@@ -402,24 +596,35 @@ export class RateLimitTrackerService {
     }
 
     const reason = this.detectRateLimitReason(status, params.body);
-    const retryAfterSec = Math.min(
-      MAX_LOCKOUT_SECONDS,
-      this.computeRetryAfterSeconds({
-        reason,
-        status,
-        retryAfter: params.retryAfter,
-        body: params.body,
-        accountId: params.accountId,
-        model: params.model,
-        backoffSteps: params.backoffSteps,
-      }),
-    );
+    const rawRetryAfterSec = this.computeRetryAfterSeconds({
+      reason,
+      status,
+      retryAfter: params.retryAfter,
+      body: params.body,
+      accountId: params.accountId,
+      model: params.model,
+      backoffSteps: params.backoffSteps,
+    });
+    const rawResetTimeMs = Date.now() + rawRetryAfterSec * 1000;
+    const preservesLongImageQuota = this.isQualifiedLongImageQuota({
+      status,
+      reason,
+      model: params.model,
+      body: params.body,
+      retryAfter: params.retryAfter,
+      resetTimeMs: rawResetTimeMs,
+      now: Date.now(),
+    });
+    const retryAfterSec = preservesLongImageQuota
+      ? rawRetryAfterSec
+      : Math.min(MAX_LOCKOUT_SECONDS, rawRetryAfterSec);
 
     const info: RateLimitInfo = {
       reason,
       retryAfterSec,
       resetTimeMs: Date.now() + retryAfterSec * 1000,
       model: params.model,
+      preservesLongImageQuota,
     };
 
     const useModelKey =
@@ -435,6 +640,29 @@ export class RateLimitTrackerService {
     return info;
   }
 
+  private isQualifiedLongImageQuota(params: {
+    status?: number;
+    reason: RateLimitReason;
+    model?: string;
+    body?: string;
+    retryAfter?: string;
+    resetTimeMs: number;
+    now: number;
+  }): boolean {
+    if (
+      params.status !== 429 ||
+      params.reason !== RateLimitReason.QuotaExhausted ||
+      !isRecognizedGeminiImageModel(params.model) ||
+      !hasStrictQuotaExhaustedMarker(params.body) ||
+      params.resetTimeMs - params.now <= MAX_LOCKOUT_SECONDS * 1000
+    ) {
+      return false;
+    }
+
+    const explicitDelay = parseRetryDelay(params.body, params.retryAfter);
+    return explicitDelay !== null && explicitDelay.delayMs > MAX_LOCKOUT_SECONDS * 1000;
+  }
+
   parseAndMarkFromError(params: {
     accountId: string;
     status?: number;
@@ -448,7 +676,8 @@ export class RateLimitTrackerService {
 
   private detectRateLimitReason(status: number, body: string | undefined): RateLimitReason {
     const parsedBody = tryParseGoogleErrorBody(body);
-    const details = Array.isArray(parsedBody?.error?.details) ? parsedBody?.error?.details : [];
+    const error = getGoogleErrorEnvelope(parsedBody);
+    const details = getGoogleErrorDetails(error);
     for (const detail of details) {
       if (!isString(detail.reason) || isEmpty(detail.reason.trim())) {
         continue;
@@ -459,7 +688,7 @@ export class RateLimitTrackerService {
       }
     }
 
-    const statusFromBody = parsedBody?.error?.status?.trim().toUpperCase();
+    const statusFromBody = error?.status?.trim().toUpperCase();
     if (statusFromBody === 'UNAVAILABLE') {
       const loweredBody = toLowerText(body);
       if (loweredBody.includes('no capacity available') || loweredBody.includes('model capacity')) {
@@ -506,25 +735,9 @@ export class RateLimitTrackerService {
     model?: string;
     backoffSteps: number[];
   }): number {
-    const headerRetryRaw = params.retryAfter?.trim() ?? '';
-    if (headerRetryRaw !== '') {
-      const headerRetry = Number(headerRetryRaw);
-      if (!Number.isNaN(headerRetry) && Number.isFinite(headerRetry) && headerRetry > 0) {
-        return Math.max(2, Math.ceil(headerRetry));
-      }
-
-      const headerRetryAt = Date.parse(headerRetryRaw);
-      if (Number.isFinite(headerRetryAt)) {
-        const retryAfterSec = Math.ceil((headerRetryAt - Date.now()) / 1000);
-        if (retryAfterSec > 0) {
-          return Math.max(2, retryAfterSec);
-        }
-      }
-    }
-
-    const bodyRetry = this.parseRetryAfterSecondsFromBody(params.body);
-    if (bodyRetry !== null) {
-      return Math.max(2, Math.ceil(bodyRetry));
+    const explicitRetry = parseRetryDelay(params.body, params.retryAfter);
+    if (explicitRetry !== null) {
+      return Math.max(2, Math.ceil(explicitRetry.delayMs / 1000));
     }
 
     const failureCount =
@@ -567,11 +780,12 @@ export class RateLimitTrackerService {
     }
     const deepParsedRetry = parseRetryDelayMilliseconds(body);
     if (deepParsedRetry !== null) {
-      return Math.ceil((deepParsedRetry + GRACE_RETRY_BUFFER_MS) / 1000);
+      return Math.ceil(deepParsedRetry / 1000);
     }
 
     const parsedBody = tryParseGoogleErrorBody(body);
-    const details = Array.isArray(parsedBody?.error?.details) ? parsedBody.error.details : [];
+    const error = getGoogleErrorEnvelope(parsedBody);
+    const details = getGoogleErrorDetails(error);
     for (const detail of details) {
       if (isString(detail.retryDelay) && !isEmpty(detail.retryDelay.trim())) {
         const parsedDelay = parseDurationToSeconds(detail.retryDelay);
@@ -598,7 +812,7 @@ export class RateLimitTrackerService {
       }
     }
 
-    const retryAfter = parsedBody?.error?.retry_after;
+    const retryAfter = error?.retry_after;
     if (isNumber(retryAfter) && retryAfter > 0) {
       return Math.ceil(retryAfter);
     }
