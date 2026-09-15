@@ -1,6 +1,7 @@
 import { Notification } from 'electron';
 import { CloudAccountRepo } from '@/modules/cloud-account/persistence/cloudHandler';
 import { CloudAccountSettingsStore } from '@/modules/cloud-account/persistence/cloud-account-settings-store';
+import { FamilyGroupStore } from '@/modules/cloud-account/persistence/family-group-store';
 import { GoogleAPIService, type QuotaData, type TokenResponse } from './GoogleAPIService';
 import { AutoSwitchService } from './AutoSwitchService';
 import { logger } from '@/shared/logging/logger';
@@ -287,9 +288,24 @@ export class CloudMonitorService {
     const refreshedAccounts: CloudAccount[] = [];
     logger.info('CloudMonitor: Polling quotas...');
     const accounts = await CloudAccountRepo.getAccounts();
+    const familyGroups = FamilyGroupStore.getFamilyGroups();
+    const polledFamilyGroupIds = new Set<string>();
     let now = Math.floor(Date.now() / 1000);
 
     for (const account of accounts) {
+      if (this.stopped || epoch !== this.stopEpoch) {
+        break;
+      }
+
+      const familyGroup = familyGroups.find((g) => g.accountIds.includes(account.id));
+      if (familyGroup && polledFamilyGroupIds.has(familyGroup.id)) {
+        logger.info(
+          `Monitor: Skipping quota fetch for ${account.email}, already refreshed via family group "${familyGroup.name}"`,
+        );
+        refreshedAccounts.push(account);
+        continue;
+      }
+
       try {
         now = Math.floor(Date.now() / 1000);
         // 1. Check/Refresh Token if needed (give it a 10 min buffer here for safety)
@@ -442,6 +458,29 @@ export class CloudMonitorService {
         account.status_reason = undefined;
         refreshedAccounts.push(account);
         proxyModelAvailabilityStore.clearCapabilityFailures(account.id);
+
+        if (familyGroup) {
+          polledFamilyGroupIds.add(familyGroup.id);
+          const siblingIds = familyGroup.accountIds.filter((id) => id !== account.id);
+          for (const siblingId of siblingIds) {
+            try {
+              await CloudAccountRepo.updateQuota(siblingId, quota);
+              await CloudAccountRepo.setAccountStatus(siblingId, 'active', null);
+              proxyModelAvailabilityStore.clearCapabilityFailures(siblingId);
+              const siblingAccount = accounts.find((a) => a.id === siblingId);
+              if (siblingAccount) {
+                siblingAccount.quota = quota;
+                siblingAccount.status = 'active';
+                siblingAccount.status_reason = undefined;
+              }
+              logger.info(
+                `Monitor: Synchronized family quota to sibling account ${siblingId} from ${account.email}`,
+              );
+            } catch (syncError) {
+              logger.warn(`Monitor: Failed to sync family quota to sibling ${siblingId}`, syncError);
+            }
+          }
+        }
       } catch (error) {
         logger.error(`Monitor: Failed to update ${account.email}`, error);
         const classified = classifyAccountStatusFromError(error);

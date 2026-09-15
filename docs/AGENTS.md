@@ -6,8 +6,12 @@ These instructions supplement the repository root [AGENTS.md](../AGENTS.md) for 
 
 Give each fact one authoritative location and link to it elsewhere:
 
+- `README.md`: central documentation index and topical lookup.
 - `architecture.md`: current runtime composition, ownership and dependency direction.
 - `development.md`: contributor setup, commands and environment-specific workflow.
+- `feature-development-guide.md`: end-to-end recipe for creating or extending a module under `src/modules/`.
+- `proxy-gateway-guide.md`: protocol mappers, streaming, and model routing in the embedded gateway.
+- `mcp-setup.md`: Model Context Protocol tool setup and usage.
 - `testing.md`: test strategy and change-to-evidence selection.
 - `security.md`: trust zones, sensitive data and high-risk boundaries.
 - `.agents/notes/`: decision rationale, alternatives and consequences.

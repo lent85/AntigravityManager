@@ -30,6 +30,7 @@ import {
   Laptop,
   Terminal,
   Radar,
+  Users,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -141,6 +142,9 @@ interface CloudAccountToolbarProps {
   showEmulationUi?: boolean;
   originFilter?: 'all' | 'real' | 'emulated';
   onOriginFilterChange?: (filter: 'all' | 'real' | 'emulated') => void;
+  isFamilyGrouped?: boolean;
+  onToggleFamilyGrouped?: () => void;
+  onOpenFamilyDialog?: () => void;
 }
 
 export function CloudAccountToolbar({
@@ -201,6 +205,9 @@ export function CloudAccountToolbar({
   showEmulationUi = false,
   originFilter = 'all',
   onOriginFilterChange,
+  isFamilyGrouped = false,
+  onToggleFamilyGrouped,
+  onOpenFamilyDialog,
 }: CloudAccountToolbarProps) {
   const { t } = useTranslation();
   const { data: emulationState } = useEmulationState(3000);
@@ -718,6 +725,60 @@ export function CloudAccountToolbar({
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+
+            {/* Family Group View Toggle */}
+            {onToggleFamilyGrouped && (
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={isFamilyGrouped ? 'secondary' : 'ghost'}
+                      size="icon"
+                      className={cn(
+                        'h-7 w-7 cursor-pointer',
+                        isFamilyGrouped &&
+                          'border-indigo-500/40 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-300',
+                      )}
+                      onClick={onToggleFamilyGrouped}
+                      aria-label={t('cloud.family.toggleGroupedView', 'Toggle Google One Family view')}
+                    >
+                      <Users
+                        className={cn(
+                          'h-3.5 w-3.5',
+                          isFamilyGrouped ? 'text-indigo-400' : 'text-muted-foreground',
+                        )}
+                      />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isFamilyGrouped
+                      ? t('cloud.family.viewNormal', 'Chế độ xem riêng lẻ')
+                      : t('cloud.family.viewGrouped', 'Gộp tài khoản gia đình (Google One)')}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
+            {onOpenFamilyDialog && (
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-foreground"
+                      onClick={onOpenFamilyDialog}
+                      aria-label={t('cloud.family.manageGroupTooltip', 'Quản lý nhóm gia đình Google One')}
+                    >
+                      <Users className="h-3.5 w-3.5 text-indigo-400" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {t('cloud.family.manageGroupTooltip', 'Quản lý nhóm gia đình Google One')}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
 
             {/* Origin Filter (All / Real / Emulated) */}
             {showEmulationUi &&

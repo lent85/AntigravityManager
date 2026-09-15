@@ -46,32 +46,30 @@ Antigravity Manager is a comprehensive enhancement tool for Antigravity, designe
 
 ```plaintext
 src/
-├── main.ts              # Electron main process
-├── preload.ts           # Preload script
-├── renderer.ts          # Renderer entry
-├── ipc/                 # IPC communication layer
-│   ├── account/         # Local IDE account IPC
-│   ├── cloud/           # Cloud AI resource IPC (new)
-│   ├── database/        # Database operation IPC
-│   └── process/         # Process management IPC
-├── services/            # Business service layer (new)
-│   ├── QuotaService.ts  # Quota monitoring service
-│   └── TokenService.ts  # Token keepalive service
-├── actions/             # Renderer actions (oRPC client)
-├── components/          # React components
-├── routes/              # Page routes
-├── layouts/             # Layout components
-├── utils/               # Utility functions
-├── types/               # TypeScript type definitions
-└── tests/               # Test files
+├── main.ts              # Electron main process bootstrap
+├── preload.ts           # Context-isolated preload bridge
+├── renderer.ts          # Renderer React bootstrap
+├── modules/             # Feature-owned modules (UI, IPC, services, stores)
+│   ├── account/         # Local IDE account management
+│   ├── antigravity-runtime/ # Process discovery and runtime patching
+│   ├── app-shell/       # Window, tray, and navigation shell
+│   ├── cloud-account/   # Cloud AI account pools, quota & auto-switch
+│   ├── config/          # App configuration
+│   ├── identity-profile/# Identity masking & profiles
+│   └── proxy-gateway/   # HTTP proxy, protocol mappers & model routing
+├── ipc/                 # Composed ORPC router and client manager
+├── server/              # Embedded NestJS/Fastify proxy gateway bootstrap
+├── shared/              # Cross-feature primitives (persistence, errors, logging)
+├── routes/              # TanStack Router file-based route definitions
+└── components/ui/       # Reusable Radix/Tailwind UI primitives
 ```
 
 **Design patterns:**
 
-* **Separation of concerns**: Main process handles system operations and network proxy; renderer handles UI.
-* **Service layer**: Encapsulates complex quota polling and token refresh logic.
+* **Feature Module Ownership**: Domain logic, components, hooks, IPC sub-routers, and stores stay inside `src/modules/<feature>`.
 * **Type-safe IPC**: Uses oRPC to enforce type-safe communication between main and renderer.
-* **State management**: React Query manages server state and async quota data.
+* **Separation of concerns**: Renderer handles UI; Electron main handles system, keyring, and SQLite; embedded NestJS handles AI proxying.
+* **State management**: TanStack Query manages server state and async quota/account data.
 
 ### Testing Strategy
 

@@ -3,6 +3,7 @@ import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarge
 import type { DeviceProfile } from '@/modules/identity-profile/types';
 import { isValidProxyUrl } from '@/shared/utils/url';
 import type { WeeklyWarmupConfig } from '@/modules/cloud-account/services/weekly-warmup-contract';
+import type { AccountFamilyGroup } from '@/modules/cloud-account/persistence/family-group-store';
 
 export function addGoogleAccount(input: { authCode: string; oauthClientKey?: string }) {
   return ipc.client.cloud.addGoogleAccount(input);
@@ -223,4 +224,30 @@ export function resetEmulatedQuotas() {
 export function clearEmulatedAccounts() {
   return ipc.client.cloud.clearEmulatedAccounts();
 }
+
+export function getFamilyGroups(): Promise<AccountFamilyGroup[]> {
+  return ipc.client.cloud.getFamilyGroups();
+}
+
+export function saveFamilyGroup(group: AccountFamilyGroup): Promise<AccountFamilyGroup> {
+  return ipc.client.cloud.saveFamilyGroup(group);
+}
+
+export function deleteFamilyGroup(input: { groupId: string }): Promise<void> {
+  return ipc.client.cloud.deleteFamilyGroup(input);
+}
+
+export function linkAccountsToFamily(input: {
+  accountIds: string[];
+  groupName?: string;
+  groupId?: string;
+  primaryAccountId?: string;
+}): Promise<AccountFamilyGroup> {
+  return ipc.client.cloud.linkAccountsToFamily(input);
+}
+
+export function unlinkAccountFromFamily(input: { accountId: string }): Promise<void> {
+  return ipc.client.cloud.unlinkAccountFromFamily(input);
+}
+
 

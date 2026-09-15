@@ -1,0 +1,4 @@
+# Cursor Rules
+Always refer to and strictly follow `AGENTS.md` and `docs/architecture.md`.
+Never break runtime boundaries between renderer, preload, IPC, and main/server processes.
+Run `npm run check:governance` and `npm run type-check` to verify changes.

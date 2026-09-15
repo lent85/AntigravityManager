@@ -35,7 +35,14 @@ import {
   Clock3,
   FlaskConical,
   CheckCircle2,
+  Crown,
+  Users,
+  UserMinus,
 } from 'lucide-react';
+import {
+  useFamilyGroups,
+  useUnlinkAccountFromFamily,
+} from '@/modules/cloud-account/hooks/useFamilyGroups';
 import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { useTranslation } from 'react-i18next';
@@ -197,6 +204,7 @@ interface CloudAccountCardProps {
   onSwitch: (id: string, appTarget?: AntigravityAppTarget) => void;
   onMarkActive?: (id: string, appTarget?: AntigravityAppTarget) => void;
   onManageIdentity: (id: string) => void;
+  onManageFamily?: (id: string) => void;
   isSelected?: boolean;
   onToggleSelection?: (id: string, selected: boolean) => void;
   isRefreshing?: boolean;
@@ -212,6 +220,7 @@ export function CloudAccountCard({
   onSwitch,
   onMarkActive,
   onManageIdentity,
+  onManageFamily,
   isSelected = false,
   onToggleSelection,
   isRefreshing,
@@ -220,6 +229,11 @@ export function CloudAccountCard({
 }: CloudAccountCardProps) {
   const { t } = useTranslation();
   const { config, saveConfig } = useAppConfig();
+  const { data: familyGroups = [] } = useFamilyGroups();
+  const unlinkMutation = useUnlinkAccountFromFamily();
+  const familyGroup = familyGroups.find((g) => g.accountIds.includes(account.id));
+  const isFamilyOwner = familyGroup?.primaryAccountId === account.id;
+
   const isMasked = Boolean(config?.mask_account_info);
   const displayName = maskName(account.name, isMasked, t('cloud.card.unknown'));
   const displayEmail = maskEmail(account.email, isMasked);
@@ -580,6 +594,29 @@ export function CloudAccountCard({
             >
               {account.provider.toUpperCase()}
             </Badge>
+            {familyGroup && (
+              <span
+                className={cn(
+                  'flex items-center gap-1 rounded border px-1.5 py-0 text-[10px] font-bold h-5',
+                  isFamilyOwner
+                    ? 'border-amber-500/30 bg-amber-500/15 text-amber-500'
+                    : 'border-blue-500/30 bg-blue-500/15 text-blue-400',
+                )}
+                title={familyGroup.name}
+              >
+                {isFamilyOwner ? (
+                  <>
+                    <Crown className="h-3 w-3" />
+                    {familyGroup.name} ({t('cloud.family.ownerBadge', 'Chủ gói')})
+                  </>
+                ) : (
+                  <>
+                    <Users className="h-3 w-3" />
+                    {familyGroup.name}
+                  </>
+                )}
+              </span>
+            )}
             <AccountTierBadge account={account} unknownLabel={t('cloud.tierFilter.unknown')} />
             {Boolean(config?.show_emulation_ui) && account.is_emulated && !isMasked && (
               <span
@@ -1065,6 +1102,47 @@ export function CloudAccountCard({
                 </TooltipContent>
               </Tooltip>
 
+              {/* Family Button */}
+              {onManageFamily && (
+                <Tooltip delayDuration={300}>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={familyGroup ? 'secondary' : 'outline'}
+                      size="icon"
+                      className="hover:bg-accent border-border/50 h-7 w-7 cursor-pointer rounded-md"
+                      onClick={() => onManageFamily(account.id)}
+                    >
+                      <Users className={cn('h-3.5 w-3.5', familyGroup ? 'text-blue-500' : '')} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs">
+                    {familyGroup
+                      ? t('cloud.family.manageFamilyGroup', 'Quản lý nhóm gia đình')
+                      : t('cloud.family.linkFamilyGroup', 'Gộp vào gia đình')}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+
+              {/* Unlink Family Button */}
+              {familyGroup && (
+                <Tooltip delayDuration={300}>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="hover:bg-amber-500/10 border-border/50 text-amber-500 hover:text-amber-400 h-7 w-7 cursor-pointer rounded-md"
+                      onClick={() => unlinkMutation.mutate(account.id)}
+                      disabled={unlinkMutation.isPending}
+                    >
+                      <UserMinus className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs">
+                    {t('cloud.family.unlinkMember', 'Gỡ khỏi nhóm gia đình')}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+
               {/* Delete Button */}
               <Tooltip delayDuration={300}>
                 <TooltipTrigger asChild>
@@ -1134,6 +1212,9 @@ interface CompactCloudAccountCardProps {
   onSwitch: (id: string, appTarget?: AntigravityAppTarget) => void;
   onMarkActive?: (id: string, appTarget?: AntigravityAppTarget) => void;
   onManageIdentity: (id: string) => void;
+  isSelected?: boolean;
+  onToggleSelection?: (id: string, selected: boolean) => void;
+  onManageFamily?: (id: string) => void;
   isRefreshing?: boolean;
   isDeleting?: boolean;
   isSwitching?: boolean;
@@ -1148,12 +1229,20 @@ export function CompactCloudAccountCard({
   onSwitch,
   onMarkActive,
   onManageIdentity,
+  isSelected = false,
+  onToggleSelection,
+  onManageFamily,
   isRefreshing,
   isDeleting,
   isSwitching,
 }: CompactCloudAccountCardProps) {
   const { t } = useTranslation();
   const { config } = useAppConfig();
+  const { data: familyGroups = [] } = useFamilyGroups();
+  const unlinkMutation = useUnlinkAccountFromFamily();
+  const familyGroup = familyGroups.find((g) => g.accountIds.includes(account.id));
+  const isFamilyOwner = familyGroup?.primaryAccountId === account.id;
+
   const [menuOpen, setMenuOpen] = useState(false);
   const isMasked = Boolean(config?.mask_account_info);
   const displayName = maskName(account.name, isMasked, t('cloud.card.unknown'));
@@ -1209,6 +1298,13 @@ export function CompactCloudAccountCard({
 
   return (
     <div className="group bg-card hover:border-primary/40 flex items-center gap-3 rounded-lg border px-3 py-2 transition-all duration-200">
+      {onToggleSelection && (
+        <Checkbox
+          checked={isSelected}
+          onCheckedChange={(checked) => onToggleSelection(account.id, Boolean(checked))}
+          className="shrink-0 cursor-pointer"
+        />
+      )}
       {account.avatar_url && !isMasked ? (
         <img
           src={account.avatar_url}
@@ -1234,6 +1330,29 @@ export function CompactCloudAccountCard({
           <span className="text-muted-foreground truncate text-xs">
             {displayEmail}
           </span>
+          {familyGroup && (
+            <span
+              className={cn(
+                'rounded border px-1 text-[9px] font-semibold flex items-center gap-0.5 shrink-0',
+                isFamilyOwner
+                  ? 'border-amber-500/30 bg-amber-500/15 text-amber-500'
+                  : 'border-blue-500/30 bg-blue-500/15 text-blue-400',
+              )}
+              title={familyGroup.name}
+            >
+              {isFamilyOwner ? (
+                <>
+                  <Crown className="h-2.5 w-2.5" />
+                  {familyGroup.name} ({t('cloud.family.ownerBadge', 'Chủ gói')})
+                </>
+              ) : (
+                <>
+                  <Users className="h-2.5 w-2.5" />
+                  {familyGroup.name}
+                </>
+              )}
+            </span>
+          )}
           <Badge
             variant={
               account.status === 'rate_limited' || account.status === 'expired'
@@ -1775,6 +1894,28 @@ export function CompactCloudAccountCard({
               <Fingerprint className="mr-2 h-3.5 w-3.5 shrink-0 text-purple-400" />
               <span className="whitespace-nowrap">{t('cloud.card.identityProfile', 'Identity Profile')}</span>
             </DropdownMenuItem>
+            {onManageFamily && (
+              <DropdownMenuItem onClick={() => onManageFamily(account.id)} className="flex cursor-pointer items-center py-2 text-xs">
+                <Users className="mr-2 h-3.5 w-3.5 shrink-0 text-blue-400" />
+                <span className="whitespace-nowrap">
+                  {familyGroup
+                    ? t('cloud.family.manageFamilyGroup', 'Quản lý gia đình')
+                    : t('cloud.family.linkFamilyGroup', 'Gộp vào gia đình')}
+                </span>
+              </DropdownMenuItem>
+            )}
+            {familyGroup && (
+              <DropdownMenuItem
+                onClick={() => unlinkMutation.mutate(account.id)}
+                disabled={unlinkMutation.isPending}
+                className="text-amber-500 focus:text-amber-500 flex cursor-pointer items-center py-2 text-xs"
+              >
+                <UserMinus className="mr-2 h-3.5 w-3.5 shrink-0" />
+                <span className="whitespace-nowrap">
+                  {t('cloud.family.unlinkMember', 'Gỡ khỏi gia đình')}
+                </span>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => onDelete(account.id)}

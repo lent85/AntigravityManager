@@ -1,4 +1,4 @@
-import { RefreshCw, Trash2, X } from 'lucide-react';
+import { RefreshCw, Trash2, Users, UserMinus, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 
@@ -7,6 +7,9 @@ interface CloudAccountBatchActionBarProps {
   onClearSelection: () => void;
   onRefreshSelected: () => void;
   onDeleteSelected: () => void;
+  onLinkFamilySelected?: () => void;
+  onUnlinkFamilySelected?: () => void;
+  hasFamilyAccountSelected?: boolean;
 }
 
 export function CloudAccountBatchActionBar({
@@ -14,6 +17,9 @@ export function CloudAccountBatchActionBar({
   onClearSelection,
   onRefreshSelected,
   onDeleteSelected,
+  onLinkFamilySelected,
+  onUnlinkFamilySelected,
+  hasFamilyAccountSelected,
 }: CloudAccountBatchActionBarProps) {
   const { t } = useTranslation();
 
@@ -38,6 +44,23 @@ export function CloudAccountBatchActionBar({
       </div>
 
       <div className="flex items-center gap-2">
+        {onLinkFamilySelected && selectedCount >= 2 && (
+          <Button variant="secondary" size="sm" onClick={onLinkFamilySelected}>
+            <Users className="mr-2 h-3.5 w-3.5 text-blue-400" />
+            {t('cloud.family.linkSelected', 'Gộp gia đình')}
+          </Button>
+        )}
+        {onUnlinkFamilySelected && hasFamilyAccountSelected && (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="border-amber-500/30 text-amber-500 hover:bg-amber-500/10 hover:text-amber-400"
+            onClick={onUnlinkFamilySelected}
+          >
+            <UserMinus className="mr-2 h-3.5 w-3.5" />
+            {t('cloud.family.unlinkSelected', 'Tách khỏi gia đình')}
+          </Button>
+        )}
         <Button variant="secondary" size="sm" onClick={onRefreshSelected}>
           <RefreshCw className="mr-2 h-3 w-3" />
           {t('cloud.batch.refresh')}

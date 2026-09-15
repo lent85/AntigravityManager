@@ -39,7 +39,13 @@ import {
   updateEmulatedAccountStrategy,
   resetEmulatedQuotas,
   clearEmulatedAccounts,
+  getFamilyGroups,
+  saveFamilyGroup,
+  deleteFamilyGroup,
+  linkAccountsToFamily,
+  unlinkAccountFromFamily,
 } from './handler';
+import { AccountFamilyGroupSchema } from '@/modules/cloud-account/persistence/family-group-store';
 import {
   AccountEmulationStrategyConfigSchema,
   EmulationStateSchema,
@@ -533,4 +539,48 @@ export const cloudRouter = os.router({
   clearEmulatedAccounts: os.output(EmulationStateSchema).handler(async () => {
     return clearEmulatedAccounts();
   }),
+
+  getFamilyGroups: os.output(z.array(AccountFamilyGroupSchema)).handler(async () => {
+    return getFamilyGroups();
+  }),
+
+  saveFamilyGroup: os
+    .input(AccountFamilyGroupSchema)
+    .output(AccountFamilyGroupSchema)
+    .handler(async ({ input }) => {
+      return saveFamilyGroup(input);
+    }),
+
+  deleteFamilyGroup: os
+    .input(z.object({ groupId: z.string() }))
+    .output(z.void())
+    .handler(async ({ input }) => {
+      deleteFamilyGroup(input.groupId);
+    }),
+
+  linkAccountsToFamily: os
+    .input(
+      z.object({
+        accountIds: z.array(z.string()),
+        groupName: z.string().optional(),
+        groupId: z.string().optional(),
+        primaryAccountId: z.string().optional(),
+      }),
+    )
+    .output(AccountFamilyGroupSchema)
+    .handler(async ({ input }) => {
+      return linkAccountsToFamily(
+        input.accountIds,
+        input.groupName,
+        input.groupId,
+        input.primaryAccountId,
+      );
+    }),
+
+  unlinkAccountFromFamily: os
+    .input(z.object({ accountId: z.string() }))
+    .output(z.void())
+    .handler(async ({ input }) => {
+      unlinkAccountFromFamily(input.accountId);
+    }),
 });

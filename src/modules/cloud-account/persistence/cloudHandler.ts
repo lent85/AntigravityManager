@@ -22,6 +22,7 @@ import {
   serializeDeviceHistory,
   serializeDeviceProfile,
 } from './cloud-account-device-profile-codec';
+import { FamilyGroupStore } from './family-group-store';
 
 interface MigrationStats {
   totalFields: number;
@@ -466,6 +467,7 @@ export class CloudAccountRepo {
     const { raw, orm } = getCloudDb();
     try {
       orm.delete(accounts).where(eq(accounts.id, id)).run();
+      FamilyGroupStore.unlinkAccount(id);
       logger.info(`Removed cloud account: ${id}`);
     } finally {
       raw.close();

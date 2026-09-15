@@ -1,6 +1,6 @@
 # Antigravity Manager Agent Instructions
 
-Antigravity Manager is an Electron desktop application with a React renderer and an embedded NestJS/Fastify proxy gateway. Read [docs/architecture.md](docs/architecture.md) before changing process boundaries, IPC, persistence, routing or the gateway. Use [docs/testing.md](docs/testing.md) to select verification and [docs/security.md](docs/security.md) for sensitive changes.
+Antigravity Manager is an Electron desktop application with a React renderer and an embedded NestJS/Fastify proxy gateway. Read [docs/README.md](docs/README.md) for documentation index, [docs/architecture.md](docs/architecture.md) before changing process boundaries, IPC, persistence, routing or the gateway, [docs/feature-development-guide.md](docs/feature-development-guide.md) for feature workflows, [docs/proxy-gateway-guide.md](docs/proxy-gateway-guide.md) for gateway changes, and [docs/mcp-setup.md](docs/mcp-setup.md) for MCP integration. Use [docs/testing.md](docs/testing.md) to select verification and [docs/security.md](docs/security.md) for sensitive changes.
 
 Instructions in a deeper `AGENTS.md` supplement this file for that subtree. Keep each rule in its narrowest owning file and link to authoritative detail instead of copying it.
 
@@ -17,6 +17,7 @@ Instructions in a deeper `AGENTS.md` supplement this file for that subtree. Keep
 - Prefer project scripts from `package.json`; do not invent a parallel command when an owning script exists.
 - The primary development shell is PowerShell on Windows. Keep scripts portable when CI or packaged behavior is cross-platform.
 - When `.codegraph/` exists, use CodeGraph before text search to understand symbols and call paths. Use `ast-grep` for syntax-aware structural search, bulk refactoring, custom lint checks, vulnerability patterns and framework/API migrations.
+- Use configured MCP tools (CodeGraph, Codanna, SQLite inspection) to explore symbols and verify schemas before broad grepping. See [docs/mcp-setup.md](docs/mcp-setup.md).
 - Bound commands with unknown output and inspect the smallest relevant context.
 
 ## Standing architecture rules
@@ -24,7 +25,7 @@ Instructions in a deeper `AGENTS.md` supplement this file for that subtree. Keep
 - Feature-specific UI, hooks, actions, IPC, services, persistence and types belong in `src/modules`.
 - Cross-feature primitives belong in `src/shared`; generic UI belongs in `src/components`. Require a real second consumer before moving feature code into shared infrastructure.
 - Renderer code must not import main-process, filesystem, database, keyring or server implementation modules. Cross-process operations go through the typed preload/IPC/ORPC surface.
-- Feature modules own their IPC schemas, routers and handlers. `src/ipc/router.ts` composes them and applies global transport behavior; do not put feature business logic there.
+- Feature modules own their IPC schemas, routers and handlers under `src/modules/<feature>/ipc/`. `src/ipc/router.ts` composes them and applies global transport behavior; the renderer calls them via `ipc.client.<feature>.<method>()`.
 - NestJS proxy behavior belongs under `src/modules/proxy-gateway/server`; `src/server` owns bootstrap and process lifecycle only.
 - Shared database primitives live under `src/shared/persistence/database`; feature repositories and codecs remain in the owning feature.
 - Routes live in `src/routes`. Never edit generated `src/routeTree.gen.ts` manually.

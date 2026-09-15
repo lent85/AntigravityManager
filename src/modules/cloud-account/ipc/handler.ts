@@ -4,6 +4,10 @@ import { CredentialStoreInjectionAdapter } from '@/modules/cloud-account/persist
 import { CloudAccountDeviceBindingStore } from '@/modules/cloud-account/persistence/cloud-account-device-binding-store';
 import { CloudAccountSettingsStore } from '@/modules/cloud-account/persistence/cloud-account-settings-store';
 import {
+  FamilyGroupStore,
+  type AccountFamilyGroup,
+} from '@/modules/cloud-account/persistence/family-group-store';
+import {
   GoogleAPIService,
   type OAuthClientDescriptor,
   type TokenResponse,
@@ -533,6 +537,33 @@ export async function deleteCloudAccount(accountId: string): Promise<void> {
   await CloudAccountRepo.removeAccount(accountId);
 }
 
+async function syncFamilyQuotaToSiblings(
+  accountId: string,
+  quota: CloudAccount['quota'],
+): Promise<void> {
+  if (!quota) {
+    return;
+  }
+  const familyGroup = FamilyGroupStore.getFamilyGroupByAccountId(accountId);
+  if (!familyGroup) {
+    return;
+  }
+
+  const siblingIds = familyGroup.accountIds.filter((id) => id !== accountId);
+  for (const siblingId of siblingIds) {
+    try {
+      await CloudAccountRepo.updateQuota(siblingId, quota);
+      await CloudAccountRepo.setAccountStatus(siblingId, 'active', null);
+      proxyModelAvailabilityStore.clearCapabilityFailures(siblingId);
+      logger.info(
+        `Synchronized family quota from account ${accountId} to sibling account ${siblingId}`,
+      );
+    } catch (error) {
+      logger.warn(`Failed to sync family quota to sibling account ${siblingId}`, error);
+    }
+  }
+}
+
 export async function refreshAccountQuota(accountId: string): Promise<CloudAccount> {
   if (AccountEmulationService.isEmulated(accountId)) {
     return AccountEmulationService.refreshAccountQuota(accountId);
@@ -599,6 +630,7 @@ export async function refreshAccountQuota(accountId: string): Promise<CloudAccou
 
     account.quota = quota;
     await CloudAccountRepo.updateQuota(account.id, account.quota);
+    await syncFamilyQuotaToSiblings(account.id, account.quota);
     await CloudAccountRepo.updateLastUsed(account.id);
     account.last_used = Math.floor(Date.now() / 1000);
     await clearAccountStatus(account);
@@ -648,6 +680,7 @@ export async function refreshAccountQuota(accountId: string): Promise<CloudAccou
 
         account.quota = quota;
         await CloudAccountRepo.updateQuota(account.id, account.quota);
+        await syncFamilyQuotaToSiblings(account.id, account.quota);
         await CloudAccountRepo.updateLastUsed(account.id);
         account.last_used = Math.floor(Date.now() / 1000);
         await clearAccountStatus(account);
@@ -1389,3 +1422,29 @@ export function clearEmulatedAccounts() {
   AccountEmulationService.clearAccounts();
   return AccountEmulationService.getState();
 }
+
+export function getFamilyGroups(): AccountFamilyGroup[] {
+  return FamilyGroupStore.getFamilyGroups();
+}
+
+export function saveFamilyGroup(group: AccountFamilyGroup): AccountFamilyGroup {
+  return FamilyGroupStore.saveFamilyGroup(group);
+}
+
+export function deleteFamilyGroup(groupId: string): void {
+  FamilyGroupStore.deleteFamilyGroup(groupId);
+}
+
+export function linkAccountsToFamily(
+  accountIds: string[],
+  groupName?: string,
+  groupId?: string,
+  primaryAccountId?: string,
+): AccountFamilyGroup {
+  return FamilyGroupStore.linkAccounts(accountIds, groupName, groupId, primaryAccountId);
+}
+
+export function unlinkAccountFromFamily(accountId: string): void {
+  FamilyGroupStore.unlinkAccount(accountId);
+}
+

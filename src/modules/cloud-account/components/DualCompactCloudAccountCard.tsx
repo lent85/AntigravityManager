@@ -4,6 +4,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  Crown,
   Fingerprint,
   FlaskConical,
   MoreVertical,
@@ -12,10 +13,17 @@ import {
   Repeat2,
   Terminal,
   Trash,
+  Users,
+  UserMinus,
 } from 'lucide-react';
 import { useAppConfig } from '@/modules/config/hooks/useAppConfig';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  useFamilyGroups,
+  useUnlinkAccountFromFamily,
+} from '@/modules/cloud-account/hooks/useFamilyGroups';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -63,6 +71,9 @@ interface DualCompactCloudAccountCardProps {
   onSwitch: (id: string, appTarget?: AntigravityAppTarget) => void;
   onMarkActive?: (id: string, appTarget?: AntigravityAppTarget) => void;
   onManageIdentity: (id: string) => void;
+  isSelected?: boolean;
+  onToggleSelection?: (id: string, selected: boolean) => void;
+  onManageFamily?: (id: string) => void;
   isRefreshing?: boolean;
   isDeleting?: boolean;
   isSwitching?: boolean;
@@ -76,13 +87,21 @@ export function DualCompactCloudAccountCard({
   onSwitch,
   onMarkActive,
   onManageIdentity,
+  isSelected = false,
+  onToggleSelection,
+  onManageFamily,
   isRefreshing,
   isDeleting,
   isSwitching,
 }: DualCompactCloudAccountCardProps) {
   const { t } = useTranslation();
   const { config } = useAppConfig();
+  const { data: familyGroups = [] } = useFamilyGroups();
+  const unlinkMutation = useUnlinkAccountFromFamily();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const familyGroup = familyGroups.find((g) => g.accountIds.includes(account.id));
+  const isFamilyOwner = familyGroup?.primaryAccountId === account.id;
 
   const isMasked = !!config?.mask_account_info;
   const displayName = maskName(account.name, isMasked, t('cloud.card.unknown', 'Unknown'));
@@ -154,6 +173,13 @@ export function DualCompactCloudAccountCard({
     >
       {/* Column 1: Account Identity & Badges (Ratio: 2) */}
       <div className="flex min-w-0 items-center gap-2.5">
+        {onToggleSelection && (
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={(checked) => onToggleSelection(account.id, Boolean(checked))}
+            className="shrink-0 cursor-pointer"
+          />
+        )}
         {account.avatar_url && !isMasked ? (
           <img
             src={account.avatar_url}
@@ -179,6 +205,29 @@ export function DualCompactCloudAccountCard({
             <span className="text-muted-foreground truncate text-[11px]">
               {displayEmail}
             </span>
+            {familyGroup && (
+              <span
+                className={cn(
+                  'rounded border px-1 text-[9px] font-semibold flex items-center gap-0.5 shrink-0',
+                  isFamilyOwner
+                    ? 'border-amber-500/30 bg-amber-500/15 text-amber-500'
+                    : 'border-blue-500/30 bg-blue-500/15 text-blue-400',
+                )}
+                title={familyGroup.name}
+              >
+                {isFamilyOwner ? (
+                  <>
+                    <Crown className="h-2.5 w-2.5" />
+                    {familyGroup.name} ({t('cloud.family.ownerBadge', 'Chủ gói')})
+                  </>
+                ) : (
+                  <>
+                    <Users className="h-2.5 w-2.5" />
+                    {familyGroup.name}
+                  </>
+                )}
+              </span>
+            )}
             <Badge
               variant={
                 account.status === 'rate_limited' || account.status === 'expired'
@@ -685,6 +734,28 @@ export function DualCompactCloudAccountCard({
               <Fingerprint className="mr-2 h-3.5 w-3.5 shrink-0 text-purple-400" />
               <span className="whitespace-nowrap">{t('cloud.card.identityProfile', 'Identity Profile')}</span>
             </DropdownMenuItem>
+            {onManageFamily && (
+              <DropdownMenuItem onClick={() => onManageFamily(account.id)} className="flex cursor-pointer items-center py-2 text-xs">
+                <Users className="mr-2 h-3.5 w-3.5 shrink-0 text-blue-400" />
+                <span className="whitespace-nowrap">
+                  {familyGroup
+                    ? t('cloud.family.manageFamilyGroup', 'Quản lý gia đình')
+                    : t('cloud.family.linkFamilyGroup', 'Gộp vào gia đình')}
+                </span>
+              </DropdownMenuItem>
+            )}
+            {familyGroup && (
+              <DropdownMenuItem
+                onClick={() => unlinkMutation.mutate(account.id)}
+                disabled={unlinkMutation.isPending}
+                className="text-amber-500 focus:text-amber-500 flex cursor-pointer items-center py-2 text-xs"
+              >
+                <UserMinus className="mr-2 h-3.5 w-3.5 shrink-0" />
+                <span className="whitespace-nowrap">
+                  {t('cloud.family.unlinkMember', 'Gỡ khỏi gia đình')}
+                </span>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => onDelete(account.id)}

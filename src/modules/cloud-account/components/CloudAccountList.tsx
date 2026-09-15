@@ -19,6 +19,10 @@ import {
   useImportCloudAccounts,
   useEmulationState,
 } from '@/modules/cloud-account/hooks/useCloudAccounts';
+import {
+  useFamilyGroups,
+  useUnlinkAccountFromFamily,
+} from '@/modules/cloud-account/hooks/useFamilyGroups';
 import { IdentityProfileDialog } from '@/modules/identity-profile/components/IdentityProfileDialog';
 import { CloudAccount } from '@/modules/cloud-account/types';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
@@ -50,6 +54,7 @@ import {
   saveQuotaWindowPreference,
 } from '@/modules/cloud-account/utils/quota-window-preference';
 import { EmulationManagementDialog } from '@/modules/cloud-account/components/EmulationManagementDialog';
+import { FamilyGroupDialog } from '@/modules/cloud-account/components/FamilyGroupDialog';
 
 export function CloudAccountList() {
   const { t } = useTranslation();
@@ -81,6 +86,8 @@ export function CloudAccountList() {
   const forcePollMutation = useForcePollCloudMonitor();
   const { data: oauthClients = [], isLoading: isOAuthClientsLoading } = useOAuthClients();
   const setActiveOAuthClientMutation = useSetActiveOAuthClient();
+  const { data: familyGroups = [] } = useFamilyGroups();
+  const unlinkFamilyMutation = useUnlinkAccountFromFamily();
 
   const { toast } = useToast();
   const lastLoadErrorToastAtRef = useRef<number>(0);
@@ -244,6 +251,57 @@ export function CloudAccountList() {
   // Batch Operations State
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isEmulationDialogOpen, setIsEmulationDialogOpen] = useState(false);
+  const [isFamilyDialogOpen, setIsFamilyDialogOpen] = useState(false);
+  const [familyDialogTargetGroupId, setFamilyDialogTargetGroupId] = useState<string | undefined>();
+  const [familyDialogInitialAccountIds, setFamilyDialogInitialAccountIds] = useState<string[]>([]);
+
+  const handleOpenFamilyDialog = (groupIdOrAccountId?: string) => {
+    if (groupIdOrAccountId) {
+      setFamilyDialogTargetGroupId(groupIdOrAccountId);
+      setFamilyDialogInitialAccountIds([groupIdOrAccountId]);
+    } else {
+      setFamilyDialogTargetGroupId(undefined);
+      setFamilyDialogInitialAccountIds(Array.from(selectedIds));
+    }
+    setIsFamilyDialogOpen(true);
+  };
+
+  const handleToggleFamilyGrouped = async () => {
+    if (config) {
+      const current = config.group_family_accounts_enabled !== false;
+      await saveConfig({
+        ...config,
+        group_family_accounts_enabled: !current,
+      });
+    }
+  };
+
+  const hasFamilyAccountSelected = useMemo(() => {
+    return Array.from(selectedIds).some((id) =>
+      familyGroups.some((group) => group.accountIds.includes(id)),
+    );
+  }, [selectedIds, familyGroups]);
+
+  const handleUnlinkSelectedAccounts = async () => {
+    const unlinkIds = Array.from(selectedIds).filter((id) =>
+      familyGroups.some((group) => group.accountIds.includes(id)),
+    );
+    if (unlinkIds.length === 0) return;
+    try {
+      for (const accountId of unlinkIds) {
+        await unlinkFamilyMutation.mutateAsync(accountId);
+      }
+      toast({
+        title: t('cloud.family.unlinkSuccess', 'Đã gỡ tài khoản khỏi nhóm gia đình'),
+      });
+      setSelectedIds(new Set());
+    } catch {
+      toast({
+        title: t('cloud.family.unlinkFailed', 'Gỡ tài khoản thất bại'),
+        variant: 'destructive',
+      });
+    }
+  };
 
   // Stealth shortcut: Ctrl+Shift+E toggles the emulation management dialog
   useEffect(() => {
@@ -873,6 +931,9 @@ export function CloudAccountList() {
         originFilter={originFilter}
         onOriginFilterChange={setOriginFilter}
         showEmulationUi={Boolean(config?.show_emulation_ui)}
+        isFamilyGrouped={config?.group_family_accounts_enabled !== false}
+        onToggleFamilyGrouped={handleToggleFamilyGrouped}
+        onOpenFamilyDialog={() => handleOpenFamilyDialog()}
       />
 
       <CloudAccountGrid
@@ -895,6 +956,7 @@ export function CloudAccountList() {
         onResetTierFilter={() => {
           resetTierFilter();
         }}
+        onManageFamily={handleOpenFamilyDialog}
       />
 
       <CloudAccountBatchActionBar
@@ -904,6 +966,19 @@ export function CloudAccountList() {
         }}
         onRefreshSelected={refreshSelectedAccounts}
         onDeleteSelected={deleteSelectedAccounts}
+        onLinkFamilySelected={() => {
+          handleOpenFamilyDialog();
+        }}
+        hasFamilyAccountSelected={hasFamilyAccountSelected}
+        onUnlinkFamilySelected={handleUnlinkSelectedAccounts}
+      />
+
+      <FamilyGroupDialog
+        open={isFamilyDialogOpen}
+        onOpenChange={setIsFamilyDialogOpen}
+        accounts={accounts || []}
+        targetGroupId={familyDialogTargetGroupId}
+        initialSelectedAccountIds={familyDialogInitialAccountIds}
       />
 
       <IdentityProfileDialog
