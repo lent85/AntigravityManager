@@ -528,6 +528,7 @@ const vi = {
       memberCount: '{{count}} tài khoản',
       sharedQuotaNotice: 'Dùng chung gói Google One',
       refreshQuota: 'Làm mới quota gia đình',
+      refreshShort: 'Làm mới',
       refreshAllTooltip: 'Làm mới quota cho cả gia đình',
       toggleGroupedView: 'Bật/tắt gộp tài khoản gia đình',
       viewNormal: 'Chế độ xem riêng lẻ',

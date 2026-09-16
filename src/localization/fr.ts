@@ -539,6 +539,7 @@ const fr = {
       memberCount: '{{count}} comptes',
       sharedQuotaNotice: 'Forfait Google One partagé',
       refreshQuota: 'Actualiser le quota familial',
+      refreshShort: 'Actualiser',
       refreshAllTooltip: 'Actualiser le quota pour toute la famille',
       toggleGroupedView: 'Basculer la vue groupe familial',
       viewNormal: 'Vue par compte individuel',

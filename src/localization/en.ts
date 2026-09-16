@@ -533,6 +533,7 @@ const en = {
       memberCount: '{{count}} accounts',
       sharedQuotaNotice: 'Shared Google One Plan',
       refreshQuota: 'Refresh Family Quota',
+      refreshShort: 'Refresh',
       refreshAllTooltip: 'Refresh quota for the whole family',
       toggleGroupedView: 'Toggle Google One Family view',
       viewNormal: 'Single Accounts View',

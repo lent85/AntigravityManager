@@ -377,12 +377,12 @@ export function FamilyCloudAccountCard({
   };
 
   // 1. DUAL COMPACT LAYOUT (Default & Most Popular)
-  // Renders a unified grid row with gridTemplateColumns: '2fr 3fr 1fr 1fr'
+  // Renders a unified grid row with gridTemplateColumns: '2fr 3fr 1fr auto'
   if (gridLayout === 'compact-dual') {
     return (
       <div
-        className="group bg-card hover:border-indigo-500/50 grid w-full items-center gap-3 rounded-lg border border-indigo-500/30 bg-gradient-to-r from-indigo-500/[0.03] via-card to-transparent px-3 py-2.5 transition-all duration-200"
-        style={{ gridTemplateColumns: '2fr 3fr 1fr 1fr' }}
+        className="group bg-card hover:border-indigo-500/50 grid w-full items-center gap-3 rounded-lg border border-indigo-500/30 bg-gradient-to-r from-indigo-500/[0.03] via-card to-transparent px-3 py-2.5 transition-all duration-200 overflow-hidden"
+        style={{ gridTemplateColumns: '2fr 3fr 1fr auto' }}
       >
         {/* Column 1: Account Identity & Members List (Ratio: 2) */}
         <div className="flex min-w-0 flex-col gap-1.5">
@@ -565,18 +565,18 @@ export function FamilyCloudAccountCard({
           </div>
         </div>
 
-        {/* Column 4: Family Actions (Ratio: 1) */}
-        <div className="flex min-w-0 items-center justify-end gap-1.5">
+        {/* Column 4: Family Actions */}
+        <div className="flex shrink-0 items-center justify-end gap-1.5 pl-1">
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 cursor-pointer px-2 text-[11px] font-medium gap-1 text-muted-foreground hover:text-foreground border border-border/40 hover:border-border"
+            className="h-7 cursor-pointer px-2 text-[11px] font-medium gap-1 text-muted-foreground hover:text-foreground border border-border/40 hover:border-border shrink-0"
             onClick={handleRefreshWholeGroup}
             disabled={isRefreshingGroup}
             title={t('cloud.family.refreshAllTooltip', 'Làm mới quota cho cả gia đình')}
           >
             <RefreshCw className={cn('h-3 w-3', isRefreshingGroup && 'animate-spin text-primary')} />
-            <span className="hidden sm:inline">{t('cloud.family.refreshQuota', 'Làm mới')}</span>
+            <span className="hidden sm:inline whitespace-nowrap">{t('cloud.family.refreshShort', 'Làm mới')}</span>
           </Button>
 
           <DropdownMenu open={groupMenuOpen} onOpenChange={setGroupMenuOpen}>
