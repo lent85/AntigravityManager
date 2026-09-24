@@ -12,7 +12,10 @@ param(
     [string]$InstallerPath,
     [switch]$SkipBuild,
     [switch]$SkipUninstall,
-    [switch]$NoLaunch
+    [switch]$NoLaunch,
+    [string]$Bump = 'patch',
+    [switch]$NoBump,
+    [string]$NewVersion
 )
 
 $ErrorActionPreference = 'Stop'
@@ -40,13 +43,21 @@ function Write-WarningLine {
 # Determine repository root
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
-# If workspace is inside a path with '#' (e.g. #external.customize), map and use virtual drive Y:
+# If workspace is inside a path with '#' (e.g. #external.customize), map parent directory to virtual drive Y:
+# (Mapping the parent ensures the repo folder is Y:\<repoName> rather than bare root Y:\, avoiding trailing slash & path split bugs in electron-packager)
 if ($repoRoot -notmatch '^[A-Za-z]:\\$' -and $repoRoot -like "*#*") {
-    if (-not (Get-PSDrive -Name Y -ErrorAction SilentlyContinue)) {
-        subst Y: "$repoRoot"
+    $parentDir = Split-Path -Parent $repoRoot
+    $repoLeaf = Split-Path -Leaf $repoRoot
+    if (Get-PSDrive -Name Y -ErrorAction SilentlyContinue) {
+        if (-not (Test-Path -LiteralPath "Y:\$repoLeaf")) {
+            subst Y: /d 2>$null
+            subst Y: "$parentDir"
+        }
+    } else {
+        subst Y: "$parentDir"
     }
-    Set-Location Y:
-    $repoRoot = "Y:"
+    Set-Location "Y:\$repoLeaf"
+    $repoRoot = "Y:\$repoLeaf"
 } else {
     Set-Location $repoRoot
 }
@@ -79,6 +90,30 @@ if ($runningProcesses) {
 if ($SkipBuild) {
     Write-Step "2/5" "Skipping packaging step (-SkipBuild specified)."
 } else {
+    # Automatic version increment for each install build
+    if (-not $NoBump) {
+        $packageJsonPath = Join-Path $repoRoot "package.json"
+        if (Test-Path -LiteralPath $packageJsonPath) {
+            $pkg = Get-Content -LiteralPath $packageJsonPath -Raw | ConvertFrom-Json
+            $oldVersion = $pkg.version
+
+            if ($NewVersion) {
+                Write-Step "2/5" "Setting release version to $NewVersion..."
+                & npm.cmd --no-git-tag-version version $NewVersion
+            } else {
+                Write-Step "2/5" "Bumping build version ($Bump) from $oldVersion..."
+                & npm.cmd --no-git-tag-version version $Bump
+            }
+
+            if ($LASTEXITCODE -eq 0) {
+                $pkgAfter = Get-Content -LiteralPath $packageJsonPath -Raw | ConvertFrom-Json
+                Write-Success "Bumped version: $oldVersion -> $($pkgAfter.version)"
+            } else {
+                Write-WarningLine "Version bump exited with code $LASTEXITCODE; proceeding with existing version $oldVersion."
+            }
+        }
+    }
+
     Write-Step "2/5" "Building official release package with electron-forge..."
 
     $hasWix = (Get-Command candle.exe -ErrorAction SilentlyContinue) -and (Get-Command light.exe -ErrorAction SilentlyContinue)
@@ -227,7 +262,7 @@ if ($installer.Extension -eq '.msi') {
     }
 } else {
     Write-Info "Executing Setup installer: $($installer.FullName)..."
-    $installProc = Start-Process -FilePath $installer.FullName -Wait -PassThru
+    $installProc = Start-Process -FilePath $installer.FullName -ArgumentList "-s" -Wait -PassThru
     if ($installProc.ExitCode -ne 0) {
         Write-Host "Setup installer exited with error code $($installProc.ExitCode)." -ForegroundColor Red
         exit $installProc.ExitCode
@@ -240,8 +275,9 @@ Write-Success "Installation completed successfully."
 # Verification & Launch
 # ------------------------------------------------------------------------------
 $candidatePaths = @(
-    "$env:LOCALAPPDATA\Programs\antigravity-manager\antigravity-manager.exe",
+    "$env:LOCALAPPDATA\antigravity_manager\antigravity-manager.exe",
     "$env:LOCALAPPDATA\antigravity-manager\antigravity-manager.exe",
+    "$env:LOCALAPPDATA\Programs\antigravity-manager\antigravity-manager.exe",
     "$env:ProgramFiles\Antigravity Manager\antigravity-manager.exe",
     "${env:ProgramFiles(x86)}\Antigravity Manager\antigravity-manager.exe"
 )

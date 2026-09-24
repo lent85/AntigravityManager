@@ -16,4 +16,5 @@ export const IPC_CHANNELS = {
   OPEN_EXTERNAL_URL: 'open-external-url',
   START_PERFORMANCE_RECORDING: 'start-performance-recording',
   STOP_PERFORMANCE_RECORDING: 'stop-performance-recording',
+  ACCOUNT_SYNC_STATUS: 'cloud-account:sync-status',
 };

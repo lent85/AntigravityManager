@@ -81,22 +81,16 @@ export function OpenCodeSyncCard({ baseUrl, models }: OpenCodeSyncCardProps) {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <ShieldCheck className="size-5" />
-              {t('proxy.open-code.title', 'OpenCode sync')}
+      <CardHeader className="py-2.5 px-4 border-b bg-muted/20">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="size-4 text-primary" />
+            <CardTitle className="text-sm font-semibold">
+              {t('proxy.open-code.title', 'OpenCode Sync')}
             </CardTitle>
-            <CardDescription>
-              {t(
-                'proxy.open-code.description',
-                'Sync the managed provider without rewriting comments or hand-maintained JSONC formatting.',
-              )}
-            </CardDescription>
           </div>
           <span
-            className={`rounded-full px-2 py-1 text-xs font-semibold ${
+            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
               isConfigured
                 ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
                 : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
@@ -110,20 +104,20 @@ export function OpenCodeSyncCard({ baseUrl, models }: OpenCodeSyncCardProps) {
           </span>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-3 text-xs sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-lg border p-3">
-            <div className="text-muted-foreground">
+      <CardContent className="p-3 sm:p-4 space-y-3">
+        <div className="grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-md border p-2">
+            <div className="text-[11px] text-muted-foreground">
               {t('proxy.open-code.config-path', 'Configuration')}
             </div>
-            <div className="mt-1 font-mono break-all">{status?.configPath ?? '—'}</div>
+            <div className="mt-0.5 font-mono text-xs break-all">{status?.configPath ?? '—'}</div>
           </div>
-          <div className="rounded-lg border p-3">
-            <div className="text-muted-foreground flex items-center gap-1">
-              <Terminal className="size-3.5" />
+          <div className="rounded-md border p-2">
+            <div className="text-[11px] text-muted-foreground flex items-center gap-1">
+              <Terminal className="size-3" />
               {t('proxy.open-code.runtime', 'OpenCode runtime')}
             </div>
-            <div className="mt-1 font-medium">
+            <div className="mt-0.5 font-medium text-xs">
               {status?.installed ? (
                 <>
                   {t('proxy.open-code.installed', 'Installed')}
@@ -134,90 +128,93 @@ export function OpenCodeSyncCard({ baseUrl, models }: OpenCodeSyncCardProps) {
               )}
             </div>
           </div>
-          <div className="rounded-lg border p-3">
-            <div className="text-muted-foreground">
+          <div className="rounded-md border p-2">
+            <div className="text-[11px] text-muted-foreground">
               {t('proxy.open-code.configured-models', 'Configured models')}
             </div>
-            <div className="mt-1 font-medium">{status?.models.length ?? 0}</div>
+            <div className="mt-0.5 font-medium text-xs">{status?.models.length ?? 0}</div>
           </div>
-          <div className="rounded-lg border p-3">
-            <div className="text-muted-foreground flex items-center gap-1">
-              <KeyRound className="size-3.5" />
+          <div className="rounded-md border p-2">
+            <div className="text-[11px] text-muted-foreground flex items-center gap-1">
+              <KeyRound className="size-3" />
               {t('proxy.open-code.credential', 'Dedicated credential')}
             </div>
-            <div className="mt-1 font-medium">
+            <div className="mt-0.5 font-medium text-xs">
               {status?.keyConfigured
-                ? t('proxy.open-code.key-stored', 'Stored in the OS credential vault')
-                : t('proxy.open-code.key-missing', 'Created on the next sync')}
+                ? t('proxy.open-code.key-stored', 'Stored in OS vault')
+                : t('proxy.open-code.key-missing', 'Created on next sync')}
             </div>
           </div>
         </div>
 
-        <p className="text-muted-foreground text-xs">
-          {t(
-            'proxy.open-code.backup-notice',
-            'Backups retain comments and formatting. The credential is replaced by an invalid placeholder and the current key is injected during restore.',
-          )}
-        </p>
-
         {status?.hasAuthPlugin ? (
-          <div className="flex gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-800 dark:text-amber-200">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <div className="flex gap-2.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
             <div>
-              <div className="text-sm font-semibold">
+              <div className="font-semibold">
                 {t('proxy.open-code.auth-plugin-warning-title', 'Legacy auth plugin detected')}
               </div>
-              <p className="mt-1 text-xs">
+              <p className="mt-0.5 text-[11px]">
                 {t(
                   'proxy.open-code.auth-plugin-warning-description',
-                  'opencode-antigravity-auth may conflict with the managed provider. Review the plugin before relying on this configuration.',
+                  'opencode-antigravity-auth may conflict with the managed provider.',
                 )}
               </p>
             </div>
           </div>
         ) : null}
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           <Button
+            size="sm"
+            className="h-8 text-xs"
             onClick={() => setIsSyncDialogOpen(true)}
             disabled={pendingAction !== null || !status}
           >
             <RefreshCw
-              className={`mr-2 size-4 ${pendingAction === 'sync' ? 'animate-spin' : ''}`}
+              className={`mr-1.5 size-3.5 ${pendingAction === 'sync' ? 'animate-spin' : ''}`}
             />
-            {t('proxy.open-code.sync', 'Configure and sync OpenCode')}
+            {t('proxy.open-code.sync', 'Sync OpenCode')}
           </Button>
           <Button
+            size="sm"
             variant="outline"
+            className="h-8 text-xs"
             onClick={() => setIsConfigViewerOpen(true)}
             disabled={!status?.exists || pendingAction !== null}
           >
-            <Eye className="mr-2 size-4" />
-            {t('proxy.open-code.view-config', 'View configuration')}
+            <Eye className="mr-1.5 size-3.5" />
+            {t('proxy.open-code.view-config', 'View Config')}
           </Button>
           <Button
+            size="sm"
             variant="outline"
+            className="h-8 text-xs"
             onClick={() => setIsRestoreDialogOpen(true)}
             disabled={!status?.hasBackup || pendingAction !== null}
           >
-            <RotateCcw className="mr-2 size-4" />
-            {t('proxy.open-code.restore', 'Restore backup')}
+            <RotateCcw className="mr-1.5 size-3.5" />
+            {t('proxy.open-code.restore', 'Restore Backup')}
           </Button>
           <Button
+            size="sm"
             variant="destructive"
+            className="h-8 text-xs"
             onClick={() => setIsClearDialogOpen(true)}
             disabled={!status?.exists || pendingAction !== null}
           >
-            <Trash2 className="mr-2 size-4" />
-            {t('proxy.open-code.clear', 'Clear managed configuration')}
+            <Trash2 className="mr-1.5 size-3.5" />
+            {t('proxy.open-code.clear', 'Clear Config')}
           </Button>
           <Button
+            size="sm"
             variant="outline"
+            className="h-8 text-xs"
             onClick={() => runAction('revoke', () => ipc.client.gateway.revokeOpenCodeKey())}
             disabled={!status?.keyConfigured || pendingAction !== null}
           >
-            <KeyRound className="mr-2 size-4" />
-            {t('proxy.open-code.revoke', 'Revoke dedicated key')}
+            <KeyRound className="mr-1.5 size-3.5" />
+            {t('proxy.open-code.revoke', 'Revoke Key')}
           </Button>
         </div>
       </CardContent>

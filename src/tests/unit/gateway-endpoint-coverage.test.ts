@@ -6,6 +6,7 @@ import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { DEFAULT_APP_CONFIG } from '@/modules/config/types';
+import { OPENAI_COMPATIBILITY_ROUTES } from '@/modules/proxy-gateway/server/modules/openai/openai-compatibility';
 import { getServerConfig, setServerConfig } from '@/server/server-config';
 
 /**
@@ -48,6 +49,11 @@ interface CensusEntry {
 }
 
 const CENSUS: readonly CensusEntry[] = [
+  // Public landing/status aliases (src/modules/proxy-gateway/server/modules/landing/landing.controller.ts)
+  { method: 'GET', routePath: '/', testFile: 'landing.controller.test.ts' },
+  { method: 'GET', routePath: '/docs', testFile: 'landing.controller.test.ts' },
+  { method: 'GET', routePath: '/portal', testFile: 'landing.controller.test.ts' },
+
   // Anthropic message batches (src/modules/proxy-gateway/server/modules/batch/anthropic-message-batches.controller.ts)
   {
     method: 'POST',
@@ -156,7 +162,27 @@ const CENSUS: readonly CensusEntry[] = [
 
   // OpenAI protocol entry controllers (src/modules/proxy-gateway/server/modules/openai/openai-*.controller.ts)
   { method: 'GET', routePath: '/v1/models', testFile: 'openai-retrieve-model.test.ts' },
+  {
+    method: 'GET',
+    routePath: '/v1/models/quote',
+    testFile: 'openai-gateway.controller.test.ts',
+  },
   { method: 'GET', routePath: '/v1/models/:model', testFile: 'openai-retrieve-model.test.ts' },
+  {
+    method: 'GET',
+    routePath: '/v1/gateway/quote',
+    testFile: 'openai-gateway.controller.test.ts',
+  },
+  {
+    method: 'GET',
+    routePath: '/v1/gateway/quota',
+    testFile: 'openai-gateway.controller.test.ts',
+  },
+  {
+    method: 'GET',
+    routePath: '/v1/dashboard/billing/usage',
+    testFile: 'openai-gateway.controller.test.ts',
+  },
   {
     method: 'POST',
     routePath: '/v1/chat/completions',
@@ -231,18 +257,9 @@ const CENSUS: readonly CensusEntry[] = [
 
 const EXPECTED_UNCOVERED_ROUTES: readonly string[] = [];
 
-const OPENAI_PROTOCOL_ROUTE_KEYS = [
-  'GET /v1/models',
-  'GET /v1/models/:model',
-  'POST /v1/chat/completions',
-  'GET /v1/chat/completions/:completionId',
-  'POST /v1/completions',
-  'POST /v1/responses',
-  'POST /v1/images/generations',
-  'POST /v1/images/edits',
-  'POST /v1/audio/transcriptions',
-  'POST /v1/audio/translations',
-] as const;
+const OPENAI_PROTOCOL_ROUTE_KEYS = OPENAI_COMPATIBILITY_ROUTES.map(
+  (route) => `${route.method} ${route.path}`,
+);
 
 const UNIT_TEST_DIR = path.join(process.cwd(), 'src/tests/unit');
 
@@ -406,6 +423,53 @@ describe('gateway endpoint coverage census', () => {
           },
         },
       ]);
+    } finally {
+      setServerConfig(previousServerConfig ?? DEFAULT_APP_CONFIG.proxy);
+    }
+  });
+
+  it('keeps client and administrative gateway credentials in separate trust zones', async () => {
+    if (!app) {
+      throw new Error('gateway application was not initialized');
+    }
+    previousServerConfig = getServerConfig();
+    setServerConfig({
+      ...DEFAULT_APP_CONFIG.proxy,
+      api_key: 'admin-test-key',
+      api_keys: [
+        {
+          id: 'client-key',
+          name: 'Client key',
+          key: 'client-test-key',
+          created_at: 1,
+          enabled: true,
+        },
+      ],
+    });
+
+    try {
+      const server = app.getHttpAdapter().getInstance();
+      const [clientQuote, clientQuota, adminQuota] = await Promise.all([
+        server.inject({
+          method: 'GET',
+          url: '/v1/gateway/quote',
+          headers: { authorization: 'Bearer client-test-key' },
+        }),
+        server.inject({
+          method: 'GET',
+          url: '/v1/gateway/quota',
+          headers: { authorization: 'Bearer client-test-key' },
+        }),
+        server.inject({
+          method: 'GET',
+          url: '/v1/gateway/quota',
+          headers: { authorization: 'Bearer admin-test-key' },
+        }),
+      ]);
+
+      expect(clientQuote.statusCode).toBe(200);
+      expect(clientQuota.statusCode).toBe(401);
+      expect(adminQuota.statusCode).toBe(200);
     } finally {
       setServerConfig(previousServerConfig ?? DEFAULT_APP_CONFIG.proxy);
     }

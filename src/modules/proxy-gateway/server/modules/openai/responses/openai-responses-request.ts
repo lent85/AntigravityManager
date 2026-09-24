@@ -108,6 +108,15 @@ const ResponsesToolOutputItemSchema = z.object({
   output: z.unknown().optional(),
 });
 
+// Responses output items may be replayed verbatim as input for a later turn.
+// Reasoning items are display/provider state rather than chat messages, so keep
+// them in durable history while deliberately omitting them from the chat mapping.
+const ResponsesReasoningItemSchema = z
+  .object({
+    type: z.literal('reasoning'),
+  })
+  .catchall(z.unknown());
+
 const ResponsesInputItemSchema = z.preprocess(
   (value) => {
     if (!isPlainObject(value)) {
@@ -126,13 +135,16 @@ const ResponsesInputItemSchema = z.preprocess(
     ResponsesWebSearchCallItemSchema,
     ResponsesCustomToolCallItemSchema,
     ResponsesToolOutputItemSchema,
+    ResponsesReasoningItemSchema,
   ]),
 );
 
 export type ResponsesInputItem = z.infer<typeof ResponsesInputItemSchema>;
-type ResponsesToolCallItem = Exclude<
+type ResponsesToolCallItem = Extract<
   ResponsesInputItem,
-  z.infer<typeof ResponsesMessageItemSchema> | z.infer<typeof ResponsesToolOutputItemSchema>
+  {
+    type: 'function_call' | 'local_shell_call' | 'web_search_call' | 'custom_tool_call';
+  }
 >;
 
 const JsonRecordSchema = z.record(z.string(), z.unknown());
@@ -190,7 +202,7 @@ const ResponsesRequestBodySchema = z
   })
   .passthrough();
 const ResponsesCompletedEventSchema = z.object({
-  type: z.literal('response.completed'),
+  type: z.enum(['response.completed', 'response.incomplete']),
   response: z.unknown().optional(),
 });
 const ResponsesContentStringSchema = z.object({
@@ -233,9 +245,24 @@ const ResponsesSessionResponseSchema = z
   .passthrough();
 
 function parseResponsesInputItems(input: unknown[]): ResponsesInputItem[] {
-  return input.flatMap((item) => {
+  return input.map((item, index) => {
     const parsed = parseResponsesInputItem(item);
-    return parsed ? [parsed] : [];
+    if (!parsed) {
+      const itemType =
+        typeof item === 'object' && item !== null && !Array.isArray(item)
+          ? Reflect.get(item, 'type')
+          : undefined;
+      throw new BadRequestException({
+        code: 'unsupported_input_item',
+        message:
+          typeof itemType === 'string' && itemType
+            ? `Unsupported Responses input item type '${itemType}' at input[${index}].`
+            : `Malformed Responses input item at input[${index}].`,
+        param: `input[${index}]`,
+        type: 'invalid_request_error',
+      });
+    }
+    return parsed;
   });
 }
 

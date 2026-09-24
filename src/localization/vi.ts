@@ -229,6 +229,11 @@ const vi = {
       auto_refresh_desc: 'Định kỳ cập nhật thông tin quota cho tất cả tài khoản',
       auto_sync: 'Tự động đồng bộ tài khoản hiện tại',
       auto_sync_desc: 'Định kỳ đồng bộ thông tin tài khoản đang hoạt động',
+      sync_delay_title: 'Độ trễ giữa các lần đồng bộ tài khoản',
+      sync_delay_desc:
+        'Chờ ngẫu nhiên giữa các tài khoản khi cập nhật. Nếu tổng thời gian một vòng vượt quá chu kỳ sync, vòng tiếp theo sẽ chạy ngay.',
+      sync_delay_min: 'Độ trễ tối thiểu',
+      sync_delay_max: 'Độ trễ tối đa',
       antigravity_executable: 'Tệp chạy Antigravity',
       antigravity_executable_desc:
         'Đường dẫn tùy chọn dùng để tìm dữ liệu portable mode và khởi chạy Antigravity.',
@@ -568,9 +573,11 @@ const vi = {
         randomModernMix: '🌈 Random Modern Mix (Ngẫu nhiên model mới & quota)',
       },
       randomizeQuota: 'Ngẫu nhiên mức quota',
-      randomizeQuotaDesc: 'Tạo ngẫu nhiên hạn mức quota 5h và 1 tuần cho tài khoản (đồng bộ theo từng nhóm Gemini và Claude).',
+      randomizeQuotaDesc:
+        'Tạo ngẫu nhiên hạn mức quota 5h và 1 tuần cho tài khoản (đồng bộ theo từng nhóm Gemini và Claude).',
       randomizeModels: 'Ngẫu nhiên mức quota',
-      randomizeModelsDesc: 'Tạo ngẫu nhiên hạn mức quota 5h và 1 tuần cho tài khoản (đồng bộ theo từng nhóm Gemini và Claude).',
+      randomizeModelsDesc:
+        'Tạo ngẫu nhiên hạn mức quota 5h và 1 tuần cho tài khoản (đồng bộ theo từng nhóm Gemini và Claude).',
       modelCount: '{{count}} model',
       quantity: 'Số lượng',
       quantityPresets: 'Mẫu có sẵn',
@@ -583,7 +590,8 @@ const vi = {
       clearBtn: 'Xóa tất cả',
       poolTitle: 'Danh Sách Tài Khoản Giả Lập',
       empty: 'Chưa có tài khoản giả lập nào. Hãy chọn kịch bản ở trên để tạo!',
-      safeNote: 'Cách ly Sandbox — Trạng thái IDE và cơ sở dữ liệu thật hoàn toàn không bị ảnh hưởng.',
+      safeNote:
+        'Cách ly Sandbox — Trạng thái IDE và cơ sở dữ liệu thật hoàn toàn không bị ảnh hưởng.',
       filterAll: 'Tất cả',
       filterReal: 'Thật',
       filterEmulated: 'Giả lập',
@@ -793,18 +801,147 @@ const vi = {
     },
   },
   proxy: {
-    title: 'API Proxy',
-    description: 'Quản lý local API proxy service.',
+    title: 'API Proxy & AI Gateway',
+    description: 'Quản lý dịch vụ API Proxy & AI Gateway cục bộ.',
     save: 'Lưu cài đặt',
     copy: 'Sao chép',
     copied: 'Đã sao chép!',
     regenerate: 'Tạo lại',
-    regenerateConfirm: {
-      title: 'Tạo lại API Key?',
+    regenerated: 'Đã tạo lại API Key mới',
+    error: 'Lỗi',
+    saving: 'Đang lưu...',
+    tabs: {
+      service: 'Dịch vụ & Tài khoản',
+      guides: 'Tài liệu & Prompts',
+      gateway: 'AI Gateway & Báo giá',
+      portal: 'Web Portal & Ngrok',
+    },
+    accounts: {
+      title: 'Danh sách & Lựa chọn Tài khoản',
+      description: 'Chọn những tài khoản đám mây nào được phép xử lý lưu lượng API Proxy.',
+      mode_all: 'Dùng tất cả tài khoản',
+      mode_custom: 'Chỉ tài khoản được chọn',
+      selected_count: 'Đã chọn {{selected}} / {{total}} tài khoản',
+      select_all: 'Chọn tất cả',
+      deselect_all: 'Bỏ chọn tất cả',
+      no_accounts:
+        'Chưa có tài khoản nào được liên kết. Vui lòng thêm tài khoản trong Cloud Accounts.',
+      all_enabled_notice:
+        'Tất cả tài khoản đang hoạt động sẽ được tự động gộp vào pool và luân chuyển theo chiến lược bên dưới.',
+    },
+    strategies: {
+      title: 'Chiến lược đảo & cân bằng tải tài khoản',
       description:
-        'API key hiện tại sẽ hết hiệu lực ngay lập tức. Các ứng dụng đang dùng key cũ sẽ ngừng hoạt động.',
-      cancel: 'Hủy',
-      confirm: 'Tạo lại',
+        'Lựa chọn cách phân bổ hoặc xoay vòng request giữa các tài khoản hợp lệ trong nhóm.',
+      select_label: 'Chiến lược định tuyến',
+      preferred_label: 'Tài khoản ưu tiên chính (Tùy chọn)',
+      no_preferred: 'Không (Theo chiến lược)',
+      round_robin: 'Vòng tròn tuần tự (Round Robin)',
+      round_robin_desc: 'Xoay vòng request đều và tuần tự qua tất cả các tài khoản hợp lệ.',
+      random: 'Phân phối ngẫu nhiên (Random)',
+      random_desc: 'Chọn ngẫu nhiên một tài khoản trong nhóm cho mỗi request.',
+      quota_priority: 'Ưu tiên Quota cao nhất',
+      quota_priority_desc:
+        'Tự động chuyển tiếp đến tài khoản có tỷ lệ quota còn lại cao nhất đối với model được yêu cầu.',
+      failover: 'Ưu tiên tuần tự (Failover)',
+      failover_desc:
+        'Dùng tài khoản chính đầu tiên, chỉ chuyển sang tài khoản kế tiếp khi bị giới hạn tốc độ hoặc hết quota.',
+      balance: 'Cân bằng phiên làm việc (Sticky Session)',
+      balance_desc: 'Duy trì kết nối tài khoản theo phiên hội thoại kèm fallback cân bằng.',
+      cache_first: 'Ưu tiên Prompt Cache',
+      cache_first_desc:
+        'Ưu tiên tái sử dụng bộ nhớ đệm prompt với thời gian chờ ngắn trước khi đổi tài khoản.',
+      performance_first: 'Tối ưu tốc độ phản hồi',
+      performance_first_desc: 'Tối ưu độ trễ với cơ chế chuyển tài khoản tức thì khi tải tăng cao.',
+    },
+    guides: {
+      ide_title: 'Cấu hình AI Client & IDE',
+      ide_desc:
+        'Sao chép cấu hình mẫu vào Cursor, VS Code (Cline / Roo Code / Continue) hoặc AI Client.',
+      target_model: 'Model AI mục tiêu:',
+      select_model: 'Chọn model AI...',
+      gemini_models: 'Google Gemini',
+      claude_models: 'Anthropic Claude',
+      other_models: 'Model khác',
+      curl_title: 'cURL (REST API)',
+      node_title: 'Node.js (OpenAI SDK)',
+      tab_ides: 'Clients & IDEs',
+      tab_sdks: 'SDKs & Mẫu Code',
+      tab_apis: 'Gateway REST APIs',
+      tab_caching: 'Context Caching',
+      tab_prompts: 'System Prompts',
+      caching_title: 'Cơ chế Gemini Context Caching (Tự động & Trong suốt)',
+      caching_desc:
+        'Hoàn toàn không cần cấu hình phía client. Gateway tự động khởi tạo và tái sử dụng cachedContents trên hạ tầng Gemini cho system prompt và tools.',
+      caching_how_it_works: 'Cơ chế hoạt động của Context Caching',
+      caching_step1_title: '1. Nhận diện tiền tố tĩnh',
+      caching_step1_desc:
+        'Đánh giá system instruction và tool schemas. Nếu nội dung tĩnh >= 8.192 ký tự, hệ thống kích hoạt cache.',
+      caching_step2_title: '2. Khởi tạo trên Upstream',
+      caching_step2_desc:
+        'Tạo resource cachedContents trên Vertex AI với TTL 1 giờ và lưu định danh vào bộ nhớ đệm LRU.',
+      caching_step3_title: '3. Tối ưu hóa Request',
+      caching_step3_desc:
+        'Request tiếp theo loại bỏ prompt/tools tĩnh, chỉ gửi mã cachedContent giúp giảm TTFT và tiết kiệm chi phí token.',
+      caching_step4_title: '4. Tự động phục hồi khi lỗi',
+      caching_step4_desc:
+        'Nếu cache hết hạn hoặc upstream trả về 404/400, Gateway tự động xóa key và retry ngay với toàn bộ payload gốc.',
+      caching_observability_title: 'Nhận biết Token Cache trong kết quả trả về',
+      caching_best_practices_title: 'Kinh nghiệm tối ưu tỷ lệ Cache Hit',
+      caching_env_title: 'Biến môi trường cấu hình nâng cao',
+      api_models_title: 'API Danh sách Model',
+      api_models_desc: 'Lấy toàn bộ danh sách các model AI đang chạy trên Gateway (chuẩn OpenAI).',
+      api_model_detail_title: 'API Chi tiết Model',
+      api_model_detail_desc: 'Truy vấn định danh OpenAI chuẩn của model chỉ định.',
+      api_quote_title: 'API Báo giá & Quota Model',
+      api_quote_desc: 'Trả về giá đã cấu hình và quota quan sát được khi có dữ liệu.',
+      api_quota_title: 'API Quota Pool Tài Khoản',
+      api_quota_desc: 'Chỉ dành cho quản trị viên để kiểm tra quota, tài khoản và bộ cân bằng tải.',
+      api_chat_title: 'API Chat Completions',
+      api_chat_desc:
+        'Endpoint chat completions chuẩn OpenAI hỗ trợ streaming và gọi tool (function calling).',
+      api_anthropic_title: 'API Tin Nhắn Anthropic',
+      api_anthropic_desc:
+        'Endpoint chuẩn native Anthropic messages; Gateway tự động chuyển đổi schema trong suốt.',
+      api_response_preview: 'Dữ liệu phản hồi mẫu',
+    },
+    pricing: {
+      title: 'Cấu hình giá Token & Báo giá Model',
+      description:
+        'Cấu hình đơn giá token cho các endpoint báo giá OpenAI Gateway và quản lý chi phí.',
+      save_button: 'Lưu bảng giá',
+      saved: 'Đã lưu cấu hình bảng giá thành công!',
+      api_explorer_title: 'Thử nghiệm API Báo giá & Quota Gateway',
+      api_explorer_desc:
+        'Sử dụng các endpoint chuẩn OpenAI & Gateway này để truy vấn khả năng model, đơn giá và quota thời gian thực.',
+    },
+    portal: {
+      title: 'Cổng Web Landing Portal công khai',
+      description:
+        'Cung cấp trang chủ Web Dashboard tương tác trực tiếp tại URL gốc của Gateway khi chia sẻ qua Ngrok, Cloudflare Tunnel hoặc LAN.',
+      enabled: 'Đã bật Portal',
+      disabled: 'Đã tắt Portal',
+      open_browser: 'Mở Web Portal',
+      custom_title: 'Tiêu đề Portal Header',
+      custom_desc: 'Mô tả / Phụ đề Portal',
+      tunnel_title: 'Mở rộng Gateway ra ngoài với Ngrok hoặc Cloudflare',
+      tunnel_desc:
+        'Chia sẻ AI Gateway với đồng đội hoặc ứng dụng bên ngoài an toàn thông qua công cụ tunnel.',
+    },
+    prompts: {
+      title: 'Thư viện AI System Prompts',
+      description:
+        'Các mẫu system prompt chuyên sâu tối ưu cho lập trình, thiết kế kiến trúc và gỡ lỗi.',
+      architect_title: 'Kiến trúc sư phần mềm cấp cao (Senior Architect)',
+      architect_desc: 'Tối ưu cho thiết kế hệ thống, type safety và phân tách tầng rõ ràng.',
+      debugger_title: 'Chuyên gia gỡ lỗi & Phân tích nguyên nhân gốc rễ',
+      debugger_desc:
+        'Truy vết luồng thực thi, phát hiện lỗi đồng thời (race condition) và rò rỉ tài nguyên.',
+      reviewer_title: 'Kiểm toán viên chất lượng & Bảo mật mã nguồn',
+      reviewer_desc:
+        'Đánh giá thay đổi mã theo tiêu chuẩn bảo mật, tương thích hợp đồng API và chất lượng.',
+      fullstack_title: 'Chuyên gia Full-Stack TypeScript',
+      fullstack_desc: 'Thành thạo React 19, TypeScript 5+, NestJS, Fastify và ứng dụng Electron.',
     },
     service: {
       title: 'Trạng thái dịch vụ',

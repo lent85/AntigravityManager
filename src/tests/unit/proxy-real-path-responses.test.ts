@@ -178,40 +178,39 @@ describe('real request path, Responses input compatibility', () => {
     expect(input).toEqual(before);
   });
 
-  it.each([false, true])('excludes ignored input from upstream with stream=%s', async (stream) => {
-    const upstream = createUpstream({
-      generate: geminiTextResponse('ok'),
-      streamFrames: [geminiStreamFrame(geminiTextResponse('ok'))],
-    });
-    const lease = createLease([createAccount('acc-1')]);
-    const controller = new OpenAIOperations(createGateway(upstream, lease).openAIService);
-    const reply = createReply();
-    const input = [
-      { type: '', role: 'user', content: 'Ignored empty-type text.' },
-      { type: 'message', role: 'user', content: { legacy: 'Ignored object text.' } },
-      { role: 'user', content: 'Keep only this.' },
-    ];
-    const before = structuredClone(input);
+  it.each([false, true])(
+    'rejects unsupported input before upstream with stream=%s',
+    async (stream) => {
+      const upstream = createUpstream({
+        generate: geminiTextResponse('ok'),
+        streamFrames: [geminiStreamFrame(geminiTextResponse('ok'))],
+      });
+      const lease = createLease([createAccount('acc-1')]);
+      const controller = new OpenAIOperations(createGateway(upstream, lease).openAIService);
+      const reply = createReply();
+      const input = [
+        { type: '', role: 'user', content: 'Ignored empty-type text.' },
+        { type: 'message', role: 'user', content: { legacy: 'Ignored object text.' } },
+        { role: 'user', content: 'Keep only this.' },
+      ];
+      const before = structuredClone(input);
 
-    await controller.responses(
-      { model: 'gemini-3-flash', input, stream, store: false },
-      reply as never,
-    );
-    if (stream) {
-      if (!(reply.body instanceof Observable)) {
-        throw new Error('Expected a Responses stream');
-      }
-      expect(await collect(reply.body)).toContain('"type":"response.completed"');
-    } else {
-      expect(reply.statusCode).toBe(200);
-    }
-
-    expect(upstream.calls).toHaveLength(1);
-    expect(upstream.calls[0]?.body.request.contents).toEqual([
-      { role: 'user', parts: [{ text: 'Keep only this.' }] },
-    ]);
-    expect(input).toEqual(before);
-  });
+      await controller.responses(
+        { model: 'gemini-3-flash', input, stream, store: false },
+        reply as never,
+      );
+      expect(reply.statusCode).toBe(400);
+      expect(reply.body).toMatchObject({
+        error: {
+          code: 'unsupported_input_item',
+          param: 'input[0]',
+          type: 'invalid_request_error',
+        },
+      });
+      expect(upstream.calls).toHaveLength(0);
+      expect(input).toEqual(before);
+    },
+  );
 
   it.each([false, true])(
     'preserves tool-result text and image through the real Responses path with stream=%s',
@@ -423,9 +422,9 @@ describe('real request path, Responses input compatibility', () => {
         { role: 'model', parts: [{ text: 'root answer' }] },
         { role: 'user', parts: [{ text: 'next request' }] },
       ]);
-      expect(upstream.calls[1]?.body.request.systemInstruction).toMatchObject({
-        parts: [{ text: expect.stringContaining('Stay concise.') }],
-      });
+      expect(JSON.stringify(upstream.calls[1]?.body.request.systemInstruction)).not.toContain(
+        'Stay concise.',
+      );
       expect(JSON.stringify(upstream.calls[1]?.body.request.tools)).toContain('lookup');
       expect(OpenAIResponsesSessionStore.get(transientResponseId)).toBeNull();
       expect(lease.getNextToken).toHaveBeenNthCalledWith(

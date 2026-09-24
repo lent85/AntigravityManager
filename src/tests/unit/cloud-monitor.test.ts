@@ -44,6 +44,7 @@ describe('CloudMonitorService', () => {
     vi.mocked(CloudAccountSettingsStore.getSetting).mockImplementation(
       (_key: string, defaultValue: unknown) => defaultValue,
     );
+    vi.mocked(AutoSwitchService.isAutoSwitchEnabledForTarget).mockReturnValue(true);
     CloudMonitorService.resetStateForTesting();
     vi.mocked(CloudAccountSettingsStore.readSetting).mockImplementation((key) =>
       CloudAccountSettingsStore.getSetting(key, undefined, z.unknown()),
@@ -57,7 +58,14 @@ describe('CloudMonitorService', () => {
   });
 
   it('should start polling on start() and set up interval', async () => {
-    vi.mocked(CloudAccountSettingsStore.getSetting).mockReturnValue(true as never);
+    vi.mocked(CloudAccountSettingsStore.getSetting).mockImplementation(
+      (key: string, defaultValue: unknown) => {
+        if (key === 'auto_switch_enabled') {
+          return true as never;
+        }
+        return defaultValue as never;
+      },
+    );
     const pollSpy = vi.spyOn(CloudMonitorService, 'poll').mockResolvedValue(undefined);
 
     CloudMonitorService.start();
@@ -518,8 +526,8 @@ describe('CloudMonitorService', () => {
     });
 
     it('should reset interval after successful focus poll', async () => {
-      const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
-      const setIntervalSpy = vi.spyOn(global, 'setInterval');
+      const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
 
       // Spy on poll to consume the start() call
       const pollSpy = vi.spyOn(CloudMonitorService, 'poll').mockResolvedValue(undefined);
@@ -535,9 +543,8 @@ describe('CloudMonitorService', () => {
       await vi.advanceTimersByTimeAsync(1000); // For poll sleep
       await focusPromise;
 
-      expect(clearIntervalSpy).toHaveBeenCalled();
-      // 1 for start (initial), 1 for reset = 2
-      expect(setIntervalSpy).toHaveBeenCalledTimes(2);
+      expect(clearTimeoutSpy).toHaveBeenCalled();
+      expect(setTimeoutSpy).toHaveBeenCalled();
     });
   });
 });
@@ -586,6 +593,7 @@ describe('CloudMonitorService AI credits alert', () => {
         if (key === 'ai_credits_alert_threshold') return threshold;
         if (key === 'quota_alert_enabled') return false;
         if (key === 'language') return 'en';
+        if (key === 'metrics_delay_min_seconds' || key === 'metrics_delay_max_seconds') return 0;
         return def;
       },
     );
@@ -690,6 +698,7 @@ describe('AccountLeaseService project-id hydration', () => {
 
     const service = new AccountLeaseService();
     const selectedToken = await service.getNextToken();
+    await new Promise((resolve) => setImmediate(resolve));
 
     expect(GoogleAPIService.fetchProjectId).toHaveBeenCalledWith('access-token');
     expect(CloudAccountRepo.updateToken).toHaveBeenCalledWith(
@@ -780,6 +789,7 @@ describe('AccountLeaseService project-id hydration', () => {
 
     const service = new AccountLeaseService();
     const selectedToken = await service.getNextToken();
+    await new Promise((resolve) => setImmediate(resolve));
 
     expect(GoogleAPIService.fetchProjectId).toHaveBeenCalledWith('access-token-4');
     expect(CloudAccountRepo.updateToken).toHaveBeenCalledWith(

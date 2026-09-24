@@ -31,9 +31,13 @@ import type { WeeklyWarmupConfig } from '@/modules/cloud-account/services/weekly
 import { syncLocalAccount } from '@/modules/cloud-account/actions/cloud';
 import { exportCloudAccounts, importCloudAccounts } from '@/modules/cloud-account/actions/cloud';
 import { startAuthFlow } from '@/modules/cloud-account/actions/cloud';
+import { useEffect, useState } from 'react';
 import {
   getMetricsPollInterval,
   setMetricsPollInterval,
+  getMetricsSyncDelayConfig,
+  setMetricsSyncDelayConfig,
+  getSyncingAccountId,
   getEmulationState,
   setEmulationEnabled,
   setEmulationTickInterval,
@@ -326,6 +330,54 @@ export function useSetMetricsPollInterval() {
       queryClient.invalidateQueries({ queryKey: ['gateway', 'modelAvailability'] });
     },
   });
+}
+
+export const METRICS_SYNC_DELAY_KEY = ['metricsSyncDelayConfig'];
+
+export function useMetricsSyncDelayConfig() {
+  return useQuery<{ minDelaySeconds: number; maxDelaySeconds: number }>({
+    queryKey: METRICS_SYNC_DELAY_KEY,
+    queryFn: getMetricsSyncDelayConfig,
+    staleTime: 60_000,
+  });
+}
+
+export function useSetMetricsSyncDelayConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: setMetricsSyncDelayConfig,
+    onSuccess: (newConfig) => {
+      queryClient.setQueryData(METRICS_SYNC_DELAY_KEY, newConfig);
+    },
+  });
+}
+
+export function useSyncingAccountId() {
+  const queryClient = useQueryClient();
+  const [syncingAccountId, setSyncingAccountId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Initial fetch
+    getSyncingAccountId()
+      .then((id) => setSyncingAccountId(id))
+      .catch(() => {});
+
+    // Listen to realtime IPC updates from main process
+    if (window.electron?.onAccountSyncStatus) {
+      const cleanup = window.electron.onAccountSyncStatus((status) => {
+        setSyncingAccountId((prev) => {
+          if (prev && !status.accountId) {
+            queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cloudAccounts });
+            queryClient.invalidateQueries({ queryKey: ['gateway', 'modelAvailability'] });
+          }
+          return status.accountId;
+        });
+      });
+      return cleanup;
+    }
+  }, [queryClient]);
+
+  return syncingAccountId;
 }
 
 export function useEmulationState(refetchInterval: number | false = false) {

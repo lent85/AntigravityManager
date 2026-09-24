@@ -345,10 +345,24 @@ export class AccountLeaseService implements OnModuleInit, OnModuleDestroy {
 
       this.rateLimitTracker.cleanupExpired();
 
+      const config = getServerConfig();
+      const accountSelectionMode = config?.account_selection_mode ?? 'all';
+      const selectedAccountIds = new Set(config?.selected_account_ids ?? []);
+
       const fullAccountPool = Array.from(this.tokens.entries()).filter(
-        ([, tokenData]) =>
-          tokenData.validation_blocked_until_ms === undefined ||
-          now >= tokenData.validation_blocked_until_ms,
+        ([accountId, tokenData]) => {
+          if (
+            accountSelectionMode === 'custom' &&
+            selectedAccountIds.size > 0 &&
+            !selectedAccountIds.has(accountId)
+          ) {
+            return false;
+          }
+          return (
+            tokenData.validation_blocked_until_ms === undefined ||
+            now >= tokenData.validation_blocked_until_ms
+          );
+        },
       );
       const modelCapableAccountPool = this.selectModelCapableAccounts(fullAccountPool, model);
       if (modelCapableAccountPool.length === 0) {
@@ -648,5 +662,77 @@ export class AccountLeaseService implements OnModuleInit, OnModuleDestroy {
 
   getModelThinkingBudgetForAccount(accountId: string, modelName: string): number | undefined {
     return this.modelPolicy.getModelThinkingBudgetForAccount(accountId, modelName);
+  }
+
+  getAggregatedModelQuotaSnapshot(): Record<
+    string,
+    {
+      available_percentage: number;
+      active_accounts: number;
+      rate_limited_accounts: number;
+      reset_time?: string;
+    }
+  > {
+    const result: Record<
+      string,
+      {
+        available_percentage: number;
+        active_accounts: number;
+        rate_limited_accounts: number;
+        reset_time?: string;
+      }
+    > = {};
+
+    const allModels = Array.from(this.getAllCollectedModels());
+    const tokens = Array.from(this.tokens.values());
+
+    for (const model of allModels) {
+      let totalPercentage = 0;
+      let count = 0;
+      let activeAccounts = 0;
+      let rateLimitedAccounts = 0;
+      let latestResetTime: string | undefined;
+
+      for (const token of tokens) {
+        const isLimited = this.isRateLimited(token.account_id, model);
+        if (isLimited) {
+          rateLimitedAccounts++;
+        } else {
+          activeAccounts++;
+        }
+
+        if (token.model_quotas?.[model] !== undefined) {
+          totalPercentage += token.model_quotas[model];
+          count++;
+        }
+        if (token.model_reset_times?.[model]) {
+          latestResetTime = token.model_reset_times[model];
+        }
+      }
+
+      const avgPercentage = count > 0 ? Math.round(totalPercentage / count) : 100;
+      result[model] = {
+        available_percentage: avgPercentage,
+        active_accounts: activeAccounts,
+        rate_limited_accounts: rateLimitedAccounts,
+        reset_time: latestResetTime,
+      };
+    }
+
+    return result;
+  }
+
+  getAllAccountsQuotaSummary(): Array<{
+    account_id: string;
+    email: string;
+    model_quotas: Record<string, number>;
+    is_rate_limited: boolean;
+  }> {
+    return Array.from(this.tokens.values()).map((token) => ({
+      account_id: token.account_id,
+      email: token.email,
+      model_quotas: token.model_quotas || {},
+      is_rate_limited: this.isRateLimited(token.account_id),
+    }));
   }
 }

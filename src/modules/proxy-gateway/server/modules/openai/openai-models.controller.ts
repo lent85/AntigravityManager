@@ -14,6 +14,11 @@ export class OpenAIModelsController {
     this.operations.listModels(res);
   }
 
+  @Get('quote')
+  public quoteModels(@Res() res: FastifyReply): void {
+    this.operations.listModelsQuote(res);
+  }
+
   @Get(':model')
   public retrieveModel(@Param('model') model: string, @Res() res: FastifyReply): void {
     this.operations.retrieveModel(model, res);

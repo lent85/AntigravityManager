@@ -22,7 +22,8 @@ import {
 import { logger } from '@/shared/logging/logger';
 import { normalizeTrustedGoogleValidationUrl } from '@/modules/cloud-account/utils/google-validation-url';
 
-import { shell } from 'electron';
+import { BrowserWindow, shell } from 'electron';
+import { IPC_CHANNELS } from '@/shared/constants';
 import fs from 'fs';
 import { isEmpty, isString } from 'lodash-es';
 import { updateTrayMenu } from '@/modules/app-shell/ipc/tray/handler';
@@ -87,6 +88,18 @@ function notifyTrayUpdate(account: CloudAccount) {
     updateTrayMenu(account, lang);
   } catch (error) {
     logger.warn('Failed to update tray after cloud account update', error);
+  }
+}
+
+export function broadcastAccountSyncStatus(accountId: string | null): void {
+  try {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(IPC_CHANNELS.ACCOUNT_SYNC_STATUS, { accountId });
+      }
+    }
+  } catch (error) {
+    logger.warn('Failed to broadcast account sync status', error);
   }
 }
 
@@ -648,7 +661,9 @@ export async function refreshAccountQuota(accountId: string): Promise<CloudAccou
     throw new Error(`Account not found: ${accountId}`);
   }
 
-  let now = Math.floor(Date.now() / 1000);
+  broadcastAccountSyncStatus(account.id);
+  try {
+    let now = Math.floor(Date.now() / 1000);
   if (account.token.expiry_timestamp < now + 300) {
     logger.info(`Token for ${account.email} near expiry, refreshing...`);
     try {
@@ -799,6 +814,9 @@ export async function refreshAccountQuota(accountId: string): Promise<CloudAccou
     logger.error(`Failed to refresh quota for ${account.email}`, error);
     throw error;
   }
+} finally {
+  broadcastAccountSyncStatus(null);
+}
 }
 
 export async function switchCloudAccount(
@@ -1264,10 +1282,9 @@ export async function setAutoSwitchEnabled(
   target?: AntigravityAppTarget,
 ): Promise<void> {
   CloudAccountSettingsStore.setAutoSwitchEnabledForTarget(target, enabled);
+  CloudMonitorService.syncSchedule();
   // Trigger an immediate check if enabled
   if (enabled) {
-    const { CloudMonitorService } =
-      await import('@/modules/cloud-account/services/CloudMonitorService');
     CloudMonitorService.poll().catch((error: unknown) =>
       logger.error('Failed to poll after enabling auto-switch', error),
     );
@@ -1488,6 +1505,31 @@ export function getMetricsPollInterval(): number {
 export function setMetricsPollInterval(minutes: number): number {
   CloudMonitorService.setPollIntervalMinutes(minutes);
   return CloudMonitorService.getPollIntervalMinutes();
+}
+
+export function getMetricsSyncDelayConfig(): { minDelaySeconds: number; maxDelaySeconds: number } {
+  return {
+    minDelaySeconds: CloudMonitorService.getDelayMinSeconds(),
+    maxDelaySeconds: CloudMonitorService.getDelayMaxSeconds(),
+  };
+}
+
+export function setMetricsSyncDelayConfig(input: {
+  minDelaySeconds: number;
+  maxDelaySeconds: number;
+}): { minDelaySeconds: number; maxDelaySeconds: number } {
+  const min = Math.max(0, input.minDelaySeconds);
+  const max = Math.max(min, input.maxDelaySeconds);
+  CloudMonitorService.setDelayMinSeconds(min);
+  CloudMonitorService.setDelayMaxSeconds(max);
+  return {
+    minDelaySeconds: min,
+    maxDelaySeconds: max,
+  };
+}
+
+export function getSyncingAccountId(): string | null {
+  return CloudMonitorService.getSyncingAccountId();
 }
 
 export function getEmulationState() {

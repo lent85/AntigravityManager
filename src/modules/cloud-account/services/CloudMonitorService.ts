@@ -1,4 +1,4 @@
-import { Notification } from 'electron';
+import { BrowserWindow, Notification } from 'electron';
 import { z } from 'zod';
 import { CloudAccountRepo } from '@/modules/cloud-account/persistence/cloudHandler';
 import { CloudAccountSettingsStore } from '@/modules/cloud-account/persistence/cloud-account-settings-store';
@@ -14,6 +14,7 @@ import {
 import { clearValidationHealthAfterSuccessfulProbe } from './CloudAccountHealthService';
 import { AutoSwitchService } from './AutoSwitchService';
 import { logger } from '@/shared/logging/logger';
+import { IPC_CHANNELS } from '@/shared/constants';
 import { classifyAccountStatusFromError } from '@/modules/cloud-account/utils/account-status';
 import type { CloudAccount } from '@/modules/cloud-account/types';
 import { AntigravityAppTargetSchema } from '@/shared/platform/antigravityAppTarget';
@@ -184,15 +185,28 @@ function mergeRefreshedToken(
 }
 
 export class CloudMonitorService {
-  private static intervalId: NodeJS.Timeout | null = null;
+  private static nextPollTimeout: NodeJS.Timeout | null = null;
+  private static get intervalId(): NodeJS.Timeout | null {
+    return this.nextPollTimeout;
+  }
+  private static set intervalId(val: NodeJS.Timeout | null) {
+    this.nextPollTimeout = val;
+  }
   static readonly DEFAULT_POLL_INTERVAL_MINUTES = 5;
   private static readonly POLL_INTERVAL_SETTING_KEY = 'metrics_poll_interval_minutes';
+  static readonly DEFAULT_DELAY_MIN_SECONDS = 30;
+  static readonly DEFAULT_DELAY_MAX_SECONDS = 45;
+  private static readonly DELAY_MIN_SETTING_KEY = 'metrics_delay_min_seconds';
+  private static readonly DELAY_MAX_SETTING_KEY = 'metrics_delay_max_seconds';
   private static DEBOUNCE_TIME = 10000; // 10 seconds
   private static lastFocusTime: number = 0;
   private static activePollPromise: Promise<void> | null = null;
   private static weeklyWarmupExecutor: WeeklyWarmupExecutor | null = null;
   private static stopped = false;
   private static stopEpoch = 0;
+  private static syncingAccountId: string | null = null;
+  private static syncStatusBroadcaster: ((accountId: string | null) => void) | null = null;
+  private static sleepCancelResolver: (() => void) | null = null;
 
   static getPollIntervalMinutes(): number {
     return CloudAccountSettingsStore.getSetting<number>(
@@ -205,12 +219,60 @@ export class CloudMonitorService {
   static setPollIntervalMinutes(minutes: number): void {
     const validMinutes = Math.max(0, minutes);
     CloudAccountSettingsStore.setSetting(this.POLL_INTERVAL_SETTING_KEY, validMinutes);
-    if (validMinutes === 0) {
-      this.stop();
+    this.syncSchedule();
+  }
+
+  static getDelayMinSeconds(): number {
+    return CloudAccountSettingsStore.getSetting<number>(
+      this.DELAY_MIN_SETTING_KEY,
+      this.DEFAULT_DELAY_MIN_SECONDS,
+      NumberSettingSchema,
+    );
+  }
+
+  static setDelayMinSeconds(seconds: number): void {
+    CloudAccountSettingsStore.setSetting(this.DELAY_MIN_SETTING_KEY, Math.max(0, seconds));
+  }
+
+  static getDelayMaxSeconds(): number {
+    return CloudAccountSettingsStore.getSetting<number>(
+      this.DELAY_MAX_SETTING_KEY,
+      this.DEFAULT_DELAY_MAX_SECONDS,
+      NumberSettingSchema,
+    );
+  }
+
+  static setDelayMaxSeconds(seconds: number): void {
+    CloudAccountSettingsStore.setSetting(this.DELAY_MAX_SETTING_KEY, Math.max(0, seconds));
+  }
+
+  static getSyncingAccountId(): string | null {
+    return this.syncingAccountId;
+  }
+
+  static setSyncStatusBroadcaster(broadcaster: ((accountId: string | null) => void) | null): void {
+    this.syncStatusBroadcaster = broadcaster;
+  }
+
+  private static setSyncingAccountId(accountId: string | null): void {
+    this.syncingAccountId = accountId;
+    if (this.syncStatusBroadcaster) {
+      try {
+        this.syncStatusBroadcaster(accountId);
+      } catch (err) {
+        logger.warn('Failed to broadcast sync status', err);
+      }
       return;
     }
-    if (this.intervalId) {
-      this.startInterval();
+
+    try {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send(IPC_CHANNELS.ACCOUNT_SYNC_STATUS, { accountId });
+        }
+      }
+    } catch (err) {
+      logger.warn('Failed to broadcast account sync status', err);
     }
   }
 
@@ -231,15 +293,19 @@ export class CloudMonitorService {
   }
 
   static isContinuousPollingEnabled(): boolean {
-    if (this.getPollIntervalMinutes() === 0) {
-      return false;
+    if (this.getPollIntervalMinutes() > 0) {
+      return true;
     }
     return this.isAutoSwitchEnabled() || WeeklyWarmupService.isEnabled();
   }
 
   static syncSchedule(): void {
     if (this.isContinuousPollingEnabled()) {
-      this.start();
+      if (!this.nextPollTimeout && !this.activePollPromise) {
+        this.start();
+      } else {
+        this.resetInterval();
+      }
       return;
     }
     this.stop();
@@ -251,31 +317,61 @@ export class CloudMonitorService {
     this.lastFocusTime = 0;
     this.activePollPromise = null;
     this.weeklyWarmupExecutor = null;
+    this.syncingAccountId = null;
+    this.syncStatusBroadcaster = null;
     this.stop();
   }
 
   static start() {
-    if (this.intervalId) return;
+    if (this.nextPollTimeout || this.activePollPromise) return;
+    this.stopped = false;
     logger.info('Starting CloudMonitorService...');
 
     // Set lastFocusTime to now to prevent "double-dip" on startup (focus event immediately after start)
     this.lastFocusTime = Date.now();
 
+    this.startInterval();
+
     // Initial Poll
     this.poll().catch((e) => logger.error('Initial poll failed', e));
-
-    this.startInterval();
   }
 
   static stop() {
     this.stopped = true;
     this.stopEpoch++;
     WeeklyWarmupService.cancel();
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-      logger.info('Stopped CloudMonitorService');
+    if (this.sleepCancelResolver) {
+      this.sleepCancelResolver();
+      this.sleepCancelResolver = null;
     }
+    if (this.nextPollTimeout) {
+      clearTimeout(this.nextPollTimeout);
+      this.nextPollTimeout = null;
+    }
+    this.setSyncingAccountId(null);
+    logger.info('Stopped CloudMonitorService');
+  }
+
+  private static abortableSleep(ms: number, epoch: number): Promise<void> {
+    if (ms <= 0 || this.stopped || epoch !== this.stopEpoch) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      let timer: NodeJS.Timeout | null = null;
+      const cleanup = () => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        if (this.sleepCancelResolver === onCancel) {
+          this.sleepCancelResolver = null;
+        }
+        resolve();
+      };
+      const onCancel = () => cleanup();
+      this.sleepCancelResolver = onCancel;
+      timer = setTimeout(cleanup, ms);
+    });
   }
 
   /**
@@ -308,31 +404,38 @@ export class CloudMonitorService {
     this.resetInterval();
   }
 
-  private static startInterval() {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
+  private static scheduleNextPoll(delayMs: number): void {
+    if (this.nextPollTimeout) {
+      clearTimeout(this.nextPollTimeout);
+      this.nextPollTimeout = null;
     }
-    const intervalMs = Math.max(1, this.getPollIntervalMinutes()) * 60 * 1000;
-    this.intervalId = setInterval(() => {
-      if (!this.isContinuousPollingEnabled()) {
-        this.stop();
+    if (this.stopped || !this.isContinuousPollingEnabled()) {
+      return;
+    }
+    this.nextPollTimeout = setTimeout(() => {
+      this.nextPollTimeout = null;
+      if (!this.isContinuousPollingEnabled() || this.stopped) {
         return;
       }
       this.poll().catch((e) => logger.error('Scheduled poll failed', e));
-    }, intervalMs);
+    }, Math.max(0, delayMs));
+  }
+
+  private static startInterval() {
+    const intervalMs = Math.max(1, this.getPollIntervalMinutes()) * 60 * 1000;
+    this.scheduleNextPoll(intervalMs);
   }
 
   private static resetInterval() {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.startInterval(); // Restart the 5-minute timer
-    }
+    const intervalMs = Math.max(1, this.getPollIntervalMinutes()) * 60 * 1000;
+    this.scheduleNextPoll(intervalMs);
   }
 
   static async poll(): Promise<void> {
     this.stopped = false;
-    if (this.isContinuousPollingEnabled() && !this.intervalId) {
-      this.startInterval();
+    if (this.nextPollTimeout) {
+      clearTimeout(this.nextPollTimeout);
+      this.nextPollTimeout = null;
     }
 
     if (this.activePollPromise) {
@@ -353,14 +456,18 @@ export class CloudMonitorService {
 
   private static async executePoll(): Promise<void> {
     const epoch = this.stopEpoch;
-    const refreshedAccounts: CloudAccount[] = [];
-    logger.info('CloudMonitor: Polling quotas...');
-    const accounts = await CloudAccountRepo.getAccounts();
-    const familyGroups = FamilyGroupStore.getFamilyGroups();
-    const polledFamilyGroupIds = new Set<string>();
-    let now = Math.floor(Date.now() / 1000);
+    const roundStartTime = Date.now();
+    const intervalMs = Math.max(1, this.getPollIntervalMinutes()) * 60 * 1000;
+    try {
+      const refreshedAccounts: CloudAccount[] = [];
+      logger.info('CloudMonitor: Polling quotas...');
+      const accounts = await CloudAccountRepo.getAccounts();
+      const familyGroups = FamilyGroupStore.getFamilyGroups();
+      const polledFamilyGroupIds = new Set<string>();
+      let now = Math.floor(Date.now() / 1000);
 
-    for (const account of accounts) {
+      for (let i = 0; i < accounts.length; i++) {
+        const account = accounts[i];
       if (this.stopped || epoch !== this.stopEpoch) {
         break;
       }
@@ -374,6 +481,7 @@ export class CloudMonitorService {
         continue;
       }
 
+      this.setSyncingAccountId(account.id);
       try {
         if (account.health?.oauth?.refresh_blocked) {
           continue;
@@ -557,6 +665,24 @@ export class CloudMonitorService {
             );
           }
         }
+      } finally {
+        this.setSyncingAccountId(null);
+      }
+
+      if (i < accounts.length - 1 && !this.stopped && epoch === this.stopEpoch) {
+        const rawMin = this.getDelayMinSeconds();
+        const rawMax = this.getDelayMaxSeconds();
+        const minSec = Math.max(0, Math.min(rawMin, rawMax));
+        const maxSec = Math.max(0, Math.max(rawMin, rawMax));
+        const delaySec =
+          minSec === maxSec
+            ? minSec
+            : Math.floor(Math.random() * (maxSec - minSec + 1)) + minSec;
+        const delayMs = delaySec * 1000;
+        logger.info(
+          `CloudMonitor: Waiting ${delaySec}s before updating next account (${i + 2}/${accounts.length})...`,
+        );
+        await this.abortableSleep(delayMs, epoch);
       }
     }
 
@@ -635,6 +761,26 @@ export class CloudMonitorService {
 
     if (epoch === this.stopEpoch) {
       await this.runWeeklyWarmups(refreshedAccounts);
+    }
+
+    } finally {
+      const roundDuration = Date.now() - roundStartTime;
+      logger.info(`CloudMonitor: Poll round completed in ${Math.round(roundDuration / 1000)}s`);
+
+      if (!this.stopped && epoch === this.stopEpoch && this.isContinuousPollingEnabled()) {
+        if (roundDuration >= intervalMs) {
+          logger.info(
+            `CloudMonitor: Round duration (${Math.round(roundDuration / 1000)}s) >= metrics sync interval (${Math.round(intervalMs / 1000)}s); starting next round immediately.`,
+          );
+          this.scheduleNextPoll(0);
+        } else {
+          const remainingWaitMs = intervalMs - roundDuration;
+          logger.info(
+            `CloudMonitor: Scheduling next round in ${Math.round(remainingWaitMs / 1000)}s (remaining interval).`,
+          );
+          this.scheduleNextPoll(remainingWaitMs);
+        }
+      }
     }
   }
 

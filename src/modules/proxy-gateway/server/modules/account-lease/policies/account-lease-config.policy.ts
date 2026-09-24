@@ -54,11 +54,20 @@ export class AccountLeaseConfigPolicy {
 
   private getSchedulingMode(): AccountLeaseSelectionMode {
     const config = getServerConfig();
-    const mode = (config?.scheduling_mode ?? 'balance').toLowerCase();
-    if (mode === 'cache-first' || mode === 'performance-first' || mode === 'balance') {
+    const mode = (config?.scheduling_mode ?? 'round-robin').toLowerCase() as AccountLeaseSelectionMode;
+    const validModes: AccountLeaseSelectionMode[] = [
+      'round-robin',
+      'random',
+      'quota-priority',
+      'failover',
+      'balance',
+      'cache-first',
+      'performance-first',
+    ];
+    if (validModes.includes(mode)) {
       return mode;
     }
-    return 'balance';
+    return 'round-robin';
   }
 
   private getMaxWaitDurationMs(): number {

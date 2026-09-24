@@ -17,6 +17,7 @@ import {
   QUERY_KEYS,
   useMetricsPollInterval,
   useSetMetricsPollInterval,
+  useSyncingAccountId,
 } from '@/modules/cloud-account/hooks/useCloudAccounts';
 import { isProcessRunning } from '@/modules/antigravity-runtime/actions/process';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -84,13 +85,15 @@ export const SidebarIndicators: React.FC<SidebarIndicatorsProps> = ({ isCollapse
   const isMutatingQuota = useIsMutating({ mutationKey: ['refreshAccountQuota'] });
   const isMutatingPoll = useIsMutating({ mutationKey: ['forcePollCloudMonitor'] });
   const isMutatingSync = useIsMutating({ mutationKey: ['syncLocalAccount'] });
+  const syncingAccountId = useSyncingAccountId();
 
   const isReloading =
     isFetchingAccounts > 0 ||
     isFetchingGateway > 0 ||
     isMutatingQuota > 0 ||
     isMutatingPoll > 0 ||
-    isMutatingSync > 0;
+    isMutatingSync > 0 ||
+    Boolean(syncingAccountId);
 
   const isConfigSaving = saveStatus === 'saving';
   const isConfigError = saveStatus === 'error';

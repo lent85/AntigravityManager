@@ -55,4 +55,14 @@ describe('Forge package ignore policy', () => {
     expect(shouldIgnorePackagePath('/test-results/report.json')).toBe(true);
     expect(shouldIgnorePackagePath('/src/main.ts')).toBe(true);
   });
+
+  it('handles relative paths and Windows backslashes without leading slash', () => {
+    expect(shouldIgnorePackagePath('.git')).toBe(true);
+    expect(shouldIgnorePackagePath('.git/HEAD')).toBe(true);
+    expect(shouldIgnorePackagePath('.git\\HEAD')).toBe(true);
+    expect(shouldIgnorePackagePath('src\\main.ts')).toBe(true);
+    expect(shouldIgnorePackagePath('node_modules\\lucide-react\\dist\\index.js')).toBe(true);
+    expect(shouldIgnorePackagePath('.vite\\build\\main.js')).toBe(false);
+    expect(shouldIgnorePackagePath('node_modules\\better-sqlite3\\package.json')).toBe(false);
+  });
 });

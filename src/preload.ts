@@ -19,6 +19,12 @@ const electronBridge = {
     ipcRenderer.on('GOOGLE_AUTH_CODE', handler);
     return () => ipcRenderer.off('GOOGLE_AUTH_CODE', handler);
   },
+  onAccountSyncStatus: (callback: (status: { accountId: string | null }) => void) => {
+    const handler = (_event: IpcRendererEvent, status: { accountId: string | null }) =>
+      callback(status);
+    ipcRenderer.on(IPC_CHANNELS.ACCOUNT_SYNC_STATUS, handler);
+    return () => ipcRenderer.off(IPC_CHANNELS.ACCOUNT_SYNC_STATUS, handler);
+  },
   changeLanguage: (lang: string) => {
     ipcRenderer.send(IPC_CHANNELS.CHANGE_LANGUAGE, lang);
   },

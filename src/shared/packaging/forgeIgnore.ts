@@ -15,7 +15,7 @@ const allowedRootPattern = PACKAGE_ALLOWED_ROOT_ENTRIES.map((entry) => escapeReg
   '|',
 );
 
-const PACKAGE_PRUNE_NODE_MODULES = [
+export const PACKAGE_PRUNE_NODE_MODULES = [
   '@apm-js-collab/code-transformer',
   '@esbuild/win32-x64',
   '@icons-pack/react-simple-icons',
@@ -71,19 +71,19 @@ const PACKAGE_PRUNE_NODE_MODULES = [
   'rollup',
 ] as const;
 
-const packagePruneNodeModulesPattern = new RegExp(
-  `^/node_modules/(?:${PACKAGE_PRUNE_NODE_MODULES.map((entry) => escapeRegExp(entry)).join('|')})(?:/|$)`,
+export const packagePruneNodeModulesPattern = new RegExp(
+  `^/?node_modules/(?:${PACKAGE_PRUNE_NODE_MODULES.map((entry) => escapeRegExp(entry)).join('|')})(?:/|$)`,
 );
 
 export const packageRootAllowlistIgnorePattern = new RegExp(
-  `^/(?!(${allowedRootPattern})(?:/|$))[^/]+(?:/|$)`,
+  `^/?(?!(${allowedRootPattern})(?:/|$))[^/]+(?:/|$)`,
 );
 
 export const packageIgnorePatterns = [
   packageRootAllowlistIgnorePattern,
-  /^\/node_modules\/\.cache(?:\/|$)/,
+  /^\/?node_modules\/\.cache(?:\/|$)/,
   // Source maps are uploaded to Sentry during build and should not ship in the app payload.
-  /^\/.*\.map$/,
+  /^\/?.*\.map$/,
   packagePruneNodeModulesPattern,
 ];
 
@@ -91,5 +91,7 @@ export function shouldIgnorePackagePath(packagePath: string) {
   const normalizedPath = packagePath.replace(/\\/g, '/');
   const rootedPath = normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`;
 
-  return packageIgnorePatterns.some((pattern) => pattern.test(rootedPath));
+  return packageIgnorePatterns.some(
+    (pattern) => pattern.test(rootedPath) || pattern.test(normalizedPath),
+  );
 }

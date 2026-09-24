@@ -5,11 +5,15 @@ import {
   Inject,
   Optional,
   Post,
+  Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { FastifyReply } from 'fastify';
-import { AnthropicChatRequest } from '@/modules/proxy-gateway/server/common/interfaces/request-interfaces';
+import { FastifyReply, FastifyRequest } from 'fastify';
+import {
+  AnthropicChatRequest,
+  AnthropicChatResponse,
+} from '@/modules/proxy-gateway/server/common/interfaces/request-interfaces';
 import { BaseProxyController } from '@/modules/proxy-gateway/server/common/base-proxy.controller';
 import { ProxyGuard } from '@/modules/proxy-gateway/server/guards/proxy.guard';
 import { FilesService } from '@/modules/proxy-gateway/server/modules/files/files.service';
@@ -17,6 +21,7 @@ import {
   expandFileReferences,
   FileReferenceError,
 } from '@/modules/proxy-gateway/server/modules/files/file-reference-expander';
+import { setResponseUsage } from '../../shared/services/request-usage-context';
 import { AnthropicService } from './anthropic.service';
 
 @Controller('v1')
@@ -45,15 +50,30 @@ export class AnthropicController extends BaseProxyController {
   }
 
   @Post('messages')
-  async anthropicMessages(@Body() body: AnthropicChatRequest, @Res() res: FastifyReply) {
+  async anthropicMessages(
+    @Body() body: AnthropicChatRequest,
+    @Res() res: FastifyReply,
+    @Req() req?: FastifyRequest,
+  ) {
     try {
       const request = await this.expandFileHandles(body);
       const result = await this.proxyService.handleAnthropicMessages(request);
 
       if (body.stream && this.isObservableLike(result)) {
-        this.writeSseResponse(res, result);
+        this.writeSseResponse(res, result, req, body.model);
         return;
       } else {
+        const response = result as AnthropicChatResponse;
+        if (req) {
+          setResponseUsage(req, {
+            protocol: 'anthropic',
+            model: response.model || body.model,
+            promptTokens: response.usage?.input_tokens,
+            completionTokens: response.usage?.output_tokens,
+            totalTokens:
+              (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0),
+          });
+        }
         res.status(HttpStatus.OK).send(result);
       }
     } catch (error) {

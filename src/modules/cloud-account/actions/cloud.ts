@@ -191,6 +191,21 @@ export function setMetricsPollInterval(input: { intervalMinutes: number }) {
   return ipc.client.cloud.setMetricsPollInterval(input);
 }
 
+export function getMetricsSyncDelayConfig() {
+  return ipc.client.cloud.getMetricsSyncDelayConfig();
+}
+
+export function setMetricsSyncDelayConfig(input: {
+  minDelaySeconds: number;
+  maxDelaySeconds: number;
+}) {
+  return ipc.client.cloud.setMetricsSyncDelayConfig(input);
+}
+
+export function getSyncingAccountId() {
+  return ipc.client.cloud.getSyncingAccountId();
+}
+
 export function getEmulationState() {
   return ipc.client.cloud.getEmulationState();
 }

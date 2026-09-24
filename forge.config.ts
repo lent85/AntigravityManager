@@ -22,7 +22,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { stringify as yamlStringify } from 'yaml';
 import { getArtifactFileName } from './src/shared/packaging/artifactNames';
-import { packageIgnorePatterns } from './src/shared/packaging/forgeIgnore';
+import {
+  PACKAGE_PRUNE_NODE_MODULES,
+  shouldIgnorePackagePath,
+} from './src/shared/packaging/forgeIgnore';
 import { normalizeSquirrelArtifacts } from './src/shared/packaging/squirrelArtifacts';
 import { shouldIncludeInElectronUpdaterMetadata } from './src/shared/packaging/updateMetadata';
 
@@ -149,7 +152,7 @@ const config: ForgeConfig = {
     icon: 'images/icon', // Electron Forge automatically adds .icns/.ico
     extraResource: ['src/assets'], // Copy assets folder to resources/assets
     afterCopy: packagerAfterCopy,
-    ignore: packageIgnorePatterns,
+    ignore: (packagePath: string) => shouldIgnorePackagePath(packagePath),
     prune: true,
   },
   rebuildConfig: {},
@@ -187,6 +190,18 @@ const config: ForgeConfig = {
       if (platform === 'win32') {
         copyModuleRecursive('koffi', true);
         copyModuleRecursive(`@koromix/koffi-${platform}-${arch}`, true);
+      }
+
+      // Clean up renderer-only and build-time packages from packaged node_modules
+      for (const moduleName of PACKAGE_PRUNE_NODE_MODULES) {
+        const targetModPath = path.join(nodeModulesPath, moduleName);
+        if (fs.existsSync(targetModPath)) {
+          try {
+            fs.rmSync(targetModPath, { recursive: true, force: true });
+          } catch (err) {
+            console.warn(`Failed to prune module ${moduleName}:`, err);
+          }
+        }
       }
 
       // Copy assets to resources folder

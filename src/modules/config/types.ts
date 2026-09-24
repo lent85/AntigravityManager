@@ -27,18 +27,46 @@ export const ModelAliasRouteSchema = z.object({
   enabled: z.boolean().default(true),
 });
 
+export const ModelPricingConfigSchema = z.object({
+  prompt_price_per_m: z.number().nonnegative().optional(),
+  completion_price_per_m: z.number().nonnegative().optional(),
+  request_price: z.number().nonnegative().optional(),
+});
+
+export const ProxyApiKeySchema = z.object({
+  id: z.string().trim().min(1),
+  name: z.string().trim().min(1),
+  key: z.string().trim().min(1),
+  created_at: z.number(),
+  last_used_at: z.number().nullable().optional(),
+  enabled: z.boolean().default(true),
+});
+
 export const ProxyConfigSchema = z.object({
   enabled: z.boolean(),
   port: z.number(),
   api_key: z.string(),
+  api_keys: z.array(ProxyApiKeySchema).default([]),
   auto_start: z.boolean(),
+  account_selection_mode: z.enum(['all', 'custom']).default('all'),
+  selected_account_ids: z.array(z.string()).default([]),
   backend_canary_enabled: z.boolean().default(true),
   parity_enabled: z.boolean().default(false),
   parity_shadow_enabled: z.boolean().default(false),
   parity_kill_switch: z.boolean().default(false),
   parity_no_go_mismatch_rate: z.number().default(0.15),
   parity_no_go_error_rate: z.number().default(0.4),
-  scheduling_mode: z.enum(['cache-first', 'balance', 'performance-first']).default('balance'),
+  scheduling_mode: z
+    .enum([
+      'round-robin',
+      'random',
+      'quota-priority',
+      'failover',
+      'balance',
+      'cache-first',
+      'performance-first',
+    ])
+    .default('round-robin'),
   max_wait_seconds: z.number().default(60),
   preferred_account_id: z.string().default(''),
   circuit_breaker_enabled: z.boolean().default(true),
@@ -50,6 +78,12 @@ export const ProxyConfigSchema = z.object({
   custom_mapping: z.record(z.string(), z.string()).default({}),
   anthropic_mapping: z.record(z.string(), z.string()), // Mapping table
   request_timeout: z.number().default(120), // Timeout in seconds
+  public_landing_enabled: z.boolean().default(true),
+  public_landing_title: z.string().default('Antigravity AI Gateway'),
+  public_landing_description: z
+    .string()
+    .default('High-performance OpenAI, Anthropic & Gemini unified proxy gateway'),
+  model_pricing: z.record(z.string(), ModelPricingConfigSchema).default({}),
   image_scheduler: ImageSchedulerConfigSchema.default({
     per_account_concurrency: 4,
   }),
@@ -67,6 +101,8 @@ export const AppConfigSchema = z.object({
   refresh_interval: z.number(), // minutes
   auto_sync: z.boolean(),
   sync_interval: z.number(), // minutes
+  metrics_delay_min_seconds: z.number().default(30), // seconds between account syncs
+  metrics_delay_max_seconds: z.number().default(45), // seconds between account syncs
   process_poll_interval: z.number().default(30), // seconds, 0 means manual only
   auto_startup: z.boolean(),
   start_in_tray: z.boolean().default(false),
@@ -97,6 +133,8 @@ export const AppConfigSchema = z.object({
   proxy: ProxyConfigSchema,
 });
 
+export type ProxyApiKey = z.infer<typeof ProxyApiKeySchema>;
+export type ModelPricingConfig = z.infer<typeof ModelPricingConfigSchema>;
 export type ModelAliasRoute = z.infer<typeof ModelAliasRouteSchema>;
 export type UpstreamProxyConfig = z.infer<typeof UpstreamProxyConfigSchema>;
 export type ProxyExperimentalConfig = z.infer<typeof ProxyExperimentalConfigSchema>;
@@ -110,6 +148,8 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   refresh_interval: 15,
   auto_sync: false,
   sync_interval: 5,
+  metrics_delay_min_seconds: 30,
+  metrics_delay_max_seconds: 45,
   process_poll_interval: 30,
   auto_startup: false,
   start_in_tray: false,
@@ -139,14 +179,17 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     enabled: false,
     port: 8045,
     api_key: '', // Generated dynamically if default needed
+    api_keys: [],
     auto_start: false,
+    account_selection_mode: 'all',
+    selected_account_ids: [],
     backend_canary_enabled: true,
     parity_enabled: false,
     parity_shadow_enabled: false,
     parity_kill_switch: false,
     parity_no_go_mismatch_rate: 0.15,
     parity_no_go_error_rate: 0.4,
-    scheduling_mode: 'balance',
+    scheduling_mode: 'round-robin',
     max_wait_seconds: 60,
     preferred_account_id: '',
     circuit_breaker_enabled: true,
@@ -156,6 +199,11 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     custom_mapping: {},
     anthropic_mapping: {},
     request_timeout: 120,
+    public_landing_enabled: true,
+    public_landing_title: 'Antigravity AI Gateway',
+    public_landing_description:
+      'High-performance OpenAI, Anthropic & Gemini unified proxy gateway',
+    model_pricing: {},
     image_scheduler: {
       per_account_concurrency: 4,
     },

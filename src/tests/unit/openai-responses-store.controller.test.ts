@@ -116,7 +116,7 @@ describe('OpenAIResponsesStoreController', () => {
     }
   });
 
-  it('does not create continuation state for an incomplete non-stream response', async () => {
+  it('retains an incomplete non-stream response for retrieval and continuation', async () => {
     const incomplete = chatResponse('resp_incomplete', 'truncated');
     incomplete.choices[0].finish_reason = 'length';
     const { chat, store } = createSurface(incomplete);
@@ -129,7 +129,14 @@ describe('OpenAIResponsesStoreController', () => {
 
     store.getResponse(responseId, retrieved as never);
 
-    expect(retrieved.status).toHaveBeenCalledWith(404);
+    expect(retrieved.status).toHaveBeenCalledWith(200);
+    expect(retrieved.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: responseId,
+        incomplete_details: { reason: 'max_output_tokens' },
+        status: 'incomplete',
+      }),
+    );
   });
 
   it('deletes a stored response once and reports it missing after that', async () => {

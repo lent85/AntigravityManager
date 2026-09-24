@@ -25,10 +25,15 @@ import {
   FileReferenceError,
 } from '@/modules/proxy-gateway/server/modules/files/file-reference-expander';
 import { OpenAIChatCompletionService } from '@/modules/proxy-gateway/server/modules/openai/chat/openai-chat-completion.service';
+import { OpenAIChatStreamCollector } from '@/modules/proxy-gateway/server/modules/openai/chat/openai-chat-stream-collector';
 import {
   OpenAIChatCompletionStore,
   type OpenAIChatCompletionStoreLike,
 } from '@/modules/proxy-gateway/server/modules/openai/chat/openai-chat-completion.store';
+import {
+  validateOpenAIChatRequest,
+  validateOpenAITextCompletionRequest,
+} from '@/modules/proxy-gateway/server/modules/openai/chat/openai-request-validation';
 import { OpenAIResponsesSessionService } from '@/modules/proxy-gateway/server/modules/openai/responses/openai-responses-session.service';
 import {
   OpenAIResponsesSessionStore,
@@ -56,6 +61,8 @@ import { parseImageMultipartRequest } from '@/modules/proxy-gateway/server/modul
 import { parseGenerationInputImages } from '@/modules/proxy-gateway/server/modules/openai/media/image-input-validation';
 import { safeStringifyPacket } from '@/shared/security/sensitiveDataMasking';
 import { BaseProxyController } from '@/modules/proxy-gateway/server/common/base-proxy.controller';
+import { setResponseUsage } from '../../shared/services/request-usage-context';
+import { proxyUsageStore } from '../../shared/services/proxy-usage.store';
 import { resolveOpenAIImageUrl } from './openai-image-url';
 import { OpenAIService, type OpenAIResponsesExecutionContext } from './openai.service';
 export type { ResponsesRequestBody } from './responses/openai-responses-request';
@@ -65,6 +72,7 @@ import {
   type ResponsesRequestBody,
   extractCompletedResponsesEvent,
   normalizeResponsesInputItems,
+  parseResponsesRequestBody,
   parseResponsesSessionResponse,
   resolveInlineData,
 } from './responses/openai-responses-request';
@@ -231,22 +239,113 @@ export class OpenAIOperations extends BaseProxyController {
     }
   }
 
-  async chatCompletions(body: OpenAIChatRequest, res: FastifyReply, req?: FastifyRequest) {
-    if (body.store === true && body.stream === true) {
-      res.status(HttpStatus.BAD_REQUEST).send({
+  /** Returns configured pricing and observed quota without inventing unknown model metadata. */
+  listModelsQuote(res: FastifyReply) {
+    try {
+      const config = getServerConfig();
+      const pricingMap = config?.model_pricing ?? {};
+      const quotaMap = this.accountLeaseService?.getAggregatedModelQuotaSnapshot() ?? {};
+      const modelIds = this.listOpenAICompatibleModelIds();
+
+      const data = modelIds.map((id) => {
+        const normalized = id.toLowerCase();
+        const pricing = pricingMap[id] ?? pricingMap[normalized];
+        const quota = quotaMap[id] ?? quotaMap[normalized];
+
+        return {
+          id,
+          object: 'model_quote',
+          created: MODEL_LIST_CREATED_AT,
+          owned_by: MODEL_LIST_OWNER,
+          ...(pricing ? { pricing } : {}),
+          ...(quota ? { quota } : {}),
+        };
+      });
+
+      res.status(HttpStatus.OK).send({
+        object: 'list',
+        data,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to quote models';
+      this.logger.error(message, error instanceof Error ? error.stack : undefined);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).send({
         error: {
-          code: 'unsupported_parameter',
-          message:
-            'store is not supported together with stream by this proxy: a streamed answer is ' +
-            'passed through chunk by chunk and no completion object is assembled to keep.',
-          param: 'store',
-          type: 'invalid_request_error',
+          message,
+          type: 'server_error',
         },
       });
+    }
+  }
+
+  /**
+   * Gateway Quota Summary returning quota state across models and connected accounts.
+   */
+  getGatewayQuotaSummary(res: FastifyReply) {
+    try {
+      const config = getServerConfig();
+      const modelsQuota = this.accountLeaseService?.getAggregatedModelQuotaSnapshot() ?? {};
+      const accountsSummary = this.accountLeaseService?.getAllAccountsQuotaSummary() ?? [];
+
+      res.status(HttpStatus.OK).send({
+        object: 'quota_summary',
+        timestamp: Date.now(),
+        scheduling_mode: config?.scheduling_mode ?? 'round-robin',
+        account_selection_mode: config?.account_selection_mode ?? 'all',
+        models: modelsQuota,
+        accounts: accountsSummary,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get quota summary';
+      this.logger.error(message, error instanceof Error ? error.stack : undefined);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).send({
+        error: {
+          message,
+          type: 'server_error',
+        },
+      });
+    }
+  }
+
+  /** Returns the gateway's local usage estimate; this is not an OpenAI billing endpoint. */
+  async getDashboardBillingUsage(res: FastifyReply): Promise<void> {
+    try {
+      const stats = await proxyUsageStore.getStats({ timeRange: '30d' });
+      res.status(HttpStatus.OK).send({
+        object: 'billing_usage',
+        currency: 'usd',
+        source: 'configured_model_pricing',
+        total_usage: stats.summary.estimatedCost,
+        daily_costs: stats.timeline.map((bucket) => ({
+          timestamp: bucket.timestamp,
+          date: bucket.time,
+          cost: bucket.cost,
+          requests: bucket.requests,
+          tokens: bucket.tokens,
+        })),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get billing usage';
+      this.logger.error(message, error instanceof Error ? error.stack : undefined);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).send({
+        error: {
+          message,
+          type: 'server_error',
+        },
+      });
+    }
+  }
+
+  async chatCompletions(body: OpenAIChatRequest, res: FastifyReply, req?: FastifyRequest) {
+    let validated: OpenAIChatRequest;
+    try {
+      validated = validateOpenAIChatRequest(body);
+    } catch (error) {
+      this.sendOpenAIErrorResponse(res, '/v1/chat/completions', error);
       return;
     }
 
-    await this.respondOpenAIChatCompletions(body, res, req);
+    await this.respondOpenAIChatCompletions(validated, res, req);
   }
 
   /**
@@ -276,30 +375,46 @@ export class OpenAIOperations extends BaseProxyController {
   }
 
   async completions(body: OpenAITextCompletionRequest, res: FastifyReply, req?: FastifyRequest) {
+    let validated: OpenAITextCompletionRequest;
+    try {
+      validated = validateOpenAITextCompletionRequest(body);
+    } catch (error) {
+      this.sendOpenAIErrorResponse(res, '/v1/completions', error);
+      return;
+    }
     const request: OpenAIChatRequest = {
-      model: body.model ?? 'gemini-3-flash',
+      model: validated.model ?? 'gemini-3-flash',
       messages: [
         {
           role: 'user',
-          content: this.normalizeCompletionPrompt(body.prompt),
+          content: this.normalizeCompletionPrompt(validated.prompt),
         },
       ],
-      max_tokens: body.max_tokens,
-      temperature: body.temperature,
-      top_p: body.top_p,
-      stream: body.stream,
+      max_tokens: validated.max_tokens,
+      temperature: validated.temperature,
+      top_p: validated.top_p,
+      stream: validated.stream,
     };
     const abortScope = this.createRequestAbortScope(req, res);
     try {
       const result = await (abortScope.signal
         ? this.proxyService.handleChatCompletions(request, 'chat-completions', abortScope.signal)
         : this.proxyService.handleChatCompletions(request));
-      if (body.stream && this.isObservableLike(result)) {
-        this.writeSseResponse(res, result);
+      if (validated.stream && this.isObservableLike(result)) {
+        this.writeSseResponse(res, result, req, request.model);
         return;
       }
 
       const response = result as OpenAIChatResponse;
+      if (req) {
+        setResponseUsage(req, {
+          protocol: 'openai',
+          model: response.model || request.model,
+          promptTokens: response.usage?.prompt_tokens,
+          completionTokens: response.usage?.completion_tokens,
+          totalTokens: response.usage?.total_tokens,
+        });
+      }
       res.status(HttpStatus.OK).send(this.toLegacyTextCompletionsResponse(response));
     } catch (error) {
       this.sendOpenAIErrorResponse(res, '/v1/completions', error);
@@ -309,9 +424,23 @@ export class OpenAIOperations extends BaseProxyController {
   }
 
   async responses(body: ResponsesRequestBody, res: FastifyReply, req?: FastifyRequest) {
+    const validated = parseResponsesRequestBody(body);
+    if (!validated) {
+      this.sendOpenAIErrorResponse(
+        res,
+        '/v1/responses',
+        new BadRequestException({
+          code: 'invalid_request_error',
+          message: 'Invalid Responses request body.',
+          param: null,
+          type: 'invalid_request_error',
+        }),
+      );
+      return;
+    }
     let expanded: ResponsesRequestBody;
     try {
-      expanded = await expandFileReferences(body, 'openai-responses', this.files);
+      expanded = await expandFileReferences(validated, 'openai-responses', this.files);
     } catch (error) {
       if (error instanceof FileReferenceError) {
         this.sendFileReferenceError(res, 'openai', error);
@@ -326,7 +455,7 @@ export class OpenAIOperations extends BaseProxyController {
       if (!prepared) {
         res
           .status(HttpStatus.NOT_FOUND)
-          .send(buildResponseNotFoundError(body.previous_response_id ?? ''));
+          .send(buildResponseNotFoundError(validated.previous_response_id ?? ''));
         return;
       }
 
@@ -343,8 +472,14 @@ export class OpenAIOperations extends BaseProxyController {
             undefined,
             this.toResponsesExecutionContext(prepared),
           ));
-      if (body.stream && this.isObservableLike(result)) {
-        this.writeSseResponse(res, this.cacheResponsesStream(result, prepared));
+      if (validated.stream && this.isObservableLike(result)) {
+        this.writeSseResponse(
+          res,
+          this.cacheResponsesStream(result, prepared),
+          req,
+          prepared.request.model,
+          'responses',
+        );
         return;
       }
 
@@ -357,6 +492,30 @@ export class OpenAIOperations extends BaseProxyController {
     } finally {
       abortScope.dispose();
     }
+  }
+
+  /** Executes the WebSocket transport through the same durable Responses path as HTTP SSE. */
+  public async createResponsesStream(
+    body: ResponsesRequestBody,
+  ): Promise<Observable<unknown> | null> {
+    const validated = parseResponsesRequestBody(body);
+    if (!validated) {
+      throw new BadRequestException('Invalid Responses WebSocket request body.');
+    }
+    const prepared = this.prepareResponsesRequest(validated);
+    if (!prepared) {
+      return null;
+    }
+    const result = await this.proxyService.handleChatCompletions(
+      prepared.request,
+      'responses',
+      undefined,
+      this.toResponsesExecutionContext(prepared),
+    );
+    if (!this.isObservableLike(result)) {
+      throw new Error('Responses WebSocket request did not produce a stream');
+    }
+    return this.cacheResponsesStream(result, prepared);
   }
 
   async imageGenerations(body: ImageMonitoringRequest, res: FastifyReply, req?: FastifyRequest) {
@@ -588,11 +747,22 @@ export class OpenAIOperations extends BaseProxyController {
         : this.proxyService.handleChatCompletions(request));
 
       if (body.stream && this.isObservableLike(result)) {
-        this.writeSseResponse(res, result);
+        const stream = body.store === true ? this.cacheChatCompletionStream(result) : result;
+        this.writeSseResponse(res, stream, req, body.model);
         return;
       } else {
+        const response = result as OpenAIChatResponse;
+        if (req) {
+          setResponseUsage(req, {
+            protocol: 'openai',
+            model: response.model || body.model,
+            promptTokens: response.usage?.prompt_tokens,
+            completionTokens: response.usage?.completion_tokens,
+            totalTokens: response.usage?.total_tokens,
+          });
+        }
         if (body.store === true) {
-          this.storedCompletions.save(result as OpenAIChatResponse);
+          this.storedCompletions.save(response);
         }
         res.status(HttpStatus.OK).send(result);
       }
@@ -615,6 +785,28 @@ export class OpenAIOperations extends BaseProxyController {
       return prompt.join('\n');
     }
     return prompt;
+  }
+
+  private cacheChatCompletionStream(stream: Observable<unknown>): Observable<unknown> {
+    return new Observable<unknown>((subscriber) => {
+      const collector = new OpenAIChatStreamCollector();
+      const subscription = stream.subscribe({
+        next: (chunk) => {
+          collector.accept(chunk);
+          subscriber.next(chunk);
+        },
+        error: (error: unknown) => subscriber.error(error),
+        complete: () => {
+          const response = collector.build();
+          if (response) {
+            this.storedCompletions.save(response);
+          }
+          subscriber.complete();
+        },
+      });
+
+      return () => subscription.unsubscribe();
+    });
   }
 
   private toLegacyTextCompletionsResponse(response: OpenAIChatResponse): Record<string, unknown> {
@@ -662,7 +854,7 @@ export class OpenAIOperations extends BaseProxyController {
       body.store !== false,
     );
     const model = body.model ?? previousSession?.session.model ?? 'gemini-3-flash';
-    const instructions = body.instructions ?? previousSession?.session.instructions;
+    const instructions = body.instructions;
     const tools = body.tools ?? previousSession?.session.tools;
     const responseId = `resp_${randomUUID()}`;
     const requestSessionId = body.previous_response_id ?? responseId;
@@ -719,7 +911,12 @@ export class OpenAIOperations extends BaseProxyController {
 
   private saveResponsesSession(response: unknown, prepared: PreparedResponsesRequest): void {
     const responseRecord = parseResponsesSessionResponse(response);
-    if (!responseRecord || (responseRecord.status && responseRecord.status !== 'completed')) {
+    if (
+      !responseRecord ||
+      (responseRecord.status &&
+        responseRecord.status !== 'completed' &&
+        responseRecord.status !== 'incomplete')
+    ) {
       return;
     }
     if (prepared.session.store === false) {

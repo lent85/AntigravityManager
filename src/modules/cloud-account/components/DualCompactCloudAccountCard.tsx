@@ -38,6 +38,7 @@ import type { CloudAccount } from '@/modules/cloud-account/types';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
 import { aggregateVisibleQuotaModelFamilies } from '@/modules/cloud-account/utils/quota-model-families';
 import { selectWeeklyQuotaItems } from '@/modules/cloud-account/utils/quota-groups';
+import { CardVerticalRefreshProgress } from '@/modules/cloud-account/components/CardVerticalRefreshProgress';
 import {
   formatAiCreditsAmount,
   formatResetTimeLabel,
@@ -168,9 +169,13 @@ export function DualCompactCloudAccountCard({
 
   return (
     <div
-      className="group bg-card hover:border-primary/40 grid w-full items-center gap-3 rounded-lg border px-3 py-2.5 transition-all duration-200"
+      className={cn(
+        "group bg-card hover:border-primary/40 grid w-full items-center gap-3 rounded-lg border px-3 py-2.5 transition-all duration-200 relative overflow-hidden",
+        isRefreshing && "border-blue-500/40 dark:border-blue-400/30"
+      )}
       style={{ gridTemplateColumns: '2fr 3fr 1fr 1fr' }}
     >
+      <CardVerticalRefreshProgress isRefreshing={isRefreshing} />
       {/* Column 1: Account Identity & Badges (Ratio: 2) */}
       <div className="flex min-w-0 items-center gap-2.5">
         {onToggleSelection && (

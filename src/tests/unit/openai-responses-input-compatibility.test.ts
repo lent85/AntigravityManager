@@ -130,20 +130,16 @@ describe('Responses input compatibility', () => {
     ]);
   });
 
-  it('ignores empty and unknown explicit types while retaining the default message role', () => {
-    expect(
+  it.each(['', 'unrecognized'])('rejects unsupported explicit item type %j', (type) => {
+    expect(() =>
       buildResponsesChatRequest({
-        input: [
-          { type: '', role: 'user', content: 'Not a message either.' },
-          { type: 'unrecognized', role: 'user', content: 'Not a message.' },
-          { type: 'message', role: null, content: 'Default role.' },
-        ],
-      }).messages,
-    ).toEqual([{ role: 'user', content: 'Default role.' }]);
+        input: [{ type, role: 'user', content: 'Unsupported item.' }],
+      }),
+    ).toThrow('Responses input item');
   });
 
   it.each(['user', 'assistant', 'system'])(
-    'ignores empty-type %s history without mutating the raw items',
+    'rejects empty-type %s history without mutating the raw items',
     (role) => {
       const history = [{ type: '', role, content: 'Ignored legacy text.' }];
       const before = structuredClone(history);
@@ -151,9 +147,7 @@ describe('Responses input compatibility', () => {
         { role: 'user', content: 'Continue.' },
       ]);
 
-      expect(buildResponsesChatRequest({ input }).messages).toEqual([
-        { role: 'user', content: 'Continue.' },
-      ]);
+      expect(() => buildResponsesChatRequest({ input })).toThrow('Responses input item');
       expect(history).toEqual(before);
     },
   );
@@ -177,12 +171,12 @@ describe('Responses input compatibility', () => {
     },
   );
 
-  it('retains the empty-user fallback when every input item is ignored', () => {
-    expect(
+  it('rejects an unsupported item instead of fabricating an empty-user fallback', () => {
+    expect(() =>
       buildResponsesChatRequest({
         input: [{ type: '', role: 'assistant', content: 'Ignored prefill.' }],
-      }).messages,
-    ).toEqual([{ role: 'user', content: '' }]);
+      }),
+    ).toThrow('Responses input item');
   });
 
   it('does not change object serialization for top-level input or tool output', () => {

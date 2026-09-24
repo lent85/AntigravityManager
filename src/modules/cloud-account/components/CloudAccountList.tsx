@@ -18,6 +18,7 @@ import {
   useExportCloudAccounts,
   useImportCloudAccounts,
   useEmulationState,
+  useSyncingAccountId,
 } from '@/modules/cloud-account/hooks/useCloudAccounts';
 import {
   useFamilyGroups,
@@ -60,6 +61,7 @@ export function CloudAccountList() {
   const { t } = useTranslation();
   const { data: warmupConfig } = useWeeklyWarmupConfig();
   const { data: emulationState } = useEmulationState(3000);
+  const backgroundSyncingAccountId = useSyncingAccountId();
   // Read local snapshots after background warmups; when emulation is enabled, poll faster (3s) to show live quota drain
   const {
     data: accounts,
@@ -823,7 +825,7 @@ export function CloudAccountList() {
     visibleAccountIds.length > 0 && visibleAccountIds.every((id) => selectedIds.has(id));
   const refreshingAccountId = refreshMutation.isPending
     ? refreshMutation.variables?.accountId
-    : undefined;
+    : (backgroundSyncingAccountId || undefined);
   const deletingAccountId = deleteMutation.isPending
     ? deleteMutation.variables?.accountId
     : undefined;

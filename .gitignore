@@ -126,3 +126,4 @@ accounts_backup.json
 
 # Bun lock file
 bun.lock
+.codanna/

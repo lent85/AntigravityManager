@@ -5,13 +5,13 @@ import { of } from 'rxjs';
 
 import { OpenAIResponsesWebSocketProtocol } from '@/modules/proxy-gateway/server/modules/openai/responses/openai-responses-websocket.protocol';
 import { attachOpenAIResponsesWebSocketServer } from '@/modules/proxy-gateway/server/modules/openai/responses/openai-responses-websocket.server';
-import { buildResponsesChatRequest } from '@/modules/proxy-gateway/server/modules/openai/responses/openai-responses-request';
 
 describe('OpenAIResponsesWebSocketProtocol', () => {
-  it('handles the initial generate=false request locally and reuses it for the next append', () => {
+  it('handles prewarm locally and reuses it through previous_response_id', () => {
     const protocol = new OpenAIResponsesWebSocketProtocol();
     const prewarm = protocol.accept({
       type: 'response.create',
+      stream_id: 'main',
       generate: false,
       model: 'gpt-5-codex',
       instructions: 'Work carefully',
@@ -26,7 +26,7 @@ describe('OpenAIResponsesWebSocketProtocol', () => {
       'response.created',
       'response.completed',
     ]);
-    expect(prewarm.events[0]).toMatchObject({ sequence_number: 0 });
+    expect(prewarm.events[0]).toMatchObject({ sequence_number: 0, stream_id: 'main' });
     expect(prewarm.events[1]).toMatchObject({
       sequence_number: 1,
       response: {
@@ -37,7 +37,9 @@ describe('OpenAIResponsesWebSocketProtocol', () => {
     });
 
     const next = protocol.accept({
-      type: 'response.append',
+      type: 'response.create',
+      stream_id: 'main',
+      previous_response_id: String((prewarm.events[1].response as { id: string }).id),
       input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Hello' }] }],
     });
     expect(next).toMatchObject({
@@ -47,66 +49,40 @@ describe('OpenAIResponsesWebSocketProtocol', () => {
         instructions: 'Work carefully',
         stream: true,
       },
+      streamId: 'main',
     });
   });
 
-  it('does not replace the transcript for an ignored empty-type assistant item', () => {
+  it('does not inherit a previous turn without previous_response_id', () => {
     const protocol = new OpenAIResponsesWebSocketProtocol();
-    const previousInput = [{ type: 'message', role: 'user', content: 'Keep this history.' }];
     protocol.accept({
       type: 'response.create',
       model: 'gpt-5-codex',
       instructions: 'Keep these instructions.',
-      input: previousInput,
+      input: [{ type: 'message', role: 'user', content: 'Old request.' }],
     });
-    const input = [
-      { type: '', role: 'assistant', content: 'Do not replace history.' },
-      { role: 'user', content: { legacy: 'Do not serialize.' } },
-      { role: 'user', content: 'Continue.' },
-    ];
-    const before = structuredClone(input);
 
-    const appended = protocol.accept({ type: 'response.append', input });
+    const next = protocol.accept({
+      type: 'response.create',
+      model: 'gpt-5-codex',
+      input: [{ type: 'message', role: 'user', content: 'New request.' }],
+    });
 
-    expect(appended).toEqual({
+    expect(next).toEqual({
       kind: 'request',
       request: {
         model: 'gpt-5-codex',
-        instructions: 'Keep these instructions.',
-        input: [...previousInput, ...input],
+        input: [{ type: 'message', role: 'user', content: 'New request.' }],
         stream: true,
       },
     });
-    if (appended.kind !== 'request') {
-      throw new Error('Expected a generation request');
-    }
-    expect(buildResponsesChatRequest({ input: appended.request.input }).messages).toEqual([
-      { role: 'user', content: 'Keep this history.' },
-      { role: 'user', content: '' },
-      { role: 'user', content: 'Continue.' },
-    ]);
-    expect(input).toEqual(before);
   });
 
-  it('replaces the transcript for a role-bearing assistant message without type', () => {
+  it('rejects the private response.append event', () => {
     const protocol = new OpenAIResponsesWebSocketProtocol();
-    protocol.accept({
-      type: 'response.create',
-      model: 'gpt-5-codex',
-      input: [{ type: 'message', role: 'user', content: 'Old request' }],
-    });
-
-    const replacement = protocol.accept({
-      type: 'response.append',
-      input: [{ role: 'assistant', content: 'Replacement transcript' }],
-    });
-
-    expect(replacement).toMatchObject({
-      kind: 'request',
-      request: {
-        input: [{ role: 'assistant', content: 'Replacement transcript' }],
-      },
-    });
+    expect(() => protocol.accept({ type: 'response.append', input: [] })).toThrow(
+      'Unsupported WebSocket request type',
+    );
   });
 });
 
@@ -133,6 +109,7 @@ describe('OpenAI Responses WebSocket transport', () => {
         socket.send(
           JSON.stringify({
             type: 'response.create',
+            stream_id: 'prewarm',
             generate: false,
             model: 'gpt-5-codex',
           }),
@@ -147,6 +124,7 @@ describe('OpenAI Responses WebSocket transport', () => {
     });
 
     expect(events.map((event) => event.type)).toEqual(['response.created', 'response.completed']);
+    expect(events.map((event) => event.stream_id)).toEqual(['prewarm', 'prewarm']);
 
     socket.close();
     detach();

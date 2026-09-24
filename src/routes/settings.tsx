@@ -24,6 +24,10 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { ModelVisibilitySettings } from '@/modules/config/components/ModelVisibilitySettings';
 import { AutoSwitchModelSettings } from '@/modules/cloud-account/components/AutoSwitchModelSettings';
 import { WeeklyWarmupSettings } from '@/modules/cloud-account/components/WeeklyWarmupSettings';
+import {
+  useMetricsSyncDelayConfig,
+  useSetMetricsSyncDelayConfig,
+} from '@/modules/cloud-account/hooks/useCloudAccounts';
 import { useEffect, useState } from 'react';
 import { ProxyConfig } from '@/modules/config/types';
 import {
@@ -88,6 +92,8 @@ function SettingsPage() {
   const [isDetectingAgy, setIsDetectingAgy] = useState(false);
   const [isPatchingAgy, setIsPatchingAgy] = useState(false);
   const clarityAvailable = isClarityAvailable();
+  const { data: syncDelayConfig } = useMetricsSyncDelayConfig();
+  const setSyncDelayMutation = useSetMetricsSyncDelayConfig();
 
   // Sync config to local state when loaded
   useEffect(() => {
@@ -495,6 +501,101 @@ function SettingsPage() {
                     }
                   }}
                 />
+              </div>
+
+              {/* Sync Delay Between Accounts */}
+              <div className="space-y-3 rounded-lg border p-4">
+                <div className="space-y-1">
+                  <Label>{t('settings.account.sync_delay_title', 'Delay Between Account Syncs')}</Label>
+                  <p className="text-xs text-gray-500">
+                    {t(
+                      'settings.account.sync_delay_desc',
+                      'Random pause between checking individual accounts. If total round time exceeds the sync interval, the next round starts immediately.',
+                    )}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-6">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="sync-delay-min" className="text-xs text-muted-foreground">
+                      {t('settings.account.sync_delay_min', 'Min delay')}:
+                    </Label>
+                    <CommitOnBlurNumberInput
+                      id="sync-delay-min"
+                      min={0}
+                      max={3600}
+                      value={syncDelayConfig?.minDelaySeconds ?? config?.metrics_delay_min_seconds ?? 30}
+                      onCommit={async (rawValue) => {
+                        const parsed = parseInt(rawValue, 10);
+                        if (isNaN(parsed) || parsed < 0) return;
+                        const currentMax = syncDelayConfig?.maxDelaySeconds ?? config?.metrics_delay_max_seconds ?? 45;
+                        const validMin = parsed;
+                        const validMax = Math.max(validMin, currentMax);
+
+                        if (config) {
+                          try {
+                            await saveConfig({
+                              ...config,
+                              metrics_delay_min_seconds: validMin,
+                              metrics_delay_max_seconds: validMax,
+                            });
+                            setSyncDelayMutation.mutate({
+                              minDelaySeconds: validMin,
+                              maxDelaySeconds: validMax,
+                            });
+                          } catch {
+                            toast({
+                              title: t('common.error'),
+                              description: t('settings.toast.saveFailed.title'),
+                              variant: 'destructive',
+                            });
+                          }
+                        }
+                      }}
+                      className="w-20 rounded-md border bg-transparent px-2 py-1 text-center text-sm"
+                    />
+                    <span className="text-muted-foreground text-xs">s</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="sync-delay-max" className="text-xs text-muted-foreground">
+                      {t('settings.account.sync_delay_max', 'Max delay')}:
+                    </Label>
+                    <CommitOnBlurNumberInput
+                      id="sync-delay-max"
+                      min={0}
+                      max={3600}
+                      value={syncDelayConfig?.maxDelaySeconds ?? config?.metrics_delay_max_seconds ?? 45}
+                      onCommit={async (rawValue) => {
+                        const parsed = parseInt(rawValue, 10);
+                        if (isNaN(parsed) || parsed < 0) return;
+                        const currentMin = syncDelayConfig?.minDelaySeconds ?? config?.metrics_delay_min_seconds ?? 30;
+                        const validMax = Math.max(currentMin, parsed);
+
+                        if (config) {
+                          try {
+                            await saveConfig({
+                              ...config,
+                              metrics_delay_min_seconds: currentMin,
+                              metrics_delay_max_seconds: validMax,
+                            });
+                            setSyncDelayMutation.mutate({
+                              minDelaySeconds: currentMin,
+                              maxDelaySeconds: validMax,
+                            });
+                          } catch {
+                            toast({
+                              title: t('common.error'),
+                              description: t('settings.toast.saveFailed.title'),
+                              variant: 'destructive',
+                            });
+                          }
+                        }
+                      }}
+                      className="w-20 rounded-md border bg-transparent px-2 py-1 text-center text-sm"
+                    />
+                    <span className="text-muted-foreground text-xs">s</span>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2 rounded-lg border p-4">

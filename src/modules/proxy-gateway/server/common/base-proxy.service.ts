@@ -21,6 +21,7 @@ import {
   hasExplicitQuotaExhaustedSignal,
   isGeminiImageModel,
 } from '@/modules/proxy-gateway/server/shared/services/rate-limit-tracker.service';
+import { recordAccountUsage } from '@/modules/proxy-gateway/server/shared/services/request-usage-context';
 import { UpstreamRequestError } from '@/modules/proxy-gateway/server/common/exceptions/upstream-request.exception';
 import {
   GeminiContent,
@@ -135,7 +136,21 @@ export abstract class BaseProxyService {
     imageRequest = false,
     signal?: AbortSignal,
   ): Promise<CloudAccount | null> {
-    return this.retryPolicy.selectRetryToken(retryState, model, sessionKey, imageRequest, signal);
+    const token = await this.retryPolicy.selectRetryToken(
+      retryState,
+      model,
+      sessionKey,
+      imageRequest,
+      signal,
+    );
+    if (token) {
+      recordAccountUsage({
+        id: token.id,
+        email: token.email,
+        name: token.name,
+      });
+    }
+    return token;
   }
 
   protected releaseImagePermit(retryState: ProxyTokenRetryState): void {

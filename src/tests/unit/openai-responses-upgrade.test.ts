@@ -111,12 +111,9 @@ describe('sessions written before reasoning format upgrade', () => {
     expect(JSON.parse(fs.readFileSync(filePath, 'utf8')).version).toBe(1);
     const legacy = restarted.get('resp_legacy_inputs');
     expect(JSON.stringify(legacy?.inputItems)).not.toContain('data:image/');
-    expect(
-      buildResponsesChatRequest({ model: legacy?.model, input: legacy?.inputItems }).messages,
-    ).toEqual([
-      { role: 'user', content: '' },
-      { role: 'user', content: '[historical image omitted]' },
-    ]);
+    expect(() =>
+      buildResponsesChatRequest({ model: legacy?.model, input: legacy?.inputItems }),
+    ).toThrow('Malformed Responses input item at input[0].');
     expect(JSON.stringify(restarted.get('resp_legacy_inputs')?.inputItems)).not.toContain(
       'data:image/',
     );

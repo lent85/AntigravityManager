@@ -18,6 +18,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/shared/ui/utils';
+import { CardVerticalRefreshProgress } from '@/modules/cloud-account/components/CardVerticalRefreshProgress';
 
 import {
   MoreVertical,
@@ -552,8 +553,12 @@ export function CloudAccountCard({
 
   return (
     <Card
-      className={`group bg-card hover:border-primary/30 border-border/80 @container relative flex h-full flex-col overflow-hidden rounded-xl border transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-4px_rgba(0,0,0,0.06),0_4px_12px_-2px_rgba(0,0,0,0.03)] ${isSelected ? 'ring-primary border-primary/50 ring-2' : ''}`}
+      className={cn(
+        `group bg-card hover:border-primary/30 border-border/80 @container relative flex h-full flex-col overflow-hidden rounded-xl border transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-4px_rgba(0,0,0,0.06),0_4px_12px_-2px_rgba(0,0,0,0.03)] ${isSelected ? 'ring-primary border-primary/50 ring-2' : ''}`,
+        isRefreshing && 'border-blue-500/40 dark:border-blue-400/30',
+      )}
     >
+      <CardVerticalRefreshProgress isRefreshing={isRefreshing} />
       <CardHeader className="relative flex flex-row items-start gap-2.5 space-y-0 p-4 pb-3">
         {onToggleSelection && (
           <div
@@ -1314,7 +1319,13 @@ export function CompactCloudAccountCard({
     (geminiWeeklyItems.length > 2 || geminiWeeklyItems.length + claudeWeeklyItems.length > 4);
 
   return (
-    <div className="group bg-card hover:border-primary/40 flex items-center gap-3 rounded-lg border px-3 py-2 transition-all duration-200">
+    <div
+      className={cn(
+        "group bg-card hover:border-primary/40 flex items-center gap-3 rounded-lg border px-3 py-2 transition-all duration-200 relative overflow-hidden",
+        isRefreshing && "border-blue-500/40 dark:border-blue-400/30"
+      )}
+    >
+      <CardVerticalRefreshProgress isRefreshing={isRefreshing} />
       {onToggleSelection && (
         <Checkbox
           checked={isSelected}

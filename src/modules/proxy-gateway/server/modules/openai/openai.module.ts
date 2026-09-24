@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { CloudMonitorService } from '@/modules/cloud-account/services/CloudMonitorService';
 import { ProxyGuard } from '../../guards/proxy.guard';
+import { AdminGuard } from '../../guards/admin.guard';
 import { FilesModule } from '../files/files.module';
 import { SharedServicesModule } from '../../shared/shared-services.module';
 import { AccountLeaseModule } from '../account-lease/account-lease.module';
@@ -10,6 +11,7 @@ import { IMAGE_QUOTA_REFRESH, OpenAIOperations } from './openai-operations.servi
 import { OpenAIChatController } from './openai-chat.controller';
 import { OpenAIMediaController } from './openai-media.controller';
 import { OpenAIModelsController } from './openai-models.controller';
+import { OpenAIGatewayController, OpenAIBillingController } from './openai-gateway.controller';
 import { OpenAIService } from './openai.service';
 import { OpenAIChatCompletionService } from './chat/openai-chat-completion.service';
 import { OpenAIResponsesSessionService } from './responses/openai-responses-session.service';
@@ -20,6 +22,8 @@ import { OpenAIResponsesController } from './responses/openai-responses.controll
   imports: [AccountLeaseModule, FilesModule, GeminiModule, SharedServicesModule],
   controllers: [
     OpenAIModelsController,
+    OpenAIGatewayController,
+    OpenAIBillingController,
     OpenAIChatController,
     OpenAIResponsesController,
     OpenAIResponsesStoreController,
@@ -30,6 +34,7 @@ import { OpenAIResponsesController } from './responses/openai-responses.controll
     OpenAIChatCompletionService,
     OpenAIResponsesSessionService,
     OpenAIService,
+    AdminGuard,
     ProxyGuard,
     {
       provide: IMAGE_QUOTA_REFRESH,

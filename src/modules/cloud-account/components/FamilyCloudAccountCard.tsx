@@ -36,6 +36,7 @@ import type { GridLayout } from '@/modules/cloud-account/components/CloudAccount
 import type { QuotaWindow } from '@/modules/cloud-account/utils/quota-groups';
 import { aggregateVisibleQuotaModelFamilies } from '@/modules/cloud-account/utils/quota-model-families';
 import { selectWeeklyQuotaItems } from '@/modules/cloud-account/utils/quota-groups';
+import { CardVerticalRefreshProgress } from '@/modules/cloud-account/components/CardVerticalRefreshProgress';
 import {
   formatAiCreditsAmount,
   formatResetTimeLabel,
@@ -171,11 +172,16 @@ export function FamilyCloudAccountCard({
   };
 
   // Render a member row inside the identity section
-  const renderIdentityMemberRow = (acc: CloudAccount, isCompactLayout = true) => {
+  const renderIdentityMemberRow = (
+    acc: CloudAccount,
+    isCompactLayout = true,
+    showTierBadge = true,
+  ) => {
     const isOwner = acc.id === familyGroup.primaryAccountId;
     const isSelected = selectedIds.has(acc.id);
     const isSwitching = switchingAccountId === acc.id;
     const isDeleting = deletingAccountId === acc.id;
+    const isMemberRefreshing = refreshingAccountId === acc.id;
     const accDisplayName = maskName(acc.name, isMasked, t('cloud.card.unknown', 'Unknown'));
     const accDisplayEmail = maskEmail(acc.email, isMasked);
     const accAvatarInitial = maskInitial(acc.name, acc.email, isMasked);
@@ -187,10 +193,12 @@ export function FamilyCloudAccountCard({
       <div
         key={acc.id}
         className={cn(
-          'flex items-center justify-between gap-1.5 rounded-md px-2 py-1 text-xs transition-colors border',
-          isActiveAnywhere
-            ? 'bg-primary/5 border-primary/20'
-            : 'border-transparent hover:bg-muted/40',
+          'flex items-center justify-between gap-1.5 rounded-md px-2 py-1 text-xs transition-colors border relative overflow-hidden',
+          isMemberRefreshing
+            ? 'bg-blue-500/10 border-blue-500/40 border-l-2 border-l-blue-500'
+            : isActiveAnywhere
+              ? 'bg-primary/5 border-primary/20'
+              : 'border-transparent hover:bg-muted/40',
           isSelected && 'bg-primary/10 border-primary/30',
         )}
       >
@@ -268,11 +276,13 @@ export function FamilyCloudAccountCard({
                 </Badge>
               )}
 
-              <AccountTierBadge
-                account={acc}
-                unknownLabel={t('cloud.tierFilter.unknown')}
-                className="h-3.5 max-w-20 px-1 text-[9px]"
-              />
+              {showTierBadge && (
+                <AccountTierBadge
+                  account={acc}
+                  unknownLabel={t('cloud.tierFilter.unknown')}
+                  className="h-3.5 max-w-20 px-1 text-[9px]"
+                />
+              )}
 
               {acc.is_active_classic && (
                 <span className="rounded border border-green-500/20 bg-green-500/10 px-1 text-[9px] font-bold text-green-600 dark:text-green-400 shrink-0">
@@ -377,22 +387,28 @@ export function FamilyCloudAccountCard({
   };
 
   // 1. DUAL COMPACT LAYOUT (Default & Most Popular)
-  // Renders a unified grid row with gridTemplateColumns: '2fr 3fr 1fr auto'
+  // Renders a unified grid row with gridTemplateColumns: '2fr 3fr auto'
   if (gridLayout === 'compact-dual') {
     return (
       <div
-        className="group bg-card hover:border-indigo-500/50 grid w-full items-center gap-3 rounded-lg border border-indigo-500/30 bg-gradient-to-r from-indigo-500/[0.03] via-card to-transparent px-3 py-2.5 transition-all duration-200 overflow-hidden"
-        style={{ gridTemplateColumns: '2fr 3fr 1fr auto' }}
+        className={cn(
+          "group bg-card hover:border-indigo-500/50 grid w-full items-center gap-3 rounded-lg border border-indigo-500/30 bg-gradient-to-r from-indigo-500/[0.03] via-card to-transparent px-3 py-2.5 transition-all duration-200 relative overflow-hidden",
+          isRefreshingGroup && "border-indigo-500/50"
+        )}
+        style={{ gridTemplateColumns: '2fr 3fr auto' }}
       >
+        <CardVerticalRefreshProgress isRefreshing={isRefreshingGroup} />
         {/* Column 1: Account Identity & Members List (Ratio: 2) */}
-        <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="flex min-w-0 flex-col gap-1.5 justify-center">
           {/* Family Group Header Badge */}
           <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground pb-0.5 border-b border-indigo-500/15">
             <Users className="h-3 w-3 text-indigo-500 shrink-0" />
             <span className="font-semibold text-foreground truncate">{familyGroup.name}</span>
-            <span className="rounded bg-indigo-500/10 px-1 py-0 text-[9px] font-medium text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
-              {t('cloud.family.sharedQuotaNotice', 'Dùng chung gói Google One')}
-            </span>
+            <AccountTierBadge
+              account={primaryAccount}
+              unknownLabel={t('cloud.tierFilter.unknown')}
+              className="h-3.5 max-w-28 px-1 text-[9px] shrink-0"
+            />
             {shouldShowAiCredits && aiCredits && (
               <span className="text-blue-500 text-[10px] shrink-0 font-medium">
                 · {formatAiCreditsAmount(aiCredits.credits)} AI Credits
@@ -402,170 +418,170 @@ export function FamilyCloudAccountCard({
 
           {/* List of Member Accounts (Owner 👑 first, then members) */}
           <div className="flex flex-col gap-1">
-            {sortedAccounts.map((acc) => renderIdentityMemberRow(acc, true))}
+            {sortedAccounts.map((acc) => renderIdentityMemberRow(acc, true, false))}
           </div>
         </div>
 
-        {/* Column 2: 5-Hour Window Quota Block (Ratio: 3) */}
-        <div className="bg-muted/30 flex min-w-0 flex-col justify-center rounded-md border border-border/50 px-2.5 py-1.5 gap-1.5 self-stretch">
-          <div className="flex items-center justify-between gap-2 border-b border-border/30 pb-1">
-            <div className="flex items-center gap-1">
-              <Clock3 className="text-muted-foreground h-3 w-3" />
-              <span className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">
-                {t('cloud.quota-window.five-hours-short', '5h')}
-              </span>
-              <span className="text-[9px] font-medium text-indigo-500">
-                ({t('cloud.family.sharedQuotaNotice', 'Google One Share')})
-              </span>
-            </div>
-            {earliest5hResetTime ? (
-              <span
-                className="text-muted-foreground text-[10px] font-mono"
-                title={formatResetTimeTitle(earliest5hResetTime, t('cloud.card.resetTime'))}
-              >
-                {formatResetTimeLabel(earliest5hResetTime, {
-                  prefix: '⏳',
-                  unknown: '',
-                })}
-              </span>
-            ) : (
-              <span className="text-muted-foreground/60 text-[9px]">
-                {compactModels.length > 0 ? '100%' : '—'}
-              </span>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-1.5 pt-0.5 justify-center flex-1">
-            {gemini5hModels.length > 0 && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-muted-foreground/70 text-[9px] font-bold uppercase tracking-wide shrink-0 w-11">
-                  Gemini
-                </span>
-                <div className="flex flex-wrap items-center gap-1 flex-1">
-                  {gemini5hModels.map(([modelName, info]) => (
-                    <QuotaIndicatorTooltip
-                      key={modelName}
-                      name={modelName}
-                      percentage={info.percentage}
-                      periodType="5h"
-                      resetTime={info.resetTime}
-                      barWidth="w-7 sm:w-8"
-                      barHeight="h-1.5"
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {claude5hModels.length > 0 && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-muted-foreground/70 text-[9px] font-bold uppercase tracking-wide shrink-0 w-11">
-                  Claude
-                </span>
-                <div className="flex flex-wrap items-center gap-1 flex-1">
-                  {claude5hModels.map(([modelName, info]) => (
-                    <QuotaIndicatorTooltip
-                      key={modelName}
-                      name={modelName}
-                      percentage={info.percentage}
-                      periodType="5h"
-                      resetTime={info.resetTime}
-                      barWidth="w-7 sm:w-8"
-                      barHeight="h-1.5"
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {compactModels.length === 0 && (
-              <div className="text-muted-foreground/60 text-[10px] italic">
-                {t('cloud.quota-window.no-5h-quota', 'No 5h quota data')}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Column 3: Weekly Window Quota Block (Ratio: 1) */}
-        <div className="bg-muted/30 flex min-w-0 flex-col justify-center rounded-md border border-border/50 px-2 py-1.5 gap-1.5 self-stretch">
-          <div className="flex items-center justify-between gap-1 border-b border-border/30 pb-1">
-            <div className="flex items-center gap-1">
-              <CalendarDays className="text-muted-foreground h-3 w-3" />
-              <span className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">
-                {t('cloud.quota-window.weekly-short', 'Week')}
-              </span>
-            </div>
-            {earliestWeeklyResetTime ? (
-              <span
-                className="text-muted-foreground text-[9px] font-mono truncate"
-                title={formatResetTimeTitle(earliestWeeklyResetTime, t('cloud.card.resetTime'))}
-              >
-                {formatResetTimeLabel(earliestWeeklyResetTime, {
-                  prefix: '⏳',
-                  unknown: '',
-                })}
-              </span>
-            ) : (
-              <span className="text-muted-foreground/60 text-[9px]">
-                {weeklyQuotaItems.length > 0 ? '100%' : '—'}
-              </span>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-1.5 pt-0.5 justify-center flex-1">
-            {geminiWeeklyItems.length > 0 && (
+        {/* Column 2: Stacked Quota Block (5H on top, Weekly on bottom) (Ratio: 3) */}
+        <div className="bg-muted/30 flex min-w-0 flex-col justify-between rounded-md border border-border/50 px-2.5 py-1.5 gap-2 self-stretch">
+          {/* Top Half: 5-Hour Window Quota */}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between gap-2 border-b border-border/30 pb-0.5">
               <div className="flex items-center gap-1">
-                <span className="text-muted-foreground/70 text-[9px] font-bold uppercase tracking-wide shrink-0 w-10">
-                  Gemini
+                <Clock3 className="text-muted-foreground h-3 w-3" />
+                <span className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">
+                  {t('cloud.quota-window.five-hours-short', '5h')}
                 </span>
-                <div className="flex flex-wrap items-center gap-1 flex-1">
-                  {geminiWeeklyItems.map((item) => (
-                    <QuotaIndicatorTooltip
-                      key={item.id}
-                      name={item.groupName || item.bucketLabel}
-                      displayName={`${item.groupName}: ${item.bucketLabel}`}
-                      percentage={item.percentage}
-                      periodType="weekly"
-                      resetTime={item.resetTime}
-                      barWidth="w-6 sm:w-7"
-                      barHeight="h-1.5"
-                    />
-                  ))}
-                </div>
               </div>
-            )}
+              {earliest5hResetTime ? (
+                <span
+                  className="text-muted-foreground text-[10px] font-mono"
+                  title={formatResetTimeTitle(earliest5hResetTime, t('cloud.card.resetTime'))}
+                >
+                  {formatResetTimeLabel(earliest5hResetTime, {
+                    prefix: '⏳',
+                    unknown: '',
+                  })}
+                </span>
+              ) : (
+                <span className="text-muted-foreground/60 text-[9px]">
+                  {compactModels.length > 0 ? '100%' : '—'}
+                </span>
+              )}
+            </div>
 
-            {claudeWeeklyItems.length > 0 && (
+            <div className="flex flex-col gap-1 pt-0.5 justify-center">
+              {gemini5hModels.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground/70 text-[9px] font-bold uppercase tracking-wide shrink-0 w-11">
+                    Gemini
+                  </span>
+                  <div className="flex flex-wrap items-center gap-1 flex-1">
+                    {gemini5hModels.map(([modelName, info]) => (
+                      <QuotaIndicatorTooltip
+                        key={modelName}
+                        name={modelName}
+                        percentage={info.percentage}
+                        periodType="5h"
+                        resetTime={info.resetTime}
+                        barWidth="w-7 sm:w-8"
+                        barHeight="h-1.5"
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {claude5hModels.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground/70 text-[9px] font-bold uppercase tracking-wide shrink-0 w-11">
+                    Claude
+                  </span>
+                  <div className="flex flex-wrap items-center gap-1 flex-1">
+                    {claude5hModels.map(([modelName, info]) => (
+                      <QuotaIndicatorTooltip
+                        key={modelName}
+                        name={modelName}
+                        percentage={info.percentage}
+                        periodType="5h"
+                        resetTime={info.resetTime}
+                        barWidth="w-7 sm:w-8"
+                        barHeight="h-1.5"
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {compactModels.length === 0 && (
+                <div className="text-muted-foreground/60 text-[10px] italic">
+                  {t('cloud.quota-window.no-5h-quota', 'No 5h quota data')}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Bottom Half: Weekly Window Quota Block */}
+          <div className="flex flex-col gap-1 border-t border-border/40 pt-1.5">
+            <div className="flex items-center justify-between gap-2 border-b border-border/30 pb-0.5">
               <div className="flex items-center gap-1">
-                <span className="text-muted-foreground/70 text-[9px] font-bold uppercase tracking-wide shrink-0 w-10">
-                  Claude
+                <CalendarDays className="text-muted-foreground h-3 w-3" />
+                <span className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">
+                  {t('cloud.quota-window.weekly-short', 'Week')}
                 </span>
-                <div className="flex flex-wrap items-center gap-1 flex-1">
-                  {claudeWeeklyItems.map((item) => (
-                    <QuotaIndicatorTooltip
-                      key={item.id}
-                      name={item.groupName || item.bucketLabel}
-                      displayName={`${item.groupName}: ${item.bucketLabel}`}
-                      percentage={item.percentage}
-                      periodType="weekly"
-                      resetTime={item.resetTime}
-                      barWidth="w-6 sm:w-7"
-                      barHeight="h-1.5"
-                    />
-                  ))}
-                </div>
               </div>
-            )}
+              {earliestWeeklyResetTime ? (
+                <span
+                  className="text-muted-foreground text-[10px] font-mono"
+                  title={formatResetTimeTitle(earliestWeeklyResetTime, t('cloud.card.resetTime'))}
+                >
+                  {formatResetTimeLabel(earliestWeeklyResetTime, {
+                    prefix: '⏳',
+                    unknown: '',
+                  })}
+                </span>
+              ) : (
+                <span className="text-muted-foreground/60 text-[9px]">
+                  {weeklyQuotaItems.length > 0 ? '100%' : '—'}
+                </span>
+              )}
+            </div>
 
-            {weeklyQuotaItems.length === 0 && (
-              <div className="text-muted-foreground/60 text-[10px] italic">
-                {t('cloud.quota-window.no-weekly-quota', 'No weekly quota data')}
-              </div>
-            )}
+            <div className="flex flex-col gap-1 pt-0.5 justify-center">
+              {geminiWeeklyItems.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground/70 text-[9px] font-bold uppercase tracking-wide shrink-0 w-11">
+                    Gemini
+                  </span>
+                  <div className="flex flex-wrap items-center gap-1 flex-1">
+                    {geminiWeeklyItems.map((item) => (
+                      <QuotaIndicatorTooltip
+                        key={item.id}
+                        name={item.groupName || item.bucketLabel}
+                        displayName={`${item.groupName}: ${item.bucketLabel}`}
+                        percentage={item.percentage}
+                        periodType="weekly"
+                        resetTime={item.resetTime}
+                        barWidth="w-7 sm:w-8"
+                        barHeight="h-1.5"
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {claudeWeeklyItems.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground/70 text-[9px] font-bold uppercase tracking-wide shrink-0 w-11">
+                    Claude
+                  </span>
+                  <div className="flex flex-wrap items-center gap-1 flex-1">
+                    {claudeWeeklyItems.map((item) => (
+                      <QuotaIndicatorTooltip
+                        key={item.id}
+                        name={item.groupName || item.bucketLabel}
+                        displayName={`${item.groupName}: ${item.bucketLabel}`}
+                        percentage={item.percentage}
+                        periodType="weekly"
+                        resetTime={item.resetTime}
+                        barWidth="w-7 sm:w-8"
+                        barHeight="h-1.5"
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {weeklyQuotaItems.length === 0 && (
+                <div className="text-muted-foreground/60 text-[10px] italic">
+                  {t('cloud.quota-window.no-weekly-quota', 'No weekly quota data')}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Column 4: Family Actions */}
+        {/* Column 3: Family Actions */}
         <div className="flex shrink-0 items-center justify-end gap-1.5 pl-1">
           <Button
             variant="ghost"
@@ -627,15 +643,16 @@ export function FamilyCloudAccountCard({
   // 2. COMPACT SINGLE ROW LAYOUT
   if (gridLayout === 'compact') {
     return (
-      <div className="group bg-card hover:border-indigo-500/50 flex flex-wrap items-center gap-3 rounded-lg border border-indigo-500/30 bg-gradient-to-r from-indigo-500/[0.03] to-transparent px-3 py-2 transition-all duration-200">
+      <div className={cn(
+        "group bg-card hover:border-indigo-500/50 flex flex-wrap items-center gap-3 rounded-lg border border-indigo-500/30 bg-gradient-to-r from-indigo-500/[0.03] to-transparent px-3 py-2 transition-all duration-200 relative overflow-hidden",
+        isRefreshingGroup && "border-indigo-500/50"
+      )}>
+        <CardVerticalRefreshProgress isRefreshing={isRefreshingGroup} />
         {/* Left: Members identity list */}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
             <Users className="h-3 w-3 text-indigo-500 shrink-0" />
             <span className="font-semibold text-foreground truncate">{familyGroup.name}</span>
-            <span className="rounded bg-indigo-500/10 px-1 text-[9px] text-indigo-500 border border-indigo-500/20">
-              {t('cloud.family.sharedQuotaNotice', 'Google One Share')}
-            </span>
           </div>
           <div className="flex flex-col gap-1">
             {sortedAccounts.map((acc) => renderIdentityMemberRow(acc, true))}
@@ -699,7 +716,11 @@ export function FamilyCloudAccountCard({
 
   // 3. CARD LAYOUT (auto, 2-col, 3-col, list)
   return (
-    <Card className="group bg-card hover:border-indigo-500/50 relative flex h-full flex-col overflow-hidden rounded-xl border border-indigo-500/30 bg-gradient-to-br from-indigo-500/[0.03] via-card to-background shadow-xs transition-all duration-300">
+    <Card className={cn(
+      "group bg-card hover:border-indigo-500/50 relative flex h-full flex-col overflow-hidden rounded-xl border border-indigo-500/30 bg-gradient-to-br from-indigo-500/[0.03] via-card to-background shadow-xs transition-all duration-300",
+      isRefreshingGroup && "border-indigo-500/50"
+    )}>
+      <CardVerticalRefreshProgress isRefreshing={isRefreshingGroup} />
       <CardHeader className="flex flex-row items-center justify-between gap-2 p-4 pb-2 border-b border-indigo-500/15">
         <div className="flex items-center gap-2 min-w-0">
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30">
@@ -720,9 +741,6 @@ export function FamilyCloudAccountCard({
                 })}
               </Badge>
             </div>
-            <p className="text-[10px] text-muted-foreground truncate">
-              {t('cloud.family.sharedQuotaNotice', 'Dùng chung gói Google One')}
-            </p>
           </div>
         </div>
 

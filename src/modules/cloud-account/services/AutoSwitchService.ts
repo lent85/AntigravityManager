@@ -7,7 +7,6 @@ import {
   type AutoSwitchModelConfig,
   type CloudAccount,
 } from '@/modules/cloud-account/types';
-import { markActiveAccount, switchCloudAccount } from '@/modules/cloud-account/ipc/handler';
 import { logger } from '@/shared/logging/logger';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
 import {
@@ -307,6 +306,10 @@ export class AutoSwitchService {
 
         const targetLabel =
           appTarget === 'agy' ? 'CLI' : appTarget === 'ide' ? 'IDE' : 'App (Classic)';
+
+        const { markActiveAccount, switchCloudAccount } = await import(
+          '@/modules/cloud-account/ipc/handler'
+        );
 
         if (isNoRestart && appTarget !== 'agy') {
           // Perform live sync without restarting GUI process

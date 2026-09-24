@@ -118,6 +118,49 @@ describe('Responses continuation across a restart', () => {
     expect(childResponseId).not.toBe(previousResponseId);
   });
 
+  it('does not carry top-level instructions into a continuation', async () => {
+    const store = createStore();
+    const root = createController(store, chatResponse('resp_instruction_root', 'root answer'));
+    const rootReply = createReplyMock();
+    await root.controller.responses(
+      { input: 'root question', instructions: 'Only answer in French.', model: 'gpt-4o' },
+      rootReply as never,
+    );
+    const rootResponseId = getSentResponseId(rootReply);
+
+    const child = createController(store, chatResponse('resp_instruction_child', 'child answer'));
+    await child.controller.responses(
+      { input: 'continue', previous_response_id: rootResponseId },
+      createReplyMock() as never,
+    );
+
+    expect(child.handleChatCompletions.mock.calls[0][0].messages).toEqual([
+      { role: 'user', content: 'root question' },
+      { role: 'assistant', content: 'root answer' },
+      { role: 'user', content: 'continue' },
+    ]);
+  });
+
+  it('stores an incomplete response so clients can retrieve and continue it', async () => {
+    const store = createStore();
+    const incomplete = chatResponse('resp_incomplete_upstream', 'partial');
+    incomplete.choices[0].finish_reason = 'length';
+    const surface = createController(store, incomplete);
+    const reply = createReplyMock();
+
+    await surface.controller.responses(
+      { input: 'write a long answer', model: 'gpt-4o' },
+      reply as never,
+    );
+
+    const responseId = getSentResponseId(reply);
+    expect(store.get(responseId)?.response).toMatchObject({
+      id: responseId,
+      status: 'incomplete',
+      incomplete_details: { reason: 'max_output_tokens' },
+    });
+  });
+
   it('persists an explicit routing identity across restart and continuation', async () => {
     const writer = createStore();
     const root = createController(writer, chatResponse('resp_routing_root', 'root'));
@@ -234,7 +277,7 @@ describe('Responses continuation across a restart', () => {
     );
   });
 
-  it('ignores legacy inputs during previous_response_id continuation without rewriting them', async () => {
+  it('rejects malformed stored inputs during previous_response_id continuation without rewriting them', async () => {
     const writer = createStore();
     const inputItems = [
       { type: '', role: 'user', content: 'Ignored empty-type history.' },
@@ -247,18 +290,22 @@ describe('Responses continuation across a restart', () => {
     const restarted = createStore();
     expect(restarted.getWithParent('resp_legacy')?.routingSessionId).toBe('resp_legacy');
     const after = createController(restarted, chatResponse('resp_continued', '42'));
+    const reply = createReplyMock();
     await after.controller.responses(
       { previous_response_id: 'resp_legacy', input: 'Add one.' },
-      createReplyMock() as never,
+      reply as never,
     );
     await restarted.flush();
 
-    expect(after.handleChatCompletions).toHaveBeenCalledTimes(1);
-    expect(after.handleChatCompletions.mock.calls[0][0].messages).toEqual([
-      { role: 'user', content: '' },
-      { role: 'user', content: 'Remember 41.' },
-      { role: 'user', content: 'Add one.' },
-    ]);
+    expect(reply.status).toHaveBeenCalledWith(400);
+    expect(reply.send).toHaveBeenCalledWith({
+      error: expect.objectContaining({
+        code: 'unsupported_input_item',
+        param: 'input[0]',
+        type: 'invalid_request_error',
+      }),
+    });
+    expect(after.handleChatCompletions).not.toHaveBeenCalled();
     expect(createStore().get('resp_legacy')?.inputItems).toEqual(inputItems);
   });
 

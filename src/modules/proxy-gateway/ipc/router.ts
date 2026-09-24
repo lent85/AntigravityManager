@@ -10,6 +10,10 @@ import {
   getGatewayStatus,
   getContextCacheStatus,
   generateApiKey,
+  createNamedApiKey,
+  getProxyUsageStats,
+  getProxyAccessLogs,
+  clearProxyUsageStats,
 } from './handlers';
 import { proxyModelAvailabilityStore } from '../server/shared/services/model-availability.service';
 import { openCodeCredentialService } from '../opencode-sync/opencode-credentials';
@@ -69,6 +73,48 @@ export const gatewayRouter = os.prefix('/gateway').router({
   generateKey: os.handler(async () => {
     const newKey = await generateApiKey();
     return { api_key: newKey };
+  }),
+
+  createNamedKey: os
+    .input(z.object({ name: z.string().default('New Client') }))
+    .handler(async ({ input }) => {
+      return createNamedApiKey(input.name);
+    }),
+
+  usageStats: os
+    .input(
+      z
+        .object({
+          timeRange: z.enum(['today', '24h', '7d', '30d', 'all']).optional(),
+          keyId: z.string().optional(),
+          accountId: z.string().optional(),
+        })
+        .optional(),
+    )
+    .handler(async ({ input }) => {
+      return getProxyUsageStats(input);
+    }),
+
+  accessLogs: os
+    .input(
+      z
+        .object({
+          timeRange: z.enum(['today', '24h', '7d', '30d', 'all']).optional(),
+          keyId: z.string().optional(),
+          accountId: z.string().optional(),
+          model: z.string().optional(),
+          status: z.enum(['all', 'success', 'error', 'auth']).optional(),
+          limit: z.number().int().min(1).max(200).optional(),
+          offset: z.number().int().min(0).optional(),
+        })
+        .optional(),
+    )
+    .handler(async ({ input }) => {
+      return getProxyAccessLogs(input);
+    }),
+
+  clearUsage: os.handler(async () => {
+    return clearProxyUsageStats();
   }),
 
   openCodeStatus: os.input(z.object({ baseUrl: z.string().url() })).handler(async ({ input }) => {

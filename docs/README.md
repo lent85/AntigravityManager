@@ -21,7 +21,8 @@ This directory contains authoritative technical documentation for contributors a
 | Document | Purpose |
 | --- | --- |
 | [feature-development-guide.md](feature-development-guide.md) | End-to-end recipe for creating or extending a feature module in `src/modules/` |
-| [proxy-gateway-guide.md](proxy-gateway-guide.md) | Architecture, protocol mappers (OpenAI, Anthropic, Gemini), streaming, and testing for the embedded proxy gateway |
+| [proxy-gateway-guide.md](proxy-gateway-guide.md) | Architecture, protocol mappers (OpenAI, Anthropic, Gemini), streaming, context caching, and testing for the embedded proxy gateway |
+| [openai-api-compatibility.md](openai-api-compatibility.md) | Dated OpenAI route matrix, authentication scopes, deviations, extensions, retention, and client examples |
 | [mcp-setup.md](mcp-setup.md) | Setup and usage instructions for Model Context Protocol (MCP) servers with Antigravity, Claude, and Cursor |
 
 ### Feature & Subsystem References

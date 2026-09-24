@@ -107,9 +107,15 @@ describe('stored chat completions', () => {
     });
   });
 
-  it('refuses store on a streamed request instead of quietly keeping nothing', async () => {
+  it('stores the completion reconstructed from a streamed request', async () => {
     const store = createStore();
-    const { controller, handleChatCompletions } = createController(store, of('data: {}\n\n'));
+    const { controller, handleChatCompletions } = createController(
+      store,
+      of(
+        'data: {"id":"chatcmpl_streamed","object":"chat.completion.chunk","created":1700000000,"model":"gpt-4o","choices":[{"index":0,"delta":{"role":"assistant","content":"the "},"finish_reason":null}]}\n\n',
+        'data: {"id":"chatcmpl_streamed","object":"chat.completion.chunk","created":1700000000,"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"answer"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}}\n\ndata: [DONE]\n\n',
+      ),
+    );
     const reply = createReplyMock();
 
     await controller.chatCompletions(
@@ -122,13 +128,44 @@ describe('stored chat completions', () => {
       reply as never,
     );
 
+    const stored = createReplyMock();
+    controller.getStoredChatCompletion('chatcmpl_streamed', stored as never);
+
+    expect(handleChatCompletions).toHaveBeenCalledOnce();
+    expect(stored.status).toHaveBeenCalledWith(200);
+    expect(stored.send).toHaveBeenCalledWith({
+      id: 'chatcmpl_streamed',
+      object: 'chat.completion',
+      created: 1700000000,
+      model: 'gpt-4o',
+      choices: [
+        {
+          index: 0,
+          finish_reason: 'stop',
+          message: { role: 'assistant', content: 'the answer' },
+        },
+      ],
+      usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+    });
+  });
+
+  it('returns an OpenAI 400 before upstream work for a missing model', async () => {
+    const store = createStore();
+    const { controller, handleChatCompletions } = createController(store);
+    const reply = createReplyMock();
+
+    await controller.chatCompletions(
+      { messages: [{ role: 'user', content: 'a question' }] } as never,
+      reply as never,
+    );
+
     expect(handleChatCompletions).not.toHaveBeenCalled();
     expect(reply.status).toHaveBeenCalledWith(400);
     expect(reply.send).toHaveBeenCalledWith({
       error: {
-        code: 'unsupported_parameter',
-        message: expect.stringContaining('store is not supported together with stream'),
-        param: 'store',
+        code: 'invalid_request_error',
+        message: "Missing required parameter: 'model'.",
+        param: 'model',
         type: 'invalid_request_error',
       },
     });

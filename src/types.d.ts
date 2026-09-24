@@ -52,6 +52,7 @@ declare global {
         telemetryEnabled: boolean;
       }>;
       onGoogleAuthCode: (callback: (code: string) => void) => () => void;
+      onAccountSyncStatus: (callback: (status: { accountId: string | null }) => void) => () => void;
       changeLanguage: (lang: string) => void;
       onManualUpdateAvailable: (callback: (update: ManualUpdateInfo) => void) => () => void;
       checkForUpdates: () => Promise<ManualUpdateCheckResult>;

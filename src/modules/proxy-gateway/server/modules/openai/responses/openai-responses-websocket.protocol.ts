@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
 import { mergeOpenAIResponsesInputItems } from './openai-responses-session.store';
-import { parseResponsesInputItem } from './openai-responses-request';
 
 export type OpenAIResponsesWebSocketEvent = Record<string, unknown> & {
   type: string;
@@ -11,224 +10,201 @@ export type OpenAIResponsesWebSocketAction =
   | {
       events: OpenAIResponsesWebSocketEvent[];
       kind: 'local';
+      streamId?: string;
     }
   | {
       kind: 'request';
       request: Record<string, unknown>;
+      streamId?: string;
     };
 
+interface CachedWebSocketResponse {
+  output: unknown[];
+  prewarm: boolean;
+  request: Record<string, unknown>;
+}
+
+const MAX_CONNECTION_RESPONSES = 128;
+const STREAM_ID_PATTERN = /^[A-Za-z0-9_.-]{1,256}$/u;
+
 /**
- * Stateful Responses WebSocket protocol adapter.
+ * Connection-local Responses state for the official WebSocket transport.
  *
- * The state transitions intentionally mirror the proven Codex transport:
- * prewarm locally, retain the previous request/output, merge append events,
- * repair compacted tool transcripts, and inherit stable request fields.
+ * Every turn is a `response.create`. `stream_id` controls scheduling only;
+ * `previous_response_id` controls lineage and may resolve either through the
+ * durable HTTP-compatible store or this bounded connection cache.
  */
 export class OpenAIResponsesWebSocketProtocol {
-  private lastRequest: Record<string, unknown> | null = null;
-  private lastResponseOutput: unknown[] = [];
-  private lastResponseId = '';
-  private lastResponsePendingToolCallIds = new Set<string>();
-  private readonly toolCallItems = new Map<string, unknown>();
+  private readonly responses = new Map<string, CachedWebSocketResponse>();
 
   public accept(payload: unknown): OpenAIResponsesWebSocketAction {
     const event = toRecord(payload);
     if (!event) {
-      throw new Error('websocket request must be a JSON object');
+      throw new Error('WebSocket request must be a JSON object.');
+    }
+    const eventType = getString(event, 'type');
+    if (eventType !== 'response.create') {
+      throw new Error(`Unsupported WebSocket request type: ${eventType ?? '(missing)'}.`);
     }
 
-    if (this.shouldHandlePrewarmLocally(event)) {
+    const streamId = this.parseStreamId(event);
+    if (event.generate === false) {
       return {
-        events: this.handlePrewarmLocally(event),
+        events: this.handlePrewarmLocally(event, streamId),
         kind: 'local',
+        ...(streamId ? { streamId } : {}),
       };
     }
 
     return {
       kind: 'request',
       request: this.normalizeRequest(event),
+      ...(streamId ? { streamId } : {}),
     };
   }
 
-  public complete(response: unknown): void {
+  public complete(response: unknown, request: Record<string, unknown>): void {
     const responseRecord = toRecord(response);
-    if (!responseRecord) {
+    const responseId = getString(responseRecord, 'id');
+    if (!responseRecord || !responseId) {
       return;
     }
 
-    const responseId = getString(responseRecord, 'id');
-    const output = Array.isArray(responseRecord.output) ? responseRecord.output : [];
-    this.lastResponseOutput = output;
-    this.lastResponseId = responseId ?? '';
-    this.lastResponsePendingToolCallIds.clear();
+    this.remember(responseId, {
+      output: Array.isArray(responseRecord.output) ? responseRecord.output : [],
+      prewarm: false,
+      request: structuredClone(request),
+    });
+  }
 
-    for (const item of output) {
-      const itemRecord = toRecord(item);
-      const type = itemRecord ? getString(itemRecord, 'type') : null;
-      if (type !== 'function_call' && type !== 'custom_tool_call') {
-        continue;
-      }
-      const callId = getString(itemRecord, 'call_id') ?? getString(itemRecord, 'id');
-      if (!callId) {
-        continue;
-      }
-      this.toolCallItems.set(callId, item);
-      this.lastResponsePendingToolCallIds.add(callId);
+  private parseStreamId(payload: Record<string, unknown>): string | undefined {
+    const rawStreamId = payload.stream_id;
+    if (rawStreamId === undefined) {
+      return undefined;
     }
+    if (typeof rawStreamId !== 'string' || !STREAM_ID_PATTERN.test(rawStreamId)) {
+      throw new Error(
+        'stream_id must be 1-256 characters containing only letters, numbers, underscores, hyphens, or periods.',
+      );
+    }
+    return rawStreamId;
   }
 
-  public getPreviousResponseId(): string {
-    return this.lastResponseId;
-  }
-
-  private shouldHandlePrewarmLocally(payload: Record<string, unknown>): boolean {
-    return (
-      this.lastRequest === null &&
-      getString(payload, 'type') === 'response.create' &&
-      payload.generate === false
-    );
-  }
-
-  private handlePrewarmLocally(payload: Record<string, unknown>): OpenAIResponsesWebSocketEvent[] {
+  private handlePrewarmLocally(
+    payload: Record<string, unknown>,
+    streamId: string | undefined,
+  ): OpenAIResponsesWebSocketEvent[] {
+    const model = getString(payload, 'model');
+    if (!model) {
+      throw new Error('Missing model in response.create prewarm request.');
+    }
     const responseId = `resp_prewarm_${randomUUID()}`;
     const createdAt = Math.floor(Date.now() / 1000);
-    const model = getString(payload, 'model') ?? 'unknown';
+    const request = stripTransportFields(payload);
+    this.remember(responseId, { output: [], prewarm: true, request });
 
-    const created: OpenAIResponsesWebSocketEvent = {
-      type: 'response.created',
-      sequence_number: 0,
-      response: {
-        id: responseId,
-        object: 'response',
-        created_at: createdAt,
-        status: 'in_progress',
-        background: false,
-        error: null,
-        output: [],
-        model,
-      },
-    };
-    const completed: OpenAIResponsesWebSocketEvent = {
-      type: 'response.completed',
-      sequence_number: 1,
-      response: {
-        id: responseId,
-        object: 'response',
-        created_at: createdAt,
-        status: 'completed',
-        background: false,
-        error: null,
-        output: [],
-        usage: {
-          input_tokens: 0,
-          input_tokens_details: { cached_tokens: 0 },
-          output_tokens: 0,
-          output_tokens_details: { reasoning_tokens: 0 },
-          total_tokens: 0,
+    return [
+      withStreamId(
+        {
+          type: 'response.created',
+          sequence_number: 0,
+          response: {
+            id: responseId,
+            object: 'response',
+            created_at: createdAt,
+            status: 'in_progress',
+            background: false,
+            error: null,
+            output: [],
+            model,
+          },
         },
-        model,
-      },
-    };
-
-    const normalized = { ...payload };
-    delete normalized.type;
-    delete normalized.generate;
-    this.lastRequest = normalized;
-    this.lastResponseOutput = [];
-    this.lastResponseId = responseId;
-    this.lastResponsePendingToolCallIds.clear();
-    return [created, completed];
+        streamId,
+      ),
+      withStreamId(
+        {
+          type: 'response.completed',
+          sequence_number: 1,
+          response: {
+            id: responseId,
+            object: 'response',
+            created_at: createdAt,
+            status: 'completed',
+            background: false,
+            error: null,
+            output: [],
+            usage: {
+              input_tokens: 0,
+              input_tokens_details: { cached_tokens: 0 },
+              output_tokens: 0,
+              output_tokens_details: { reasoning_tokens: 0 },
+              total_tokens: 0,
+            },
+            model,
+          },
+        },
+        streamId,
+      ),
+    ];
   }
 
   private normalizeRequest(payload: Record<string, unknown>): Record<string, unknown> {
-    const eventType = getString(payload, 'type') ?? '';
-    if (eventType === 'response.create' && this.lastRequest === null) {
-      const normalized = { ...payload };
-      delete normalized.type;
-      delete normalized.generate;
-      normalized.stream = true;
-      normalized.input ??= [];
-      if (!getString(normalized, 'model')) {
-        throw new Error('missing model in response.create request');
+    const normalized = stripTransportFields(payload);
+    normalized.stream = true;
+    normalized.input ??= [];
+
+    const previousResponseId = getString(payload, 'previous_response_id');
+    const parent = previousResponseId ? this.responses.get(previousResponseId) : undefined;
+    if (parent) {
+      const parentInput = Array.isArray(parent.request.input) ? parent.request.input : [];
+      const newInput = Array.isArray(normalized.input) ? normalized.input : [];
+      normalized.input = mergeOpenAIResponsesInputItems(
+        [...parentInput, ...parent.output],
+        newInput,
+        parent.output,
+      );
+      normalized.model ??= parent.request.model;
+      if (parent.prewarm) {
+        for (const field of ['instructions', 'tools', 'tool_choice']) {
+          normalized[field] ??= parent.request[field];
+        }
       }
-      this.lastRequest = normalized;
-      return normalized;
+      delete normalized.previous_response_id;
     }
 
-    if (eventType !== 'response.create' && eventType !== 'response.append') {
-      throw new Error(`unsupported websocket request type: ${eventType}`);
+    if (!getString(normalized, 'model') && !getString(normalized, 'previous_response_id')) {
+      throw new Error('Missing model in response.create request.');
     }
-    if (this.lastRequest === null) {
-      throw new Error('websocket request received before response.create');
-    }
-
-    if (shouldReplaceTranscript(payload)) {
-      const replacement = { ...payload };
-      delete replacement.type;
-      delete replacement.generate;
-      delete replacement.previous_response_id;
-      replacement.stream = true;
-      this.lastRequest = replacement;
-      return replacement;
-    }
-
-    const newInput = Array.isArray(payload.input) ? payload.input : [];
-    for (const item of newInput) {
-      const itemRecord = toRecord(item);
-      const type = itemRecord ? getString(itemRecord, 'type') : null;
-      if (type !== 'function_call_output' && type !== 'custom_tool_call_output') {
-        continue;
-      }
-      const callId = getString(itemRecord, 'call_id');
-      if (callId) {
-        this.lastResponsePendingToolCallIds.delete(callId);
-      }
-    }
-
-    const previousInput = Array.isArray(this.lastRequest.input) ? this.lastRequest.input : [];
-    const mergedInput = mergeOpenAIResponsesInputItems(
-      [...previousInput, ...this.lastResponseOutput],
-      newInput,
-      [...this.toolCallItems.values()],
-    );
-    const normalized: Record<string, unknown> = {
-      ...payload,
-      input: mergedInput,
-      stream: true,
-    };
-    delete normalized.type;
-    delete normalized.generate;
-    delete normalized.previous_response_id;
-
-    for (const field of ['model', 'instructions', 'tools', 'tool_choice']) {
-      if (!(field in normalized) && field in this.lastRequest) {
-        normalized[field] = this.lastRequest[field];
-      }
-    }
-
-    this.lastRequest = normalized;
     return normalized;
+  }
+
+  private remember(responseId: string, response: CachedWebSocketResponse): void {
+    this.responses.delete(responseId);
+    this.responses.set(responseId, response);
+    while (this.responses.size > MAX_CONNECTION_RESPONSES) {
+      const oldest = this.responses.keys().next().value;
+      if (typeof oldest !== 'string') {
+        break;
+      }
+      this.responses.delete(oldest);
+    }
   }
 }
 
-function shouldReplaceTranscript(payload: Record<string, unknown>): boolean {
-  if (getString(payload, 'previous_response_id')) {
-    return false;
-  }
-  if (!Array.isArray(payload.input)) {
-    return false;
-  }
+function stripTransportFields(payload: Record<string, unknown>): Record<string, unknown> {
+  const normalized = { ...payload };
+  delete normalized.type;
+  delete normalized.generate;
+  delete normalized.stream_id;
+  delete normalized.background;
+  return normalized;
+}
 
-  return payload.input.some((item) => {
-    const parsed = parseResponsesInputItem(item);
-    if (!parsed) {
-      return false;
-    }
-    if (parsed.type === 'function_call' || parsed.type === 'custom_tool_call') {
-      return true;
-    }
-    return parsed.type === 'message' && parsed.role === 'assistant';
-  });
+function withStreamId(
+  event: OpenAIResponsesWebSocketEvent,
+  streamId: string | undefined,
+): OpenAIResponsesWebSocketEvent {
+  return streamId ? { ...event, stream_id: streamId } : event;
 }
 
 function toRecord(value: unknown): Record<string, unknown> | null {

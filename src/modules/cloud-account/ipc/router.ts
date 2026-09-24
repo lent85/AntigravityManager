@@ -32,6 +32,9 @@ import {
   importCloudAccounts,
   getMetricsPollInterval,
   setMetricsPollInterval,
+  getMetricsSyncDelayConfig,
+  setMetricsSyncDelayConfig,
+  getSyncingAccountId,
   getEmulationState,
   setEmulationEnabled,
   setEmulationTickInterval,
@@ -469,6 +472,38 @@ export const cloudRouter = os.router({
     .handler(async ({ input }) => {
       return setMetricsPollInterval(input.intervalMinutes);
     }),
+
+  getMetricsSyncDelayConfig: os
+    .output(
+      z.object({
+        minDelaySeconds: z.number(),
+        maxDelaySeconds: z.number(),
+      }),
+    )
+    .handler(async () => {
+      return getMetricsSyncDelayConfig();
+    }),
+
+  setMetricsSyncDelayConfig: os
+    .input(
+      z.object({
+        minDelaySeconds: z.number().min(0).max(3600),
+        maxDelaySeconds: z.number().min(0).max(3600),
+      }),
+    )
+    .output(
+      z.object({
+        minDelaySeconds: z.number(),
+        maxDelaySeconds: z.number(),
+      }),
+    )
+    .handler(async ({ input }) => {
+      return setMetricsSyncDelayConfig(input);
+    }),
+
+  getSyncingAccountId: os.output(z.string().nullable()).handler(async () => {
+    return getSyncingAccountId();
+  }),
 
   getEmulationState: os.output(EmulationStateSchema).handler(async () => {
     return getEmulationState();

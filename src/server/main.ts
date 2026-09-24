@@ -6,19 +6,47 @@ import { AppModule } from './app.module';
 import { logger } from '../shared/logging/logger';
 import { AccountLeaseService } from '../modules/proxy-gateway/server/modules/account-lease/account-lease.service';
 import { OpenAIOperations } from '../modules/proxy-gateway/server/modules/openai/openai-operations.service';
-import { ProxyService } from '../modules/proxy-gateway/server/proxy.service';
 import { DEFAULT_MAX_FILE_BYTES } from '../modules/proxy-gateway/server/modules/files/file-store.types';
 import { attachOpenAIResponsesWebSocketServer } from '../modules/proxy-gateway/server/modules/openai/responses/openai-responses-websocket.server';
 import { parseResponsesRequestBody } from '../modules/proxy-gateway/server/modules/openai/responses/openai-responses-request';
-import {
-  extractApiKeyToken,
-  hasConfiguredApiKey,
-} from '../modules/proxy-gateway/server/guards/api-key-auth.util';
-import { isObservable } from 'rxjs';
+import { extractApiKeyToken } from '../modules/proxy-gateway/server/guards/api-key-auth.util';
 import { MAX_IMAGE_GENERATION_BODY_BYTES } from '@/modules/proxy-gateway/server/modules/openai/media/image-input-validation';
 
-import { ProxyConfig } from '@/modules/config/types';
+import { ProxyConfig, ModelPricingConfig } from '@/modules/config/types';
 import { getServerConfig, setServerConfig } from './server-config';
+import { proxyUsageStore } from '../modules/proxy-gateway/server/shared/services/proxy-usage.store';
+import {
+  getClientInfo,
+  getResponseUsage,
+  resolveConfiguredApiKeys,
+  setCurrentRequest,
+} from '../modules/proxy-gateway/server/shared/services/request-usage-context';
+
+function calculateEstimatedCost(
+  pricing: Record<string, ModelPricingConfig> | undefined,
+  model: string | undefined,
+  promptTokens: number,
+  completionTokens: number,
+): number {
+  if (!pricing || !model) {
+    return 0;
+  }
+  const modelConfig = pricing[model];
+  if (!modelConfig) {
+    return 0;
+  }
+  let cost = 0;
+  if (modelConfig.prompt_price_per_m && promptTokens > 0) {
+    cost += (promptTokens / 1_000_000) * modelConfig.prompt_price_per_m;
+  }
+  if (modelConfig.completion_price_per_m && completionTokens > 0) {
+    cost += (completionTokens / 1_000_000) * modelConfig.completion_price_per_m;
+  }
+  if (modelConfig.request_price) {
+    cost += modelConfig.request_price;
+  }
+  return cost;
+}
 
 let app: NestFastifyApplication | null = null;
 let currentPort: number = 0;
@@ -121,6 +149,92 @@ export async function bootstrapNestServer(config: ProxyConfig): Promise<NestServ
   try {
     const fastifyAdapter = new FastifyAdapter();
     registerImageGenerationBodyLimit(fastifyAdapter.getInstance());
+
+    // Register request instrumentation hooks for usage tracking
+    const fastifyInstance = fastifyAdapter.getInstance() as any;
+    fastifyInstance.addHook('onRequest', (request: any, _reply: any, done: () => void) => {
+      setCurrentRequest(request);
+      if (request.raw) {
+        request.raw.__startTime = Date.now();
+      }
+      done();
+    });
+
+    fastifyInstance.addHook('onResponse', (request: any, reply: any, done: () => void) => {
+      try {
+        const url = request.url || '';
+        if (
+          url === '/health' ||
+          url.startsWith('/static') ||
+          url === '/favicon.ico' ||
+          (url === '/' && request.method === 'GET')
+        ) {
+          done();
+          return;
+        }
+
+        const durationMs = Date.now() - (request.raw?.__startTime || Date.now());
+        const clientInfo = getClientInfo(request);
+        const usage = getResponseUsage(request);
+
+        const currentConfig = getServerConfig();
+        const model = usage?.model || request.body?.model || '';
+        const promptTokens = usage?.promptTokens || 0;
+        const completionTokens = usage?.completionTokens || 0;
+        const totalTokens = usage?.totalTokens || promptTokens + completionTokens;
+        const cachedTokens = usage?.cachedTokens || 0;
+
+        const cost = calculateEstimatedCost(
+          currentConfig?.model_pricing,
+          model,
+          promptTokens,
+          completionTokens,
+        );
+
+        let protocol: 'openai' | 'anthropic' | 'gemini' | 'unknown' = usage?.protocol || 'unknown';
+        if (protocol === 'unknown') {
+          if (url.includes('/messages') || url.includes('/complete')) {
+            protocol = 'anthropic';
+          } else if (url.includes(':generateContent') || url.includes('/v1beta/models')) {
+            protocol = 'gemini';
+          } else if (url.startsWith('/v1/')) {
+            protocol = 'openai';
+          }
+        }
+
+        const keyId = clientInfo?.keyId || (reply.statusCode === 401 ? 'unauthorized' : 'unknown');
+        const keyName =
+          clientInfo?.keyName ||
+          (reply.statusCode === 401 ? 'Unauthorized Access' : 'Unknown Client');
+
+        proxyUsageStore.record({
+          timestamp: Date.now(),
+          keyId,
+          keyName,
+          accountId: usage?.accountId,
+          accountEmail: usage?.accountEmail,
+          protocol,
+          endpoint: url.split('?')[0],
+          model,
+          statusCode: reply.statusCode,
+          durationMs,
+          promptTokens,
+          completionTokens,
+          totalTokens,
+          cachedTokens,
+          cost,
+          errorMessage:
+            usage?.errorMessage ||
+            (reply.statusCode >= 400 ? `HTTP ${reply.statusCode}` : undefined),
+          ip: request.ip,
+          userAgent: request.headers?.['user-agent'],
+        });
+      } catch (err) {
+        logger.error('Failed to record proxy usage in onResponse hook', err);
+      }
+      done();
+    });
+
     app = await NestFactory.create<NestFastifyApplication>(AppModule, fastifyAdapter, {
       abortOnError: false,
       logger: ['error', 'warn', 'log'],
@@ -135,47 +249,38 @@ export async function bootstrapNestServer(config: ProxyConfig): Promise<NestServ
     });
     registerRawMediaBodyParser(fastifyAdapter.getInstance() as RawMediaBodyParserHost);
 
-    const apiKeyConfigured = hasConfiguredApiKey(config.api_key);
-    if (apiKeyConfigured) {
+    const configuredKeys = resolveConfiguredApiKeys(config);
+    const hasAnyApiKey = configuredKeys.length > 0;
+    if (hasAnyApiKey) {
       app.enableCors();
     }
 
-    const listenHost = apiKeyConfigured ? '0.0.0.0' : '127.0.0.1';
+    const listenHost = hasAnyApiKey ? '0.0.0.0' : '127.0.0.1';
     await app.listen(port, listenHost);
     const openAIOperations = app.get(OpenAIOperations);
-    const proxyService = app.get(ProxyService);
     detachResponsesWebSocketServer = attachOpenAIResponsesWebSocketServer(app.getHttpServer(), {
       isAuthorized: (request) => {
-        const configuredApiKey = getConfiguredApiKey();
-        return (
-          !hasConfiguredApiKey(configuredApiKey) ||
-          extractApiKeyToken(request.headers) === configuredApiKey
-        );
+        const currentConfig = getServerConfig();
+        const keys = resolveConfiguredApiKeys(currentConfig);
+        if (keys.length === 0) {
+          return true;
+        }
+        const clientToken = extractApiKeyToken(request.headers);
+        if (!clientToken) {
+          return false;
+        }
+        return keys.some((k) => k.enabled !== false && k.key.trim() === clientToken.trim());
       },
       streamRequest: async (request) => {
         const body = parseResponsesRequestBody(request);
         if (!body) {
           throw new Error('Invalid Responses WebSocket request');
         }
-        const prepared = openAIOperations.prepareResponsesRequest(body);
-        if (!prepared) {
+        const result = await openAIOperations.createResponsesStream(body);
+        if (!result) {
           throw new Error(
             `Unknown or expired previous_response_id: ${String(request.previous_response_id ?? '')}`,
           );
-        }
-
-        const result = await proxyService.handleChatCompletions(
-          prepared.request,
-          'responses',
-          undefined,
-          {
-            requestSessionId: prepared.requestSessionId,
-            responseId: prepared.responseId,
-            routingSessionId: prepared.routingSessionId,
-          },
-        );
-        if (!isObservable(result)) {
-          throw new Error('Responses WebSocket request did not produce a stream');
         }
         return result;
       },
@@ -260,10 +365,6 @@ export function updateNestServerAccountLeaseOAuthHealth(
   }
 
   return app.get(AccountLeaseService).updateAccountOAuthHealth(accountId, oauthHealth);
-}
-
-function getConfiguredApiKey(): string | undefined {
-  return getServerConfig()?.api_key;
 }
 
 export async function getNestServerStatus(): Promise<{

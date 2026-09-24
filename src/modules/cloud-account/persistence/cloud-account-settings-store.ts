@@ -128,4 +128,20 @@ export class CloudAccountSettingsStore {
   static setNoRestartEnabled(enabled: boolean): void {
     this.setSetting('auto_switch_no_restart', enabled);
   }
+
+  static getMetricsDelayMinSeconds(): number {
+    return this.getSetting<number>('metrics_delay_min_seconds', 30, z.number());
+  }
+
+  static setMetricsDelayMinSeconds(seconds: number): void {
+    this.setSetting('metrics_delay_min_seconds', Math.max(0, seconds));
+  }
+
+  static getMetricsDelayMaxSeconds(): number {
+    return this.getSetting<number>('metrics_delay_max_seconds', 45, z.number());
+  }
+
+  static setMetricsDelayMaxSeconds(seconds: number): void {
+    this.setSetting('metrics_delay_max_seconds', Math.max(0, seconds));
+  }
 }

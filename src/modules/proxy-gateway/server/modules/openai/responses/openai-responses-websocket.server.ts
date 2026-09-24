@@ -6,6 +6,7 @@ import { WebSocket, WebSocketServer, type RawData } from 'ws';
 
 import {
   OpenAIResponsesWebSocketProtocol,
+  type OpenAIResponsesWebSocketAction,
   type OpenAIResponsesWebSocketEvent,
 } from './openai-responses-websocket.protocol';
 
@@ -58,14 +59,38 @@ function handleConnection(
   dependencies: OpenAIResponsesWebSocketServerDependencies,
 ): void {
   const protocol = new OpenAIResponsesWebSocketProtocol();
-  let activeSubscription: Subscription | null = null;
-  let processing = Promise.resolve();
+  const activeSubscriptions = new Set<Subscription>();
+  const laneQueues = new Map<string, Promise<void>>();
+  const namedStreams = new Set<string>();
+  const runWithConcurrencyLimit = createConcurrencyGate(16);
 
   socket.on('message', (rawData) => {
-    processing = processing
+    let action: OpenAIResponsesWebSocketAction;
+    try {
+      const payload = parseClientPayload(rawData);
+      action = protocol.accept(payload);
+    } catch (error) {
+      sendWebSocketError(socket, error);
+      return;
+    }
+
+    if (action.streamId) {
+      namedStreams.add(action.streamId);
+      if (namedStreams.size > 32) {
+        namedStreams.delete(action.streamId);
+        sendWebSocketError(
+          socket,
+          new Error('A WebSocket connection supports at most 32 distinct stream_id values.'),
+          action.streamId,
+        );
+        return;
+      }
+    }
+
+    const laneKey = action.streamId ?? '__default__';
+    const previous = laneQueues.get(laneKey) ?? Promise.resolve();
+    const processing = previous
       .then(async () => {
-        const payload = parseClientPayload(rawData);
-        const action = protocol.accept(payload);
         if (action.kind === 'local') {
           for (const event of action.events) {
             sendEvent(socket, event);
@@ -73,45 +98,66 @@ function handleConnection(
           return;
         }
 
-        const stream = await dependencies.streamRequest(action.request);
-        if (!isObservable(stream)) {
-          throw new Error('Responses WebSocket upstream did not return a stream');
-        }
-        const parseUpstreamChunk = createUpstreamEventParser();
-        try {
+        await runWithConcurrencyLimit(async () => {
+          const stream = await dependencies.streamRequest(action.request);
+          if (!isObservable(stream)) {
+            throw new Error('Responses WebSocket upstream did not return a stream');
+          }
+          const parseUpstreamChunk = createUpstreamEventParser();
           await new Promise<void>((resolve, reject) => {
-            activeSubscription = stream.subscribe({
+            const subscription = stream.subscribe({
               next: (chunk) => {
-                for (const event of parseUpstreamChunk(chunk)) {
+                for (const upstreamEvent of parseUpstreamChunk(chunk)) {
+                  const event = addStreamId(upstreamEvent, action.streamId);
                   sendEvent(socket, event);
-                  if (event.type === 'response.completed') {
-                    protocol.complete(event.response);
+                  if (event.type === 'response.completed' || event.type === 'response.incomplete') {
+                    protocol.complete(event.response, action.request);
                   }
                 }
               },
               error: reject,
               complete: resolve,
             });
+            activeSubscriptions.add(subscription);
+            subscription.add(() => activeSubscriptions.delete(subscription));
           });
-        } finally {
-          activeSubscription = null;
-        }
+        });
       })
       .catch((error: unknown) => {
-        sendEvent(socket, {
-          type: 'error',
-          error: {
-            message: error instanceof Error ? error.message : String(error),
-            type: 'server_error',
-          },
-        });
+        sendWebSocketError(socket, error, action.streamId);
       });
+    laneQueues.set(laneKey, processing);
+    void processing.finally(() => {
+      if (laneQueues.get(laneKey) === processing) {
+        laneQueues.delete(laneKey);
+      }
+    });
   });
 
   socket.once('close', () => {
-    activeSubscription?.unsubscribe();
-    activeSubscription = null;
+    for (const subscription of activeSubscriptions) {
+      subscription.unsubscribe();
+    }
+    activeSubscriptions.clear();
   });
+}
+
+function createConcurrencyGate(limit: number): <T>(operation: () => Promise<T>) => Promise<T> {
+  let active = 0;
+  const waiting: Array<() => void> = [];
+
+  return async <T>(operation: () => Promise<T>): Promise<T> => {
+    if (active >= limit) {
+      await new Promise<void>((resolve) => waiting.push(resolve));
+    }
+    active += 1;
+    try {
+      return await operation();
+    } finally {
+      active -= 1;
+      waiting.shift()?.();
+    }
+  };
 }
 
 function parseClientPayload(rawData: RawData): unknown {
@@ -172,6 +218,30 @@ function sendEvent(socket: WebSocket, event: OpenAIResponsesWebSocketEvent): voi
   if (socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(event));
   }
+}
+
+function addStreamId(
+  event: OpenAIResponsesWebSocketEvent,
+  streamId: string | undefined,
+): OpenAIResponsesWebSocketEvent {
+  return streamId ? { ...event, stream_id: streamId } : event;
+}
+
+function sendWebSocketError(socket: WebSocket, error: unknown, streamId?: string): void {
+  sendEvent(
+    socket,
+    addStreamId(
+      {
+        type: 'error',
+        error: {
+          code: 'invalid_request_error',
+          message: error instanceof Error ? error.message : String(error),
+          type: 'invalid_request_error',
+        },
+      },
+      streamId,
+    ),
+  );
 }
 
 function rawDataToString(rawData: RawData): string {

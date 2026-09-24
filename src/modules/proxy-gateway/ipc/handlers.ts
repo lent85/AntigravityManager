@@ -80,11 +80,18 @@ export const getContextCacheStatus = () => {
   };
 };
 
+import { proxyUsageStore } from '../server/shared/services/proxy-usage.store';
+import type {
+  GetUsageLogsOptions,
+  GetUsageStatsOptions,
+} from '../server/shared/services/proxy-usage.types';
+import type { ProxyApiKey } from '@/modules/config/types';
+
 /**
  * Generate a new API key
  */
 export const generateApiKey = async (): Promise<string> => {
-  const newKey = `sk-${uuidv4().replace(/-/g, '')}`;
+  const newKey = `sk-antigravity-${uuidv4().replace(/-/g, '')}`;
 
   // Save to config
   const config = ConfigManager.loadConfig();
@@ -92,4 +99,49 @@ export const generateApiKey = async (): Promise<string> => {
   await ConfigManager.saveConfig(config);
 
   return newKey;
+};
+
+/**
+ * Creates a named API Key and saves to config
+ */
+export const createNamedApiKey = async (name: string): Promise<ProxyApiKey> => {
+  const config = ConfigManager.loadConfig();
+  const newKeyStr = `sk-antigravity-${uuidv4().replace(/-/g, '')}`;
+  const newApiKey: ProxyApiKey = {
+    id: `key_${uuidv4().slice(0, 8)}`,
+    name: name.trim() || 'New Client',
+    key: newKeyStr,
+    created_at: Date.now(),
+    enabled: true,
+  };
+
+  const currentKeys = config.proxy.api_keys || [];
+  config.proxy.api_keys = [...currentKeys, newApiKey];
+  if (!config.proxy.api_key) {
+    config.proxy.api_key = newKeyStr;
+  }
+  await ConfigManager.saveConfig(config);
+  return newApiKey;
+};
+
+/**
+ * Get aggregated proxy usage metrics
+ */
+export const getProxyUsageStats = async (options?: GetUsageStatsOptions) => {
+  return proxyUsageStore.getStats(options);
+};
+
+/**
+ * Get paginated recent access logs
+ */
+export const getProxyAccessLogs = async (options?: GetUsageLogsOptions) => {
+  return proxyUsageStore.getLogs(options);
+};
+
+/**
+ * Clear recorded usage logs
+ */
+export const clearProxyUsageStats = async () => {
+  proxyUsageStore.clear();
+  return { success: true };
 };

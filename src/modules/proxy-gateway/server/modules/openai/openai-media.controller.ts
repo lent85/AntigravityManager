@@ -1,9 +1,10 @@
-import { Body, Controller, Inject, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpStatus, Inject, Post, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { ProxyGuard } from '../../guards/proxy.guard';
 import { type ImageMonitoringRequest } from './media/image-monitoring-summary';
-import { AudioRequestBody, OpenAIOperations } from './openai-operations.service';
+import { parseAudioMultipartRequest } from './media/audio-multipart-request';
+import { OpenAIOperations } from './openai-operations.service';
 
 @Controller('v1')
 @UseGuards(ProxyGuard)
@@ -25,20 +26,36 @@ export class OpenAIMediaController {
   }
 
   @Post('audio/transcriptions')
-  public audioTranscriptions(
-    @Body() body: AudioRequestBody,
-    @Req() req: FastifyRequest,
-    @Res() res: FastifyReply,
-  ): Promise<void> {
-    return this.operations.audioTranscriptions(body, req, res);
+  public audioTranscriptions(@Req() req: FastifyRequest, @Res() res: FastifyReply): Promise<void> {
+    return this.parseAndHandleAudio(req, res, 'transcriptions');
   }
 
   @Post('audio/translations')
-  public audioTranslations(
-    @Body() body: AudioRequestBody,
-    @Req() req: FastifyRequest,
-    @Res() res: FastifyReply,
+  public audioTranslations(@Req() req: FastifyRequest, @Res() res: FastifyReply): Promise<void> {
+    return this.parseAndHandleAudio(req, res, 'translations');
+  }
+
+  private async parseAndHandleAudio(
+    req: FastifyRequest,
+    res: FastifyReply,
+    operation: 'transcriptions' | 'translations',
   ): Promise<void> {
-    return this.operations.audioTranslations(body, req, res);
+    try {
+      const body = await parseAudioMultipartRequest(req);
+      if (operation === 'transcriptions') {
+        await this.operations.audioTranscriptions(body, req, res);
+      } else {
+        await this.operations.audioTranslations(body, req, res);
+      }
+    } catch (error) {
+      res.status(HttpStatus.BAD_REQUEST).send({
+        error: {
+          code: 'invalid_multipart_form',
+          message: error instanceof Error ? error.message : 'Invalid multipart request.',
+          param: 'file',
+          type: 'invalid_request_error',
+        },
+      });
+    }
   }
 }

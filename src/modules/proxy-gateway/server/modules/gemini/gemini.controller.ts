@@ -34,6 +34,7 @@ import { getAllDynamicModels } from '../../../antigravity/ModelMapping';
 import { AccountLeaseService } from '../account-lease/account-lease.service';
 import { UpstreamRequestError } from '../../common/exceptions/upstream-request.exception';
 import { createProxyRequestAbortScope } from '../../common/base-proxy.controller';
+import { setResponseUsage } from '../../shared/services/request-usage-context';
 
 type GeminiModelMetadata = {
   name: string;
@@ -158,7 +159,7 @@ export class GeminiController {
           ? this.proxyService.handleGeminiStreamGenerateContent(model, request, abortScope.signal)
           : this.proxyService.handleGeminiStreamGenerateContent(model, request));
         if (stream instanceof Observable) {
-          this.writeObservableSseResponse(res, stream);
+          this.writeObservableSseResponse(res, stream, req, model);
           return;
         }
       }
@@ -172,6 +173,15 @@ export class GeminiController {
               abortScope.signal,
             )
           : this.proxyService.handleGeminiGenerateContent(model, request));
+        if (req) {
+          setResponseUsage(req, {
+            protocol: 'gemini',
+            model: model.replace(/^models\//, ''),
+            promptTokens: result.usageMetadata?.promptTokenCount,
+            completionTokens: result.usageMetadata?.candidatesTokenCount,
+            totalTokens: result.usageMetadata?.totalTokenCount,
+          });
+        }
         res.status(HttpStatus.OK).send(this.buildNormalizedGeminiGenerateResponse(result));
         return;
       }
@@ -366,7 +376,12 @@ export class GeminiController {
     return normalized;
   }
 
-  private writeObservableSseResponse(res: FastifyReply, stream: Observable<unknown>): void {
+  private writeObservableSseResponse(
+    res: FastifyReply,
+    stream: Observable<unknown>,
+    req?: FastifyRequest,
+    modelName?: string,
+  ): void {
     if (!res.raw || !isFunction(res.raw.writeHead) || !isFunction(res.raw.write)) {
       res.header('Content-Type', 'text/event-stream');
       res.header('Cache-Control', 'no-cache');
@@ -385,6 +400,10 @@ export class GeminiController {
       Connection: 'keep-alive',
     });
 
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let totalTokens = 0;
+
     const subscription = stream.subscribe({
       next: (chunk) => {
         if (res.raw.writableEnded) {
@@ -392,8 +411,37 @@ export class GeminiController {
         }
         const payload = isString(chunk) ? chunk : String(chunk ?? '');
         res.raw.write(payload);
+
+        if (payload.includes('"usageMetadata"')) {
+          try {
+            const trimmed = payload.trim();
+            for (const line of trimmed.split('\n')) {
+              if (line.startsWith('data: ')) {
+                const parsed = JSON.parse(line.slice(6));
+                if (parsed.usageMetadata) {
+                  if (typeof parsed.usageMetadata.promptTokenCount === 'number') {
+                    promptTokens = parsed.usageMetadata.promptTokenCount;
+                  }
+                  if (typeof parsed.usageMetadata.candidatesTokenCount === 'number') {
+                    completionTokens = parsed.usageMetadata.candidatesTokenCount;
+                  }
+                  if (typeof parsed.usageMetadata.totalTokenCount === 'number') {
+                    totalTokens = parsed.usageMetadata.totalTokenCount;
+                  }
+                }
+              }
+            }
+          } catch {
+            // ignore partial JSON
+          }
+        }
       },
       error: (error) => {
+        if (req) {
+          setResponseUsage(req, {
+            errorMessage: error instanceof Error ? error.message : String(error),
+          });
+        }
         if (res.raw.writableEnded) {
           return;
         }
@@ -409,6 +457,15 @@ export class GeminiController {
         res.raw.end();
       },
       complete: () => {
+        if (req) {
+          setResponseUsage(req, {
+            protocol: 'gemini',
+            model: modelName?.replace(/^models\//, ''),
+            promptTokens,
+            completionTokens,
+            totalTokens: totalTokens || promptTokens + completionTokens,
+          });
+        }
         if (!res.raw.writableEnded) {
           res.raw.end();
         }

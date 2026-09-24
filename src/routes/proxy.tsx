@@ -1,109 +1,35 @@
 /**
  * API Proxy Service Page
- * Provides service control, model mapping, and usage examples
+ * Modern AI Gateway management with multi-account routing, setup guides, token pricing, and public web portal.
  */
 import { createFileRoute } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { ipc } from '@/ipc/manager';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAppConfig } from '@/modules/config/hooks/useAppConfig';
 import { useCloudAccounts } from '@/modules/cloud-account/hooks/useCloudAccounts';
 import { ProxyConfig } from '@/modules/config/types';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { useToast } from '@/components/ui/use-toast';
-import { OpenCodeSyncCard } from '@/modules/proxy-gateway/components/OpenCodeSyncCard';
-import {
-  buildProxyExampleModels,
-  isImageProxyExampleModel,
-} from '@/modules/proxy-gateway/components/proxy-example-models';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Loader2,
-  Copy,
-  CheckCircle,
-  Zap,
-  Cpu,
-  Sparkles,
-  BrainCircuit,
-  Code,
-  Terminal,
-  Eye,
-  EyeOff,
-  ImageIcon,
-} from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Activity, Loader2, Server, BookOpen, DollarSign, Globe, FileText } from 'lucide-react';
+import { buildProxyExampleModels } from '@/modules/proxy-gateway/components/proxy-example-models';
+import { ProxyServiceCard } from '@/modules/proxy-gateway/components/ProxyServiceCard';
+import { ProxyApiKeysCard } from '@/modules/proxy-gateway/components/ProxyApiKeysCard';
+import { ProxyAccountRoutingCard } from '@/modules/proxy-gateway/components/ProxyAccountRoutingCard';
+import { ProxyDashboardTab } from '@/modules/proxy-gateway/components/ProxyDashboardTab';
+import { ProxyLogsTab } from '@/modules/proxy-gateway/components/ProxyLogsTab';
+import { ProxyDocsPromptsTab } from '@/modules/proxy-gateway/components/ProxyDocsPromptsTab';
+import { ProxyGatewayPricingTab } from '@/modules/proxy-gateway/components/ProxyGatewayPricingTab';
+import { ProxyWebPortalTab } from '@/modules/proxy-gateway/components/ProxyWebPortalTab';
 
-type ProxyProtocol = 'openai' | 'anthropic';
-
-function getExampleModelIcon(modelId: string): ReactNode {
-  const normalizedId = modelId.toLowerCase();
-  if (isImageProxyExampleModel(normalizedId)) {
-    return <ImageIcon size={14} />;
-  }
-  if (normalizedId.includes('claude-opus')) {
-    return <BrainCircuit size={14} />;
-  }
-  if (normalizedId.includes('claude')) {
-    return <Sparkles size={14} />;
-  }
-  if (normalizedId.includes('flash')) {
-    return <Zap size={14} />;
-  }
-  return <Cpu size={14} />;
-}
-
-const ANTHROPIC_ROUTE_OPTIONS = [
-  'claude-sonnet-4-6-thinking',
-  'claude-opus-4-6-thinking',
-  'gemini-3-flash',
-  'gemini-3.1-pro-low',
-  'gemini-3.1-pro-high',
-] as const;
-
-const DEFAULT_ANTHROPIC_MAPPING: Record<string, string> = {
-  'claude-sonnet-4-6-20260219': 'claude-sonnet-4-6-thinking',
-  'claude-sonnet-4-5-20250929': 'claude-sonnet-4-6-thinking',
-  'claude-opus-4-6-20260201': 'claude-opus-4-6-thinking',
-  opus: 'claude-opus-4-6-thinking',
-};
-
-function resolveAnthropicMappingValue(
-  anthropicMapping: Record<string, string>,
-  keys: string[],
-  fallback: string,
-): string {
-  for (const key of keys) {
-    const value = anthropicMapping[key];
-    if (value) {
-      return value;
-    }
-  }
-  return fallback;
-}
+export const Route = createFileRoute('/proxy')({
+  component: ProxyPage,
+});
 
 function ProxyPage() {
   const { t } = useTranslation();
   const { config, isLoading, saveConfig } = useAppConfig();
   const { data: cloudAccounts = [] } = useCloudAccounts();
-  const { toast } = useToast();
 
   // Query all available local IPs
   const { data: localIps } = useQuery({
@@ -134,30 +60,23 @@ function ProxyPage() {
 
   // Local state for proxyConfig editing
   const [proxyConfig, setProxyConfig] = useState<ProxyConfig | undefined>(undefined);
-  const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
-  const [showKey, setShowKey] = useState(false);
-  const [gatewayError, setGatewayError] = useState<string | null>(null);
 
   // Sync config.proxy to local state when loaded, and check actual server status
   useEffect(() => {
     if (config) {
-      // Check actual server status and sync with config
       const syncServerStatus = async () => {
         try {
           const status = await ipc.client.gateway.status();
           const actualEnabled = status.running;
 
-          // If config says enabled but server not running, or vice versa, sync
           if (config.proxy.enabled !== actualEnabled) {
             const syncedConfig = { ...config.proxy, enabled: actualEnabled };
             setProxyConfig(syncedConfig);
-            // Also save the corrected state
             await saveConfig({ ...config, proxy: syncedConfig });
           } else {
             setProxyConfig(config.proxy);
           }
         } catch {
-          // If status check fails, just use config value
           setProxyConfig(config.proxy);
         }
       };
@@ -173,627 +92,143 @@ function ProxyPage() {
     }
   };
 
-  const updateGatewayPort = (value: string) => {
-    if (!proxyConfig) {
-      return;
-    }
-
-    const port = Number.parseInt(value, 10);
-    const nextPort = Number.isInteger(port) && port >= 1024 && port <= 65535 ? port : 8045;
-    setGatewayError(null);
-    updateProxyConfig({ ...proxyConfig, port: nextPort });
-  };
-
-  // ===== Usage Examples State =====
-  const [selectedProtocol, setSelectedProtocol] = useState<ProxyProtocol>('openai');
-  const [activeModelTab, setActiveModelTab] = useState('gemini-3.1-pro-high');
-  const [copied, setCopied] = useState<string | null>(null);
   const exampleModels = useMemo(() => buildProxyExampleModels(cloudAccounts), [cloudAccounts]);
-  const visibleExampleModels = useMemo(
-    () =>
-      selectedProtocol === 'anthropic'
-        ? exampleModels.filter((model) => !isImageProxyExampleModel(model.id))
-        : exampleModels,
-    [exampleModels, selectedProtocol],
-  );
-  const effectiveModelId = visibleExampleModels.some((model) => model.id === activeModelTab)
-    ? activeModelTab
-    : (visibleExampleModels[0]?.id ?? activeModelTab);
+  const apiKey = proxyConfig?.api_key || '';
+  const port = proxyConfig?.port || 8045;
+  const baseUrl = `http://${selectedIp || 'localhost'}:${port}`;
 
-  // Computed values for examples
-  const apiKey = proxyConfig?.api_key || 'YOUR_API_KEY';
-  const baseUrl = `http://localhost:${proxyConfig?.port || 8045}`;
+  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [selectedClientKeyId, setSelectedClientKeyId] = useState<string | undefined>(undefined);
 
-  const updateAnthropicMapping = (mappingPatch: Record<string, string>) => {
-    if (!proxyConfig) {
-      return;
-    }
-    updateProxyConfig({
-      ...proxyConfig,
-      anthropic_mapping: {
-        ...proxyConfig.anthropic_mapping,
-        ...mappingPatch,
-      },
-    });
-  };
-
-  const copyToClipboard = (text: string, type: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(type);
-    setTimeout(() => setCopied(null), 2000);
-  };
-
-  const getCurlExample = (modelId: string) => {
-    if (selectedProtocol === 'anthropic') {
-      return `curl ${baseUrl}/v1/messages \\
-  -H "Content-Type: application/json" \\
-  -H "x-api-key: ${apiKey}" \\
-  -H "anthropic-version: 2023-06-01" \\
-  -d '{
-    "model": "${modelId}",
-    "max_tokens": 1024,
-    "messages": [{"role": "user", "content": "Hello"}]
-  }'`;
-    }
-    if (isImageProxyExampleModel(modelId)) {
-      return `curl ${baseUrl}/v1/chat/completions \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${apiKey}" \\
-  -d '{
-    "model": "${modelId}",
-    "size": "1024x1024",
-    "messages": [{"role": "user", "content": "Draw a futuristic city"}]
-  }'`;
-    }
-    return `curl ${baseUrl}/v1/chat/completions \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${apiKey}" \\
-  -d '{
-    "model": "${modelId}",
-    "messages": [{"role": "user", "content": "Hello"}]
-  }'`;
-  };
-
-  const getPythonExample = (modelId: string) => {
-    if (selectedProtocol === 'anthropic') {
-      return `from anthropic import Anthropic
-
-client = Anthropic(
-    base_url="${baseUrl}",
-    api_key="${apiKey}"
-)
-
-response = client.messages.create(
-    model="${modelId}",
-    max_tokens=1024,
-    messages=[{"role": "user", "content": "Hello"}]
-)
-print(response.content[0].text)`;
-    }
-    return `from openai import OpenAI
-
-client = OpenAI(
-    base_url="${baseUrl}/v1",
-    api_key="${apiKey}"
-)
-
-response = client.chat.completions.create(
-    model="${modelId}",
-    messages=[{"role": "user", "content": "Hello"}]
-)
-print(response.choices[0].message.content)`;
+  const handleViewClientStats = (keyId: string) => {
+    setSelectedClientKeyId(keyId);
+    setActiveTab('dashboard');
   };
 
   if (isLoading || !proxyConfig) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="animate-spin" />
+      <div className="flex h-full items-center justify-center p-12">
+        <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto max-w-4xl space-y-5 p-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">{t('proxy.title')}</h2>
-        <p className="text-muted-foreground mt-1">{t('proxy.description')}</p>
-
-        {/* Local Access Info Banner */}
-        {proxyConfig?.enabled && (
-          <div className="mt-4 flex flex-col gap-2 rounded-md border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
-            <div className="flex items-center gap-2">
-              <div className="font-semibold">{t('proxy.config.local_access')}</div>
-              <code className="rounded bg-blue-100 px-1.5 py-0.5 font-mono select-all dark:bg-blue-900/50">
-                http://{selectedIp || 'localhost'}:{proxyConfig.port}/v1
-              </code>
-              {/* IP Selector Dropdown */}
-              {localIps && localIps.length > 1 && (
-                <Select value={selectedIp} onValueChange={setSelectedIp}>
-                  <SelectTrigger className="ml-2 h-7 w-auto min-w-[180px] text-xs">
-                    <SelectValue placeholder={t('proxy.config.select_ip')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {localIps.map((ip) => (
-                      <SelectItem key={ip.address} value={ip.address} className="text-xs">
-                        {ip.address} ({ip.name}){ip.isRecommended && ' ★'}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-            {!proxyConfig.api_key && (
-              <div className="flex items-center gap-2 text-xs font-medium text-amber-600 dark:text-amber-400">
-                {t('proxy.config.no_token_warning')}
-              </div>
+    <div className="w-full max-w-none space-y-3 px-3 py-2.5 sm:px-6 sm:py-4">
+      {/* Page Header */}
+      <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
+            {t('proxy.title', 'API Proxy & AI Gateway')}
+          </h1>
+          <p className="text-muted-foreground text-xs">
+            {t(
+              'proxy.description',
+              'High-performance unified gateway for OpenAI, Anthropic, and Gemini models with multi-account routing.',
             )}
-          </div>
-        )}
+          </p>
+        </div>
       </div>
 
-      {/* Service Control Card */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>{t('proxy.service.title')}</CardTitle>
-              <CardDescription>{t('proxy.service.description')}</CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <div
-                className={`h-3 w-3 rounded-full ${proxyConfig.enabled ? 'animate-pulse bg-green-500' : 'bg-gray-400'}`}
-              ></div>
-              <span className="text-sm font-medium">
-                {proxyConfig.enabled ? t('proxy.service.running') : t('proxy.service.stopped')}
-              </span>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Start/Stop Button */}
-          <div className="flex items-center gap-4">
-            <Button
-              variant={proxyConfig.enabled ? 'destructive' : 'default'}
-              onClick={async () => {
-                try {
-                  const { ipc } = await import('@/ipc/manager');
-                  if (proxyConfig.enabled) {
-                    await ipc.client.gateway.stop();
-                    setGatewayError(null);
-                    updateProxyConfig({ ...proxyConfig, enabled: false });
-                    return;
-                  }
+      {/* Main Tabs Navigation */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3">
+        <TabsList className="grid h-9 w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-6 bg-muted/60 p-0.5">
+          <TabsTrigger value="dashboard" className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium">
+            <Activity className="size-3.5" />
+            <span className="truncate">{t('proxy.tabs.dashboard', 'Dashboard & Usage')}</span>
+          </TabsTrigger>
+          <TabsTrigger value="logs" className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium">
+            <FileText className="size-3.5" />
+            <span className="truncate">{t('proxy.tabs.logs', 'Request Logs')}</span>
+          </TabsTrigger>
+          <TabsTrigger value="service" className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium">
+            <Server className="size-3.5" />
+            <span className="truncate">{t('proxy.tabs.service', 'Service & Accounts')}</span>
+          </TabsTrigger>
+          <TabsTrigger value="guides" className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium">
+            <BookOpen className="size-3.5" />
+            <span className="truncate">{t('proxy.tabs.guides', 'Guides & Prompts')}</span>
+          </TabsTrigger>
+          <TabsTrigger value="gateway" className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium">
+            <DollarSign className="size-3.5" />
+            <span className="truncate">{t('proxy.tabs.gateway', 'AI Gateway & Pricing')}</span>
+          </TabsTrigger>
+          <TabsTrigger value="portal" className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium">
+            <Globe className="size-3.5" />
+            <span className="truncate">{t('proxy.tabs.portal', 'Web Portal & Ngrok')}</span>
+          </TabsTrigger>
+        </TabsList>
 
-                  const result = await ipc.client.gateway.start({ port: proxyConfig.port });
-                  if (result.success) {
-                    setGatewayError(null);
-                    updateProxyConfig({ ...proxyConfig, port: result.port, enabled: true });
-                    return;
-                  }
+        {/* Tab 1: Real-time Dashboard & Usage Analytics */}
+        <TabsContent value="dashboard" className="mt-0 space-y-3">
+          <ProxyDashboardTab
+            proxyConfig={proxyConfig}
+            selectedClientKeyId={selectedClientKeyId}
+            onClearSelectedKeyId={() => setSelectedClientKeyId(undefined)}
+            onNavigateToLogs={() => setActiveTab('logs')}
+          />
+        </TabsContent>
 
-                  const description =
-                    result.reason === 'address-in-use'
-                      ? t('proxy.service.port_in_use_description', { port: result.port })
-                      : result.message;
-                  setGatewayError(description);
-                  updateProxyConfig({ ...proxyConfig, enabled: false });
-                  toast({
-                    title:
-                      result.reason === 'address-in-use'
-                        ? t('proxy.service.port_in_use_title')
-                        : t('proxy.service.start_failed'),
-                    description,
-                    variant: 'destructive',
-                  });
-                } catch (error) {
-                  const description =
-                    error instanceof Error ? error.message : t('proxy.service.start_failed');
-                  setGatewayError(description);
-                  updateProxyConfig({ ...proxyConfig, enabled: false });
-                  toast({
-                    title: t('proxy.service.start_failed'),
-                    description,
-                    variant: 'destructive',
-                  });
-                }
-              }}
-            >
-              {proxyConfig.enabled ? t('proxy.service.stop') : t('proxy.service.start')}
-            </Button>
-          </div>
-          {gatewayError && (
-            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
-              {gatewayError}
-            </div>
-          )}
+        {/* Tab 2: Dedicated Request & Error Logs */}
+        <TabsContent value="logs" className="mt-0 space-y-3">
+          <ProxyLogsTab
+            proxyConfig={proxyConfig}
+            selectedClientKeyId={selectedClientKeyId}
+            onClearSelectedKeyId={() => setSelectedClientKeyId(undefined)}
+          />
+        </TabsContent>
 
-          {/* Port & Timeout Configuration */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="gateway-port">{t('proxy.config.port')}</Label>
-              <Input
-                id="gateway-port"
-                type="number"
-                value={proxyConfig.port}
-                min={1024}
-                max={65535}
-                onChange={(e) => updateGatewayPort(e.target.value)}
-                disabled={proxyConfig.enabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="gateway-timeout">{t('proxy.config.timeout')}</Label>
-              <Input
-                id="gateway-timeout"
-                type="number"
-                value={proxyConfig.request_timeout}
-                onChange={(e) =>
-                  updateProxyConfig({
-                    ...proxyConfig,
-                    request_timeout: parseInt(e.target.value) || 120,
-                  })
-                }
-              />
-            </div>
-          </div>
+        {/* Tab 2: Service, API Keys & Accounts */}
+        <TabsContent value="service" className="mt-0 space-y-3">
+          <ProxyServiceCard
+            proxyConfig={proxyConfig}
+            updateProxyConfig={updateProxyConfig}
+            localIps={localIps}
+            selectedIp={selectedIp}
+            setSelectedIp={setSelectedIp}
+          />
+          <ProxyApiKeysCard
+            proxyConfig={proxyConfig}
+            updateProxyConfig={updateProxyConfig}
+            onViewClientStats={handleViewClientStats}
+          />
+          <ProxyAccountRoutingCard
+            proxyConfig={proxyConfig}
+            updateProxyConfig={updateProxyConfig}
+            cloudAccounts={cloudAccounts}
+          />
+        </TabsContent>
 
-          {/* API Key */}
-          <div className="space-y-2">
-            <Label>{t('proxy.config.api_key')}</Label>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Input
-                  value={proxyConfig.api_key || ''}
-                  readOnly
-                  type={showKey ? 'text' : 'password'}
-                  className="pr-10 font-mono text-sm"
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute top-0 right-0 h-full px-3 py-2 hover:bg-transparent"
-                  onClick={() => setShowKey(!showKey)}
-                  title={showKey ? t('proxy.config.hide_key') : t('proxy.config.show_key')}
-                >
-                  {showKey ? (
-                    <EyeOff className="text-muted-foreground h-4 w-4" />
-                  ) : (
-                    <Eye className="text-muted-foreground h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigator.clipboard.writeText(proxyConfig.api_key || '')}
-              >
-                <Copy size={14} className="mr-1" />
-                {t('proxy.copy')}
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setIsRegenerateDialogOpen(true)}>
-                {t('proxy.regenerate')}
-              </Button>
-            </div>
-            <Dialog open={isRegenerateDialogOpen} onOpenChange={setIsRegenerateDialogOpen}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>{t('proxy.regenerateConfirm.title')}</DialogTitle>
-                  <DialogDescription>{t('proxy.regenerateConfirm.description')}</DialogDescription>
-                </DialogHeader>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsRegenerateDialogOpen(false)}>
-                    {t('proxy.regenerateConfirm.cancel')}
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    onClick={async () => {
-                      const { ipc } = await import('@/ipc/manager');
-                      const result = await ipc.client.gateway.generateKey();
-                      updateProxyConfig({ ...proxyConfig, api_key: result.api_key });
-                      setIsRegenerateDialogOpen(false);
-                    }}
-                  >
-                    {t('proxy.regenerateConfirm.confirm')}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
+        {/* Tab 3: Guides & Prompts */}
+        <TabsContent value="guides" className="space-y-6 mt-0">
+          <ProxyDocsPromptsTab
+            baseUrl={baseUrl}
+            apiKey={apiKey}
+            apiKeys={proxyConfig.api_keys}
+            models={exampleModels}
+          />
+        </TabsContent>
 
-          {/* Auto Start Toggle */}
-          <div className="flex items-center justify-between rounded-lg border p-4">
-            <div className="space-y-1">
-              <Label>{t('proxy.config.auto_start')}</Label>
-              <p className="text-xs text-gray-500">{t('proxy.config.auto_start_desc')}</p>
-            </div>
-            <Switch
-              checked={proxyConfig.auto_start}
-              onCheckedChange={(checked) =>
-                updateProxyConfig({ ...proxyConfig, auto_start: checked })
-              }
-            />
-          </div>
+        {/* Tab 4: AI Gateway & Pricing */}
+        <TabsContent value="gateway" className="space-y-6 mt-0">
+          <ProxyGatewayPricingTab
+            proxyConfig={proxyConfig}
+            updateProxyConfig={updateProxyConfig}
+            models={exampleModels}
+            baseUrl={baseUrl}
+          />
+        </TabsContent>
 
-          <div className="flex items-center justify-between rounded-lg border p-4">
-            <div className="space-y-1">
-              <Label>{t('proxy.config.cloud_code_meta')}</Label>
-              <p className="text-xs text-gray-500">{t('proxy.config.cloud_code_meta_desc')}</p>
-            </div>
-            <Switch
-              checked={proxyConfig.experimental.enable_cloud_code_meta}
-              onCheckedChange={(checked) =>
-                updateProxyConfig({
-                  ...proxyConfig,
-                  experimental: {
-                    ...proxyConfig.experimental,
-                    enable_cloud_code_meta: checked,
-                  },
-                })
-              }
-            />
-          </div>
-
-          <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
-            <div className="space-y-1">
-              <Label htmlFor="proxy-allow-local-video-paths">
-                {t('proxy.config.allow-local-video-paths')}
-              </Label>
-              <p className="text-muted-foreground text-xs">
-                {t('proxy.config.allow-local-video-paths-desc')}
-              </p>
-            </div>
-            <Switch
-              id="proxy-allow-local-video-paths"
-              checked={proxyConfig.experimental.allow_local_video_paths}
-              onCheckedChange={(checked) =>
-                updateProxyConfig({
-                  ...proxyConfig,
-                  experimental: {
-                    ...proxyConfig.experimental,
-                    allow_local_video_paths: checked,
-                  },
-                })
-              }
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Model Mapping Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('proxy.mapping.title')}</CardTitle>
-          <CardDescription>{t('proxy.mapping.description')}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between rounded-lg border p-4">
-            <div className="space-y-1">
-              <Label>{t('proxy.mapping.only-raw-quota-models')}</Label>
-              <p className="text-xs text-gray-500">
-                {t('proxy.mapping.only-raw-quota-models-desc')}
-              </p>
-            </div>
-            <Switch
-              checked={proxyConfig.only_raw_quota_models}
-              onCheckedChange={(checked) =>
-                updateProxyConfig({ ...proxyConfig, only_raw_quota_models: checked })
-              }
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {/* Sonnet 4.6 Card */}
-            <div className="flex flex-col rounded-lg border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/50 p-4 dark:border-blue-800/50 dark:from-blue-950/30 dark:to-blue-900/20">
-              <div className="mb-2 flex items-center gap-2">
-                <div className="h-2 w-2 animate-pulse rounded-full bg-blue-500"></div>
-                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                  Claude Sonnet 4.6 (Thinking)
-                </h3>
-              </div>
-              <p className="mb-3 text-xs text-gray-600 dark:text-gray-400">
-                {t('proxy.mapping.maps_to')}
-              </p>
-              <Select
-                value={resolveAnthropicMappingValue(
-                  proxyConfig.anthropic_mapping,
-                  ['claude-sonnet-4-6-20260219', 'claude-sonnet-4-5-20250929'],
-                  'claude-sonnet-4-6-thinking',
-                )}
-                onValueChange={(value) =>
-                  updateAnthropicMapping({
-                    'claude-sonnet-4-6-20260219': value,
-                    'claude-sonnet-4-5-20250929': value,
-                  })
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ANTHROPIC_ROUTE_OPTIONS.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Opus 4.6 Card */}
-            <div className="flex flex-col rounded-lg border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100/50 p-4 dark:border-purple-800/50 dark:from-purple-950/30 dark:to-purple-900/20">
-              <div className="mb-2 flex items-center gap-2">
-                <div className="h-2 w-2 animate-pulse rounded-full bg-purple-500"></div>
-                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                  Claude Opus 4.6 (Thinking)
-                </h3>
-              </div>
-              <p className="mb-3 text-xs text-gray-600 dark:text-gray-400">
-                {t('proxy.mapping.maps_to')}
-              </p>
-              <Select
-                value={resolveAnthropicMappingValue(
-                  proxyConfig.anthropic_mapping,
-                  ['claude-opus-4-6-20260201', 'opus'],
-                  'claude-opus-4-6-thinking',
-                )}
-                onValueChange={(value) =>
-                  updateAnthropicMapping({
-                    'claude-opus-4-6-20260201': value,
-                    opus: value,
-                  })
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ANTHROPIC_ROUTE_OPTIONS.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="flex justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                updateProxyConfig({
-                  ...proxyConfig,
-                  anthropic_mapping: { ...DEFAULT_ANTHROPIC_MAPPING },
-                })
-              }
-            >
-              {t('proxy.mapping.restore')}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <OpenCodeSyncCard baseUrl={baseUrl} models={exampleModels} />
-
-      {/* Usage Examples Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Code size={20} />
-            {t('proxy.examples.title')}
-          </CardTitle>
-          <CardDescription>{t('proxy.examples.description')}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Protocol Selector Cards */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {/* OpenAI Protocol Card */}
-            <div
-              className={`cursor-pointer rounded-lg border-2 bg-gradient-to-br from-blue-50 to-blue-100/50 p-4 transition-all dark:from-blue-950/30 dark:to-blue-900/20 ${selectedProtocol === 'openai' ? 'border-blue-500 shadow-md dark:border-blue-600' : 'border-blue-200 hover:border-blue-300 dark:border-blue-800/50'}`}
-              onClick={() => setSelectedProtocol('openai')}
-            >
-              <div className="mb-3 flex items-center gap-2">
-                <div
-                  className={`h-2 w-2 rounded-full ${selectedProtocol === 'openai' ? 'animate-pulse bg-blue-500' : 'bg-blue-400'}`}
-                ></div>
-                <span className="text-sm font-bold text-blue-700 dark:text-blue-400">
-                  {t('settings.examples.openai_protocol')}
-                </span>
-              </div>
-              <div className="mb-2 rounded border border-blue-200/50 bg-white/60 px-3 py-2 dark:border-blue-700/30 dark:bg-gray-800/40">
-                <code className="font-mono text-xs break-all text-gray-800 dark:text-gray-200">
-                  POST /v1/chat/completions
-                </code>
-              </div>
-              <p className="text-xs text-gray-600 dark:text-gray-400">
-                {t('settings.examples.openai_tools')}
-              </p>
-            </div>
-
-            {/* Anthropic Protocol Card */}
-            <div
-              className={`cursor-pointer rounded-lg border-2 bg-gradient-to-br from-purple-50 to-purple-100/50 p-4 transition-all dark:from-purple-950/30 dark:to-purple-900/20 ${selectedProtocol === 'anthropic' ? 'border-purple-500 shadow-md dark:border-purple-600' : 'border-purple-200 hover:border-purple-300 dark:border-purple-800/50'}`}
-              onClick={() => setSelectedProtocol('anthropic')}
-            >
-              <div className="mb-3 flex items-center gap-2">
-                <div
-                  className={`h-2 w-2 rounded-full ${selectedProtocol === 'anthropic' ? 'animate-pulse bg-purple-500' : 'bg-purple-400'}`}
-                ></div>
-                <span className="text-sm font-bold text-purple-700 dark:text-purple-400">
-                  {t('settings.examples.anthropic_protocol')}
-                </span>
-              </div>
-              <div className="mb-2 rounded border border-purple-200/50 bg-white/60 px-3 py-2 dark:border-purple-700/30 dark:bg-gray-800/40">
-                <code className="font-mono text-xs break-all text-gray-800 dark:text-gray-200">
-                  POST /v1/messages
-                </code>
-              </div>
-              <p className="text-xs text-gray-600 dark:text-gray-400">
-                {t('settings.examples.anthropic_tools')}
-              </p>
-            </div>
-          </div>
-
-          {/* Model Tabs */}
-          <div className="flex flex-wrap gap-1 border-b border-gray-200 dark:border-gray-700">
-            {visibleExampleModels.map((model) => (
-              <button
-                key={model.id}
-                onClick={() => setActiveModelTab(model.id)}
-                className={`flex items-center gap-1 rounded-t-lg px-3 py-2 text-xs font-medium whitespace-nowrap transition-colors ${effectiveModelId === model.id ? 'border-b-2 border-blue-600 bg-blue-50/50 text-blue-600 dark:border-blue-400 dark:bg-blue-900/10 dark:text-blue-400' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'}`}
-              >
-                {getExampleModelIcon(model.id)}
-                <span>{model.name}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* cURL Example */}
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <span className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-gray-100">
-                <Terminal size={16} />
-                cURL
-              </span>
-              <button
-                onClick={() => copyToClipboard(getCurlExample(effectiveModelId), 'curl')}
-                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
-              >
-                {copied === 'curl' ? <CheckCircle size={14} /> : <Copy size={14} />}
-                {copied === 'curl' ? t('proxy.copied') : t('proxy.copy')}
-              </button>
-            </div>
-            <pre className="overflow-x-auto rounded-lg bg-gray-900 p-3 font-mono text-xs whitespace-pre-wrap text-gray-100">
-              {getCurlExample(effectiveModelId)}
-            </pre>
-          </div>
-
-          {/* Python Example */}
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <span className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-gray-100">
-                <Code size={16} />
-                Python
-              </span>
-              <button
-                onClick={() => copyToClipboard(getPythonExample(effectiveModelId), 'python')}
-                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
-              >
-                {copied === 'python' ? <CheckCircle size={14} /> : <Copy size={14} />}
-                {copied === 'python' ? t('proxy.copied') : t('proxy.copy')}
-              </button>
-            </div>
-            <pre className="overflow-x-auto rounded-lg bg-gray-900 p-3 font-mono text-xs whitespace-pre-wrap text-gray-100">
-              {getPythonExample(effectiveModelId)}
-            </pre>
-          </div>
-        </CardContent>
-      </Card>
+        {/* Tab 5: Web Portal & Ngrok */}
+        <TabsContent value="portal" className="space-y-6 mt-0">
+          <ProxyWebPortalTab
+            proxyConfig={proxyConfig}
+            updateProxyConfig={updateProxyConfig}
+            selectedIp={selectedIp}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
-
-export const Route = createFileRoute('/proxy')({
-  component: ProxyPage,
-});
+export default ProxyPage;

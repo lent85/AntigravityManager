@@ -5,6 +5,8 @@ import { Observable } from 'rxjs';
 import { UpstreamRequestError } from '@/modules/proxy-gateway/server/common/exceptions/upstream-request.exception';
 import type { FileReferenceError } from '@/modules/proxy-gateway/server/modules/files/file-reference-expander';
 
+import { getCurrentRequest, setResponseUsage } from '../shared/services/request-usage-context';
+
 export function createProxyRequestAbortScope(
   req: FastifyRequest | undefined,
   res: FastifyReply,
@@ -43,7 +45,13 @@ export abstract class BaseProxyController {
     return createProxyRequestAbortScope(req, res);
   }
 
-  protected writeSseResponse(res: FastifyReply, stream: Observable<unknown>): void {
+  protected writeSseResponse(
+    res: FastifyReply,
+    stream: Observable<unknown>,
+    req?: FastifyRequest,
+    modelFallback?: string,
+    dialect: 'default' | 'responses' = 'default',
+  ): void {
     if (!res.raw || !isFunction(res.raw.writeHead) || !isFunction(res.raw.write)) {
       res.header('Content-Type', 'text/event-stream');
       res.header('Cache-Control', 'no-cache');
@@ -62,6 +70,12 @@ export abstract class BaseProxyController {
       Connection: 'keep-alive',
     });
 
+    let streamModel = modelFallback || '';
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let totalTokens = 0;
+    let cachedTokens = 0;
+
     const subscription = stream.subscribe({
       next: (chunk) => {
         if (res.raw.writableEnded) {
@@ -69,23 +83,90 @@ export abstract class BaseProxyController {
         }
         const payload = isString(chunk) ? chunk : String(chunk ?? '');
         res.raw.write(payload);
+
+        // Inspect chunk for usage metadata
+        if (
+          payload.includes('"usage"') ||
+          payload.includes('"usageMetadata"') ||
+          payload.includes('"message_delta"')
+        ) {
+          try {
+            const trimmed = payload.trim();
+            for (const line of trimmed.split('\n')) {
+              if (line.startsWith('data: ') && !line.includes('[DONE]')) {
+                const parsed = JSON.parse(line.slice(6));
+                if (parsed.model) {
+                  streamModel = parsed.model;
+                }
+                const usage = parsed.usage || parsed.usageMetadata || parsed.message?.usage;
+                if (usage) {
+                  if (typeof usage.prompt_tokens === 'number') promptTokens = usage.prompt_tokens;
+                  if (typeof usage.promptTokenCount === 'number')
+                    promptTokens = usage.promptTokenCount;
+                  if (typeof usage.input_tokens === 'number') promptTokens = usage.input_tokens;
+
+                  if (typeof usage.completion_tokens === 'number')
+                    completionTokens = usage.completion_tokens;
+                  if (typeof usage.candidatesTokenCount === 'number')
+                    completionTokens = usage.candidatesTokenCount;
+                  if (typeof usage.output_tokens === 'number')
+                    completionTokens = usage.output_tokens;
+
+                  if (typeof usage.total_tokens === 'number') totalTokens = usage.total_tokens;
+                  if (typeof usage.totalTokenCount === 'number')
+                    totalTokens = usage.totalTokenCount;
+
+                  if (typeof usage.cached_tokens === 'number') cachedTokens = usage.cached_tokens;
+                  if (typeof usage.total_cached_tokens === 'number')
+                    cachedTokens = usage.total_cached_tokens;
+                }
+                if (parsed.delta?.usage?.output_tokens) {
+                  completionTokens = parsed.delta.usage.output_tokens;
+                }
+              }
+            }
+          } catch {
+            // Partial chunk or non-JSON; safely ignore
+          }
+        }
       },
       error: (error) => {
+        if (req) {
+          setResponseUsage(req, {
+            errorMessage: error instanceof Error ? error.message : String(error),
+          });
+        }
         if (res.raw.writableEnded) {
           return;
         }
-        const message = error instanceof Error ? error.message : String(error);
-        res.raw.write(
-          `data: ${JSON.stringify({
-            error: {
-              message,
-              type: 'server_error',
-            },
-          })}\n\n`,
-        );
+        const message = 'The server encountered an error while processing the stream.';
+        const payload =
+          dialect === 'responses'
+            ? {
+                type: 'error',
+                code: 'server_error',
+                message,
+                param: null,
+              }
+            : {
+                error: {
+                  message,
+                  type: 'server_error',
+                },
+              };
+        res.raw.write(`data: ${JSON.stringify(payload)}\n\n`);
         res.raw.end();
       },
       complete: () => {
+        if (req) {
+          setResponseUsage(req, {
+            model: streamModel || undefined,
+            promptTokens,
+            completionTokens,
+            totalTokens: totalTokens || promptTokens + completionTokens,
+            cachedTokens,
+          });
+        }
         if (!res.raw.writableEnded) {
           res.raw.end();
         }
@@ -123,6 +204,10 @@ export abstract class BaseProxyController {
     dialect: 'anthropic' | 'gemini' | 'openai',
     error: FileReferenceError,
   ): void {
+    const currentReq = res.request ?? getCurrentRequest();
+    if (currentReq) {
+      setResponseUsage(currentReq, { errorMessage: error.message });
+    }
     if (dialect === 'anthropic') {
       res.status(error.httpStatus).send({
         type: 'error',
@@ -156,15 +241,70 @@ export abstract class BaseProxyController {
     error: unknown,
     overrideMessage?: string,
   ): void {
-    const message = overrideMessage ?? this.resolveErrorMessageText(error);
-    const status = this.resolveErrorHttpStatus(message, error);
-    this.logProxyEndpointError(endpoint, status, message, error);
+    const originalMessage = overrideMessage ?? this.resolveErrorMessageText(error);
+    const status = this.resolveErrorHttpStatus(originalMessage, error);
+    const details = this.resolveOpenAIErrorDetails(error, status, originalMessage, overrideMessage);
+    this.logProxyEndpointError(endpoint, status, details.message, error);
+    const currentReq = res.request ?? getCurrentRequest();
+    if (currentReq) {
+      setResponseUsage(currentReq, { errorMessage: details.message });
+    }
     res.status(status).send({
-      error: {
-        message,
-        type: 'server_error',
-      },
+      error: details,
     });
+  }
+
+  private resolveOpenAIErrorDetails(
+    error: unknown,
+    status: HttpStatus,
+    originalMessage: string,
+    overrideMessage: string | undefined,
+  ): { code: string | null; message: string; param: string | null; type: string } {
+    const exceptionResponse = error instanceof HttpException ? error.getResponse() : null;
+    const responseRecord =
+      typeof exceptionResponse === 'object' && exceptionResponse !== null
+        ? exceptionResponse
+        : null;
+    const responseMessage = responseRecord ? Reflect.get(responseRecord, 'message') : undefined;
+    const responseCode = responseRecord ? Reflect.get(responseRecord, 'code') : undefined;
+    const responseParam = responseRecord ? Reflect.get(responseRecord, 'param') : undefined;
+    const responseType = responseRecord ? Reflect.get(responseRecord, 'type') : undefined;
+    const type =
+      typeof responseType === 'string'
+        ? responseType
+        : status === HttpStatus.UNAUTHORIZED
+          ? 'authentication_error'
+          : status === HttpStatus.FORBIDDEN
+            ? 'permission_error'
+            : status === HttpStatus.TOO_MANY_REQUESTS
+              ? 'rate_limit_error'
+              : status >= HttpStatus.INTERNAL_SERVER_ERROR
+                ? status === HttpStatus.SERVICE_UNAVAILABLE
+                  ? 'service_unavailable_error'
+                  : 'server_error'
+                : 'invalid_request_error';
+    const code =
+      typeof responseCode === 'string'
+        ? responseCode
+        : status === HttpStatus.UNAUTHORIZED
+          ? 'invalid_api_key'
+          : status === HttpStatus.SERVICE_UNAVAILABLE
+            ? 'service_unavailable'
+            : null;
+    const message =
+      overrideMessage ??
+      (typeof responseMessage === 'string'
+        ? responseMessage
+        : status >= HttpStatus.INTERNAL_SERVER_ERROR
+          ? 'The server encountered an error while processing the request.'
+          : originalMessage);
+
+    return {
+      code,
+      message,
+      param: typeof responseParam === 'string' ? responseParam : null,
+      type,
+    };
   }
 
   protected sendAnthropicErrorResponse(
@@ -176,6 +316,10 @@ export abstract class BaseProxyController {
     const message = overrideMessage ?? this.resolveErrorMessageText(error);
     const status = this.resolveErrorHttpStatus(message, error);
     this.logProxyEndpointError(endpoint, status, message, error);
+    const currentReq = res.request ?? getCurrentRequest();
+    if (currentReq) {
+      setResponseUsage(currentReq, { errorMessage: message });
+    }
     res.status(status).send({
       type: 'error',
       error: {

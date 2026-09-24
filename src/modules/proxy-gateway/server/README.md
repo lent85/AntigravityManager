@@ -40,7 +40,11 @@ server/
 │  └─ api-key-auth.util.ts                 # API key extraction and normalization utilities
 ├─ modules/                                # Sub-modules organized by feature capability
 │  ├─ openai/                              # OpenAI protocol sub-module
-│  │  ├─ openai.controller.ts              # Chat, Completions, Responses, Image, and Audio endpoints
+│  │  ├─ openai-chat.controller.ts         # Chat and legacy Completions endpoints
+│  │  ├─ openai-media.controller.ts        # Image and Audio endpoints
+│  │  ├─ openai-models.controller.ts       # Standard model catalog endpoints
+│  │  ├─ openai-gateway.controller.ts      # Nonstandard quote, quota, and billing extensions
+│  │  ├─ openai-operations.service.ts      # Shared route operations and durable response orchestration
 │  │  ├─ openai.service.ts                 # Request orchestration, stream conversion, tool call mapping
 │  │  ├─ openai.module.ts                  # NestJS OpenAI module registration
 │  │  ├─ responses/                        # OpenAI Responses WebSocket protocol and session store
@@ -50,6 +54,7 @@ server/
 │  │  │  ├─ openai-responses-websocket.protocol.ts
 │  │  │  └─ openai-responses-websocket.server.ts
 │  │  └─ media/                            # Image and audio multipart input parsing & monitoring summary
+│  │     ├─ audio-multipart-request.ts
 │  │     ├─ image-multipart-request.ts
 │  │     └─ image-monitoring-summary.ts
 │  ├─ anthropic/                           # Anthropic protocol sub-module
@@ -144,7 +149,7 @@ State a client can still reference after the process goes away is kept in `~/.an
 
 `GET /v1/responses/{id}` replays the payload the create call answered with and `DELETE /v1/responses/{id}` removes it; both answer 404 in OpenAI's error envelope for an id that is unknown, has aged out, or was created with `store: false`. A `previous_response_id` that cannot be resolved is answered the same way, because a client reads that as "start a fresh conversation" while an empty chain reads to the user as the assistant losing its memory.
 
-`POST /v1/chat/completions` accepts `store: true` on a unary request and keeps the `chat.completion` object it answered with, so `GET /v1/chat/completions/{id}` replays exactly that object -- choices, finish reasons, usage, model and creation time -- and a client that lost the connection reads its answer instead of paying for it twice. An id that was never stored or has aged out is 404, never an empty completion. `store: true` together with `stream: true` is refused with `param: "store"`, because a streamed answer is passed through chunk by chunk and no completion object is assembled to keep; answering 200 and keeping nothing would be a promise this route cannot fulfil.
+`POST /v1/chat/completions` accepts `store: true` for unary and streaming requests. The streaming path forwards chunks unchanged while reconstructing the final `chat.completion` object; it commits that object only after a clean terminal event. `GET /v1/chat/completions/{id}` replays exactly the stored object -- choices, finish reasons, usage, model and creation time. An id that was never stored or has aged out is 404, never an empty completion.
 
 The two stores are separate files with separate ceilings. They have unrelated lifetimes and unrelated volumes, so a burst of stored completions must not evict live conversation state.
 

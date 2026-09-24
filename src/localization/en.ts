@@ -230,6 +230,11 @@ const en = {
       auto_refresh_desc: 'Periodically refresh quota info for all accounts',
       auto_sync: 'Auto Sync Current Account',
       auto_sync_desc: 'Periodically sync active account information',
+      sync_delay_title: 'Delay Between Account Syncs',
+      sync_delay_desc:
+        'Random pause between checking individual accounts. If total round time exceeds the sync interval, the next round starts immediately.',
+      sync_delay_min: 'Min delay',
+      sync_delay_max: 'Max delay',
       antigravity_executable: 'Antigravity executable',
       antigravity_executable_desc:
         'Optional path used to find portable mode data and launch Antigravity.',
@@ -573,9 +578,11 @@ const en = {
         randomModernMix: 'Random Modern Mix (Variable Models & Quotas)',
       },
       randomizeQuota: 'Randomize Quota Levels',
-      randomizeQuotaDesc: 'Randomize 5h and weekly quota levels across accounts (consistent within Gemini and Claude groups).',
+      randomizeQuotaDesc:
+        'Randomize 5h and weekly quota levels across accounts (consistent within Gemini and Claude groups).',
       randomizeModels: 'Randomize Quota Levels',
-      randomizeModelsDesc: 'Randomize 5h and weekly quota levels across accounts (consistent within Gemini and Claude groups).',
+      randomizeModelsDesc:
+        'Randomize 5h and weekly quota levels across accounts (consistent within Gemini and Claude groups).',
       modelCount: '{{count}} models',
       quantity: 'Quantity',
       quantityPresets: 'Presets',
@@ -871,12 +878,13 @@ const en = {
     },
   },
   proxy: {
-    title: 'API Proxy',
-    description: 'Manage the local API proxy service.',
+    title: 'API Proxy & AI Gateway',
+    description: 'Manage the local API proxy and AI gateway service.',
     save: 'Save Settings',
     copy: 'Copy',
     copied: 'Copied!',
     regenerate: 'Regenerate',
+    regenerated: 'API key regenerated',
     regenerateConfirm: {
       title: 'Regenerate API Key?',
       description:
@@ -913,6 +921,146 @@ const en = {
       no_token_warning: '⚠️ API key is not set. Access is open to everyone!',
       show_key: 'Show',
       hide_key: 'Hide',
+    },
+    error: 'Error',
+    saving: 'Saving...',
+    tabs: {
+      service: 'Service & Accounts',
+      guides: 'Guides & Prompts',
+      gateway: 'AI Gateway & Pricing',
+      portal: 'Web Portal & Ngrok',
+    },
+    accounts: {
+      title: 'Account Selection & Pool',
+      description:
+        'Choose which connected cloud accounts are available to handle API Proxy traffic.',
+      mode_all: 'Use All Accounts',
+      mode_custom: 'Selected Accounts Only',
+      selected_count: '{{selected}} of {{total}} accounts selected',
+      select_all: 'Select All',
+      deselect_all: 'Deselect All',
+      no_accounts: 'No cloud accounts connected. Please add an account in Cloud Accounts.',
+      all_enabled_notice:
+        'All active connected accounts are automatically pooled and rotated according to the load-balancing strategy below.',
+    },
+    strategies: {
+      title: 'Account Switching & Load Balancing Strategy',
+      description:
+        'Choose how requests are distributed or rotated across eligible accounts in the pool.',
+      select_label: 'Routing Strategy',
+      preferred_label: 'Preferred Primary Account (Optional)',
+      no_preferred: 'None (Follow Strategy)',
+      round_robin: 'Round Robin (Sequential)',
+      round_robin_desc: 'Evenly and sequentially cycles requests across all eligible accounts.',
+      random: 'Random Distribution',
+      random_desc: 'Randomly selects an account for each request across the pool.',
+      quota_priority: 'Highest Quota First',
+      quota_priority_desc:
+        'Automatically routes to the account with the highest remaining quota for the requested model.',
+      failover: 'Sequential Failover',
+      failover_desc:
+        'Uses primary account and only shifts to subsequent accounts when rate-limited or exhausted.',
+      balance: 'Sticky Session Balance',
+      balance_desc: 'Maintains conversation affinity for sticky sessions with balanced fallback.',
+      cache_first: 'Prompt Cache First',
+      cache_first_desc:
+        'Prioritizes prompt cache affinity with brief wait tolerance before rotating.',
+      performance_first: 'Performance / Fast Rotation',
+      performance_first_desc: 'Optimized for speed with immediate account rollover on saturation.',
+    },
+    guides: {
+      ide_title: 'AI Client & IDE Setup',
+      ide_desc:
+        'Copy preconfigured snippets into Cursor, VS Code (Cline/Roo Code/Continue), or custom AI tools.',
+      target_model: 'Target Model:',
+      select_model: 'Select a model...',
+      gemini_models: 'Google Gemini',
+      claude_models: 'Anthropic Claude',
+      other_models: 'Other Models',
+      curl_title: 'cURL (REST API)',
+      node_title: 'Node.js (OpenAI SDK)',
+      tab_ides: 'Clients & IDEs',
+      tab_sdks: 'SDKs & Code',
+      tab_apis: 'Gateway REST APIs',
+      tab_caching: 'Context Caching',
+      tab_prompts: 'System Prompts',
+      caching_title: 'Gemini Context Caching (Transparent & Automatic)',
+      caching_desc:
+        'Zero client configuration needed. The Gateway automatically provisions and reuses upstream Gemini cachedContents for static prompts and tools.',
+      caching_how_it_works: 'How Context Caching Works',
+      caching_step1_title: '1. Static Prefix Detection',
+      caching_step1_desc:
+        'Analyzes system instructions and tools. When static content is >= 8,192 characters, it qualifies for caching.',
+      caching_step2_title: '2. Upstream Creation',
+      caching_step2_desc:
+        'Provisions a cachedContents resource in Google Vertex AI with 1-hour TTL and stores the handle in LRU memory.',
+      caching_step3_title: '3. Request Trimming',
+      caching_step3_desc:
+        'Subsequent requests omit repeated static instructions, sending the cachedContent handle to slash TTFT and token costs.',
+      caching_step4_title: '4. Resilient Failover',
+      caching_step4_desc:
+        'If cache expires or upstream returns 404/400, Gateway auto-invalidates and retries once with the full payload.',
+      caching_observability_title: 'Token Accounting & Client Verification',
+      caching_best_practices_title: 'Best Practices for Maximizing Cache Hits',
+      caching_env_title: 'Environment Variables & Advanced Tuning',
+      api_models_title: 'List Models API',
+      api_models_desc:
+        'Returns a list of all models available in the gateway (OpenAI compatible format).',
+      api_model_detail_title: 'Retrieve Model Detail API',
+      api_model_detail_desc: 'Retrieve the standard OpenAI identity for a specific model.',
+      api_quote_title: 'Model Pricing & Quote API',
+      api_quote_desc:
+        'Returns configured pricing and observed quota when those values are available.',
+      api_quota_title: 'Account Pool Quota API',
+      api_quota_desc:
+        'Admin-only inspection of pooled quota, account status, and load balancer health.',
+      api_chat_title: 'Chat Completions API',
+      api_chat_desc:
+        'OpenAI-compatible chat completion endpoint supporting streaming and tool calls.',
+      api_anthropic_title: 'Anthropic Messages API',
+      api_anthropic_desc:
+        'Native Anthropic messages endpoint; gateway transparently handles schema mapping.',
+      api_response_preview: 'Response Preview',
+    },
+    pricing: {
+      title: 'Model Pricing & Quote Configuration',
+      description:
+        'Configure token pricing for OpenAI Gateway quote endpoints and billing accounting.',
+      save_button: 'Save Pricing',
+      saved: 'Pricing configuration saved successfully!',
+      api_explorer_title: 'AI Gateway Quote & Quota Endpoints',
+      api_explorer_desc:
+        'Use these standard OpenAI & Gateway endpoints to query model capabilities, pricing, and live quotas.',
+    },
+    portal: {
+      title: 'Public Web Landing Portal',
+      description:
+        'Serve a rich, interactive Web Landing Portal at the gateway root URL for developers connecting via Ngrok, Cloudflare Tunnel, or LAN.',
+      enabled: 'Portal Enabled',
+      disabled: 'Portal Disabled',
+      open_browser: 'Open Web Portal',
+      custom_title: 'Portal Header Title',
+      custom_desc: 'Portal Subtitle / Description',
+      tunnel_title: 'Expose Gateway with Ngrok or Cloudflare',
+      tunnel_desc:
+        'Share your AI Gateway with teammates or external apps securely using tunneling tools.',
+    },
+    prompts: {
+      title: 'AI System Prompts Library',
+      description:
+        'Ready-to-use system prompts crafted for code generation, software architecture, and debugging.',
+      architect_title: 'Senior Software Architect',
+      architect_desc:
+        'Designed for high-level system architecture, type safety, and clean separation of concerns.',
+      debugger_title: 'Deep Reasoning & Root Cause Debugger',
+      debugger_desc:
+        'Systematically traces execution paths and finds elusive race conditions or memory leaks.',
+      reviewer_title: 'Code Quality & Security Auditor',
+      reviewer_desc:
+        'Audits changes for security vulnerabilities, API breaking changes, and style consistency.',
+      fullstack_title: 'Modern Full-Stack TypeScript Expert',
+      fullstack_desc:
+        'Expert in React 19, TypeScript 5+, NestJS, Fastify, and Electron desktop apps.',
     },
     mapping: {
       title: 'Model Mapping',

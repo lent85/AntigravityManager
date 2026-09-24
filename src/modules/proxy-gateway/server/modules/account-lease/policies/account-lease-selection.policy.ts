@@ -1,4 +1,11 @@
-export type AccountLeaseSelectionMode = 'cache-first' | 'balance' | 'performance-first';
+export type AccountLeaseSelectionMode =
+  | 'round-robin'
+  | 'random'
+  | 'quota-priority'
+  | 'failover'
+  | 'balance'
+  | 'cache-first'
+  | 'performance-first';
 export type AccountLeaseSelectionEntry<T> = [string, T];
 
 export interface AccountLeaseRateLimitReader {
@@ -208,6 +215,80 @@ export class AccountLeaseSelectionPolicy {
     return picked;
   }
 
+  private pickRandomEntry<T>(
+    candidates: Array<AccountLeaseSelectionEntry<T>>,
+  ): AccountLeaseSelectionEntry<T> | null {
+    if (candidates.length === 0) {
+      return null;
+    }
+    const randomIndex = Math.floor(Math.random() * candidates.length);
+    return candidates[randomIndex];
+  }
+
+  private pickFailoverEntry<T>(
+    candidates: Array<AccountLeaseSelectionEntry<T>>,
+  ): AccountLeaseSelectionEntry<T> | null {
+    if (candidates.length === 0) {
+      return null;
+    }
+    return candidates[0];
+  }
+
+  private pickQuotaPriorityEntry<T>(
+    candidates: Array<AccountLeaseSelectionEntry<T>>,
+    model?: string,
+  ): AccountLeaseSelectionEntry<T> | null {
+    if (candidates.length === 0) {
+      return null;
+    }
+    if (candidates.length === 1) {
+      return candidates[0];
+    }
+
+    let bestCandidate = candidates[0];
+    let highestQuota = -1;
+
+    for (const entry of candidates) {
+      const tokenData = entry[1] as { model_quotas?: Record<string, number> };
+      let quota = -1;
+      if (model && tokenData?.model_quotas?.[model] !== undefined) {
+        quota = tokenData.model_quotas[model];
+      } else if (tokenData?.model_quotas) {
+        const values = Object.values(tokenData.model_quotas);
+        if (values.length > 0) {
+          quota = values.reduce((sum, v) => sum + v, 0) / values.length;
+        }
+      }
+      if (quota > highestQuota) {
+        highestQuota = quota;
+        bestCandidate = entry;
+      }
+    }
+
+    return bestCandidate;
+  }
+
+  private pickByStrategy<T>(
+    candidates: Array<AccountLeaseSelectionEntry<T>>,
+    mode: AccountLeaseSelectionMode,
+    model?: string,
+  ): AccountLeaseSelectionEntry<T> | null {
+    switch (mode) {
+      case 'random':
+        return this.pickRandomEntry(candidates);
+      case 'quota-priority':
+        return this.pickQuotaPriorityEntry(candidates, model);
+      case 'failover':
+        return this.pickFailoverEntry(candidates);
+      case 'round-robin':
+      case 'balance':
+      case 'cache-first':
+      case 'performance-first':
+      default:
+        return this.pickRoundRobinEntry(candidates);
+    }
+  }
+
   private peekRoundRobinCandidateAccountId<T>(
     candidates: Array<AccountLeaseSelectionEntry<T>>,
   ): string | null {
@@ -232,16 +313,21 @@ export class AccountLeaseSelectionPolicy {
       return null;
     }
 
-    const stickyToken = this.findStickySessionToken(
-      availableTokens,
-      request.sessionKey,
-      request.now,
-    );
-    if (stickyToken) {
-      return stickyToken;
+    const mode = request.config.schedulingMode;
+    const isStickyMode = mode === 'balance' || mode === 'cache-first';
+
+    if (isStickyMode) {
+      const stickyToken = this.findStickySessionToken(
+        availableTokens,
+        request.sessionKey,
+        request.now,
+      );
+      if (stickyToken) {
+        return stickyToken;
+      }
     }
 
-    return this.pickRoundRobinEntry(availableTokens);
+    return this.pickByStrategy(availableTokens, mode, request.model);
   }
 
   private async selectParityTokenCandidate<T>(
@@ -266,13 +352,18 @@ export class AccountLeaseSelectionPolicy {
       }
     }
 
-    const stickyToken = this.findStickySessionToken(
-      availableTokens,
-      request.sessionKey,
-      request.now,
-    );
-    if (stickyToken) {
-      return stickyToken;
+    const mode = request.config.schedulingMode;
+    const isStickyMode = mode === 'balance' || mode === 'cache-first';
+
+    if (isStickyMode) {
+      const stickyToken = this.findStickySessionToken(
+        availableTokens,
+        request.sessionKey,
+        request.now,
+      );
+      if (stickyToken) {
+        return stickyToken;
+      }
     }
 
     const stickyBinding = this.getValidSessionBinding(request.sessionKey, request.now);
@@ -297,12 +388,12 @@ export class AccountLeaseSelectionPolicy {
           return stickyAfterWait;
         }
         if (refreshedAvailable.length > 0) {
-          return this.pickRoundRobinEntry(refreshedAvailable);
+          return this.pickByStrategy(refreshedAvailable, mode, request.model);
         }
       }
     }
 
-    return this.pickRoundRobinEntry(availableTokens);
+    return this.pickByStrategy(availableTokens, mode, request.model);
   }
 
   private predictLegacyAccountCandidateId<T>(
