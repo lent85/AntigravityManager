@@ -1,9 +1,22 @@
 import { HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { isFunction, isObjectLike, isString } from 'lodash-es';
+import { isFunction, isObjectLike } from 'lodash-es';
 import { Observable } from 'rxjs';
+import { writeProxySseResponse } from './proxy-sse-response';
 import { UpstreamRequestError } from '@/modules/proxy-gateway/server/common/exceptions/upstream-request.exception';
 import type { FileReferenceError } from '@/modules/proxy-gateway/server/modules/files/file-reference-expander';
+import { ProxyAccountUnavailableError } from '@/modules/proxy-gateway/server/common/exceptions/proxy-account-unavailable.exception';
+
+export function applyProxyRetryAfterHeader(res: FastifyReply, error: unknown): void {
+  if (
+    error instanceof ProxyAccountUnavailableError &&
+    error.retryAfterSeconds !== undefined &&
+    Number.isFinite(error.retryAfterSeconds) &&
+    error.retryAfterSeconds > 0
+  ) {
+    res.header('Retry-After', String(Math.ceil(error.retryAfterSeconds)));
+  }
+}
 
 import { getCurrentRequest, setResponseUsage } from '../shared/services/request-usage-context';
 
@@ -48,133 +61,17 @@ export abstract class BaseProxyController {
   protected writeSseResponse(
     res: FastifyReply,
     stream: Observable<unknown>,
-    req?: FastifyRequest,
+    reqOrIncludeTiming?: FastifyRequest | boolean,
     modelFallback?: string,
     dialect: 'default' | 'responses' = 'default',
   ): void {
-    if (!res.raw || !isFunction(res.raw.writeHead) || !isFunction(res.raw.write)) {
-      res.header('Content-Type', 'text/event-stream');
-      res.header('Cache-Control', 'no-cache');
-      res.header('Connection', 'keep-alive');
-      res.send(stream);
-      return;
-    }
-
-    if (isFunction((res as { hijack?: () => void }).hijack)) {
-      (res as { hijack: () => void }).hijack();
-    }
-
-    res.raw.writeHead(HttpStatus.OK, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-    });
-
-    let streamModel = modelFallback || '';
-    let promptTokens = 0;
-    let completionTokens = 0;
-    let totalTokens = 0;
-    let cachedTokens = 0;
-
-    const subscription = stream.subscribe({
-      next: (chunk) => {
-        if (res.raw.writableEnded) {
-          return;
-        }
-        const payload = isString(chunk) ? chunk : String(chunk ?? '');
-        res.raw.write(payload);
-
-        // Inspect chunk for usage metadata
-        if (
-          payload.includes('"usage"') ||
-          payload.includes('"usageMetadata"') ||
-          payload.includes('"message_delta"')
-        ) {
-          try {
-            const trimmed = payload.trim();
-            for (const line of trimmed.split('\n')) {
-              if (line.startsWith('data: ') && !line.includes('[DONE]')) {
-                const parsed = JSON.parse(line.slice(6));
-                if (parsed.model) {
-                  streamModel = parsed.model;
-                }
-                const usage = parsed.usage || parsed.usageMetadata || parsed.message?.usage;
-                if (usage) {
-                  if (typeof usage.prompt_tokens === 'number') promptTokens = usage.prompt_tokens;
-                  if (typeof usage.promptTokenCount === 'number')
-                    promptTokens = usage.promptTokenCount;
-                  if (typeof usage.input_tokens === 'number') promptTokens = usage.input_tokens;
-
-                  if (typeof usage.completion_tokens === 'number')
-                    completionTokens = usage.completion_tokens;
-                  if (typeof usage.candidatesTokenCount === 'number')
-                    completionTokens = usage.candidatesTokenCount;
-                  if (typeof usage.output_tokens === 'number')
-                    completionTokens = usage.output_tokens;
-
-                  if (typeof usage.total_tokens === 'number') totalTokens = usage.total_tokens;
-                  if (typeof usage.totalTokenCount === 'number')
-                    totalTokens = usage.totalTokenCount;
-
-                  if (typeof usage.cached_tokens === 'number') cachedTokens = usage.cached_tokens;
-                  if (typeof usage.total_cached_tokens === 'number')
-                    cachedTokens = usage.total_cached_tokens;
-                }
-                if (parsed.delta?.usage?.output_tokens) {
-                  completionTokens = parsed.delta.usage.output_tokens;
-                }
-              }
-            }
-          } catch {
-            // Partial chunk or non-JSON; safely ignore
-          }
-        }
-      },
-      error: (error) => {
-        if (req) {
-          setResponseUsage(req, {
-            errorMessage: error instanceof Error ? error.message : String(error),
-          });
-        }
-        if (res.raw.writableEnded) {
-          return;
-        }
-        const message = 'The server encountered an error while processing the stream.';
-        const payload =
-          dialect === 'responses'
-            ? {
-                type: 'error',
-                code: 'server_error',
-                message,
-                param: null,
-              }
-            : {
-                error: {
-                  message,
-                  type: 'server_error',
-                },
-              };
-        res.raw.write(`data: ${JSON.stringify(payload)}\n\n`);
-        res.raw.end();
-      },
-      complete: () => {
-        if (req) {
-          setResponseUsage(req, {
-            model: streamModel || undefined,
-            promptTokens,
-            completionTokens,
-            totalTokens: totalTokens || promptTokens + completionTokens,
-            cachedTokens,
-          });
-        }
-        if (!res.raw.writableEnded) {
-          res.raw.end();
-        }
-      },
-    });
-
-    res.raw.on('close', () => {
-      subscription.unsubscribe();
+    const includeTiming = typeof reqOrIncludeTiming === 'boolean' ? reqOrIncludeTiming : true;
+    const req = typeof reqOrIncludeTiming === 'object' ? reqOrIncludeTiming : res.request;
+    writeProxySseResponse(res, stream, {
+      includeTiming,
+      request: req,
+      modelFallback,
+      dialect,
     });
   }
 
@@ -245,6 +142,7 @@ export abstract class BaseProxyController {
     const status = this.resolveErrorHttpStatus(originalMessage, error);
     const details = this.resolveOpenAIErrorDetails(error, status, originalMessage, overrideMessage);
     this.logProxyEndpointError(endpoint, status, details.message, error);
+    applyProxyRetryAfterHeader(res, error);
     const currentReq = res.request ?? getCurrentRequest();
     if (currentReq) {
       setResponseUsage(currentReq, { errorMessage: details.message });
@@ -314,8 +212,9 @@ export abstract class BaseProxyController {
     overrideMessage?: string,
   ): void {
     const message = overrideMessage ?? this.resolveErrorMessageText(error);
-    const status = this.resolveErrorHttpStatus(message, error);
+    const status = this.resolveAnthropicErrorHttpStatus(message, error);
     this.logProxyEndpointError(endpoint, status, message, error);
+    applyProxyRetryAfterHeader(res, error);
     const currentReq = res.request ?? getCurrentRequest();
     if (currentReq) {
       setResponseUsage(currentReq, { errorMessage: message });
@@ -327,6 +226,22 @@ export abstract class BaseProxyController {
         message,
       },
     });
+  }
+
+  /**
+   * A terminal upstream 403 means the local account pool could not satisfy an
+   * Anthropic request. Claude clients treat a public 403 as an invalid local
+   * login and stop retrying, so expose it as temporary gateway unavailability.
+   * This stays at the Anthropic boundary: OpenAI and Gemini preserve upstream
+   * 403 responses, and the shared retry service remains provider-neutral.
+   */
+  private resolveAnthropicErrorHttpStatus(message: string, error?: unknown): HttpStatus {
+    const status = this.resolveErrorHttpStatus(message, error);
+    if (error instanceof UpstreamRequestError && status === HttpStatus.FORBIDDEN) {
+      return HttpStatus.SERVICE_UNAVAILABLE;
+    }
+
+    return status;
   }
 
   private resolveErrorHttpStatus(message: string, error?: unknown): HttpStatus {

@@ -112,10 +112,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
-venv/
-ENV/
-env/
-*.egg-info/
 dist/
 build/
 
@@ -127,3 +123,6 @@ accounts_backup.json
 # Bun lock file
 bun.lock
 .codanna/
+.idea/
+# Local analysis metadata
+.code-review-graph/

@@ -31,6 +31,7 @@ import {
 import { GeminiResponse } from '@/modules/proxy-gateway/server/common/interfaces/request-interfaces';
 import { decodeInternalSseData } from '@/modules/proxy-gateway/antigravity/internal-sse';
 import { isProjectLicenseErrorMessage } from '@/modules/proxy-gateway/server/common/google-error-details';
+import { setCurrentAuditAccountId } from '@/modules/proxy-gateway/audit/traffic-audit-context';
 
 interface StreamIdleTimer {
   reset: () => void;
@@ -136,21 +137,22 @@ export abstract class BaseProxyService {
     imageRequest = false,
     signal?: AbortSignal,
   ): Promise<CloudAccount | null> {
-    const token = await this.retryPolicy.selectRetryToken(
+    const account = await this.retryPolicy.selectRetryToken(
       retryState,
       model,
       sessionKey,
       imageRequest,
       signal,
     );
-    if (token) {
+    if (account) {
       recordAccountUsage({
-        id: token.id,
-        email: token.email,
-        name: token.name,
+        id: account.id,
+        email: account.email,
+        name: account.name,
       });
     }
-    return token;
+    setCurrentAuditAccountId(account?.id ?? null);
+    return account;
   }
 
   protected releaseImagePermit(retryState: ProxyTokenRetryState): void {
@@ -340,12 +342,18 @@ export abstract class BaseProxyService {
     model: string,
     accountId: string,
     registered?: RegisteredGenerationConstraints,
+    enforceAuthoritativeThinkingBudget = false,
   ): void {
+    if (body.request.systemInstruction) {
+      body.request.systemInstruction.role = 'user';
+    }
+
     this.generationConstraints.applyInternalGenerationConstraints(
       body,
       model,
       accountId,
       registered,
+      enforceAuthoritativeThinkingBudget,
     );
   }
 
@@ -374,7 +382,7 @@ export abstract class BaseProxyService {
       const token = await this.selectRetryToken(retryState, targetModel);
       if (!token) {
         if (lastError !== null) {
-          throw lastError;
+          throw this.resolveTerminalRetryError(retryState, lastError);
         }
         throw new Error('No available accounts (all exhausted or rate limited)');
       }
@@ -398,6 +406,7 @@ export abstract class BaseProxyService {
         return response.totalTokens;
       } catch (error) {
         lastError = error;
+        this.recordRetryFailure(retryState, error);
         if (await this.prepareGraceRetry(retryState, token, error, label)) {
           continue;
         }
@@ -405,7 +414,10 @@ export abstract class BaseProxyService {
       }
     }
 
-    throw lastError || new Error(`${label} request failed after retries`);
+    throw this.resolveTerminalRetryError(
+      retryState,
+      lastError || new Error(`${label} request failed after retries`),
+    );
   }
 
   protected async generateInternalWithStreamFallback(

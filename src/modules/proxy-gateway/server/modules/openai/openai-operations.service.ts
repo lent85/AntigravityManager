@@ -61,6 +61,7 @@ import { parseImageMultipartRequest } from '@/modules/proxy-gateway/server/modul
 import { parseGenerationInputImages } from '@/modules/proxy-gateway/server/modules/openai/media/image-input-validation';
 import { safeStringifyPacket } from '@/shared/security/sensitiveDataMasking';
 import { BaseProxyController } from '@/modules/proxy-gateway/server/common/base-proxy.controller';
+import { setProxyResponseTimingHeaders } from '@/modules/proxy-gateway/server/common/proxy-response-timing';
 import { setResponseUsage } from '../../shared/services/request-usage-context';
 import { proxyUsageStore } from '../../shared/services/proxy-usage.store';
 import { resolveOpenAIImageUrl } from './openai-image-url';
@@ -406,6 +407,7 @@ export class OpenAIOperations extends BaseProxyController {
       }
 
       const response = result as OpenAIChatResponse;
+      setProxyResponseTimingHeaders(res, req);
       if (req) {
         setResponseUsage(req, {
           protocol: 'openai',
@@ -486,6 +488,7 @@ export class OpenAIOperations extends BaseProxyController {
       const response = result as OpenAIChatResponse;
       const responsesResponse = toOpenAIResponsesResponse(response, prepared.responseId);
       this.saveResponsesSession(responsesResponse, prepared);
+      setProxyResponseTimingHeaders(res, req);
       res.status(HttpStatus.OK).send(responsesResponse);
     } catch (error) {
       this.sendOpenAIErrorResponse(res, '/v1/responses', error);
@@ -764,6 +767,7 @@ export class OpenAIOperations extends BaseProxyController {
         if (body.store === true) {
           this.storedCompletions.save(response);
         }
+        setProxyResponseTimingHeaders(res, req);
         res.status(HttpStatus.OK).send(result);
       }
     } catch (error) {

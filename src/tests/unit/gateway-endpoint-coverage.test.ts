@@ -253,6 +253,99 @@ const CENSUS: readonly CensusEntry[] = [
     routePath: '/v1internal/generateChat',
     testFile: 'v1internal-passthrough.test.ts',
   },
+  // Traffic audit internal routes (src/modules/proxy-gateway/server/modules/observability/observability.controller.ts)
+  {
+    method: 'GET',
+    routePath: '/internal/audit/stats',
+    testFile: 'traffic-audit-thought-store.test.ts',
+  },
+  {
+    method: 'GET',
+    routePath: '/internal/audit/requests',
+    testFile: 'traffic-audit-thought-store.test.ts',
+  },
+  {
+    method: 'GET',
+    routePath: '/internal/audit/filter-options',
+    testFile: 'traffic-audit-thought-store.test.ts',
+  },
+  {
+    method: 'GET',
+    routePath: '/internal/audit/requests/:requestId',
+    testFile: 'traffic-audit-thought-store.test.ts',
+  },
+  {
+    method: 'DELETE',
+    routePath: '/internal/audit/requests/:requestId',
+    testFile: 'traffic-audit-thought-store.test.ts',
+  },
+  {
+    method: 'DELETE',
+    routePath: '/internal/audit/requests',
+    testFile: 'traffic-audit-thought-store.test.ts',
+  },
+  {
+    method: 'GET',
+    routePath: '/internal/audit/bodies/:bodyId/chunks',
+    testFile: 'traffic-audit-thought-store.test.ts',
+  },
+  {
+    method: 'GET',
+    routePath: '/internal/audit/bodies/:bodyId/content',
+    testFile: 'traffic-audit-thought-store.test.ts',
+  },
+  {
+    method: 'POST',
+    routePath: '/internal/audit/repair',
+    testFile: 'traffic-audit-thought-store.test.ts',
+  },
+  // Thought Store client routes (src/modules/proxy-gateway/server/modules/thinking/thinking.controller.ts)
+  {
+    method: 'POST',
+    routePath: '/v1/thinking/end',
+    testFile: 'thought-store-restoration.test.ts',
+  },
+  {
+    method: 'GET',
+    routePath: '/v1/thinking/sessions/:sessionId',
+    testFile: 'thought-store-restoration.test.ts',
+  },
+  {
+    method: 'DELETE',
+    routePath: '/v1/thinking/sessions/:sessionId',
+    testFile: 'thought-store-restoration.test.ts',
+  },
+  // Thought Store internal routes (src/modules/proxy-gateway/server/modules/observability/observability.controller.ts)
+  {
+    method: 'GET',
+    routePath: '/internal/thinking/stats',
+    testFile: 'thought-store-restoration.test.ts',
+  },
+  {
+    method: 'GET',
+    routePath: '/internal/thinking/sessions',
+    testFile: 'thought-store-restoration.test.ts',
+  },
+  {
+    method: 'GET',
+    routePath: '/internal/thinking/sessions/:sessionKey',
+    testFile: 'thought-store-restoration.test.ts',
+  },
+  {
+    method: 'DELETE',
+    routePath: '/internal/thinking/sessions/:sessionKey',
+    testFile: 'thought-store-restoration.test.ts',
+  },
+  {
+    method: 'DELETE',
+    routePath: '/internal/thinking/sessions',
+    testFile: 'thought-store-restoration.test.ts',
+  },
+  {
+    method: 'POST',
+    routePath: '/internal/thinking/repair',
+    testFile: 'thought-store-restoration.test.ts',
+  },
 ];
 
 const EXPECTED_UNCOVERED_ROUTES: readonly string[] = [];

@@ -17,4 +17,6 @@ export const IPC_CHANNELS = {
   START_PERFORMANCE_RECORDING: 'start-performance-recording',
   STOP_PERFORMANCE_RECORDING: 'stop-performance-recording',
   ACCOUNT_SYNC_STATUS: 'cloud-account:sync-status',
+  TRAFFIC_AUDIT_EVENT: 'traffic-audit-event',
+  SAVE_TRAFFIC_AUDIT_BODY: 'save-traffic-audit-body',
 };

@@ -1,6 +1,10 @@
 import { ipcRenderer, contextBridge, type IpcRendererEvent } from 'electron';
 import type { RendererPerformanceSnapshot } from './modules/app-shell/performance-recorder/types';
-import { IPC_CHANNELS } from '@/shared/constants';
+import {
+  TrafficAuditEventSchema,
+  type TrafficAuditEvent,
+} from './modules/proxy-gateway/audit/traffic-audit.types';
+import { IPC_CHANNELS } from './shared/constants';
 
 window.addEventListener('message', (event) => {
   if (event.data === IPC_CHANNELS.START_ORPC_SERVER) {
@@ -34,6 +38,16 @@ const electronBridge = {
     ipcRenderer.send(IPC_CHANNELS.MANUAL_UPDATE_RENDERER_READY);
     return () => ipcRenderer.off(IPC_CHANNELS.MANUAL_UPDATE_AVAILABLE, handler);
   },
+  onTrafficAuditEvent: (callback: (event: TrafficAuditEvent) => void) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown) => {
+      const parsed = TrafficAuditEventSchema.safeParse(payload);
+      if (parsed.success) {
+        callback(parsed.data);
+      }
+    };
+    ipcRenderer.on(IPC_CHANNELS.TRAFFIC_AUDIT_EVENT, handler);
+    return () => ipcRenderer.off(IPC_CHANNELS.TRAFFIC_AUDIT_EVENT, handler);
+  },
   checkForUpdates: () => {
     return ipcRenderer.invoke(IPC_CHANNELS.CHECK_FOR_UPDATES);
   },
@@ -48,6 +62,9 @@ const electronBridge = {
   },
   openExternalUrl: (url: string) => {
     return ipcRenderer.invoke(IPC_CHANNELS.OPEN_EXTERNAL_URL, url);
+  },
+  saveTrafficAuditBody: (bodyId: string, suggestedName: string) => {
+    return ipcRenderer.invoke(IPC_CHANNELS.SAVE_TRAFFIC_AUDIT_BODY, bodyId, suggestedName);
   },
   ...(import.meta.env.ANTIGRAVITY_ENABLE_PERFORMANCE_RECORDER === '1'
     ? {

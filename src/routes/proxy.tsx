@@ -21,6 +21,11 @@ import { ProxyLogsTab } from '@/modules/proxy-gateway/components/ProxyLogsTab';
 import { ProxyDocsPromptsTab } from '@/modules/proxy-gateway/components/ProxyDocsPromptsTab';
 import { ProxyGatewayPricingTab } from '@/modules/proxy-gateway/components/ProxyGatewayPricingTab';
 import { ProxyWebPortalTab } from '@/modules/proxy-gateway/components/ProxyWebPortalTab';
+import { GlobalSystemPromptCard } from '@/modules/proxy-gateway/components/GlobalSystemPromptCard';
+import { AuditAndThoughtStoreCard } from '@/modules/proxy-gateway/components/AuditAndThoughtStoreCard';
+import { OpenCodeSyncCard } from '@/modules/proxy-gateway/components/OpenCodeSyncCard';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 
 export const Route = createFileRoute('/proxy')({
   component: ProxyPage,
@@ -48,15 +53,12 @@ function ProxyPage() {
   });
 
   // Selected IP for display (defaults to first recommended or first available)
-  const [selectedIp, setSelectedIp] = useState<string>('');
-
-  // Set default selected IP when IPs are loaded
-  useEffect(() => {
-    if (localIps && localIps.length > 0 && !selectedIp) {
-      const recommended = localIps.find((ip) => ip.isRecommended);
-      setSelectedIp(recommended?.address || localIps[0].address);
-    }
-  }, [localIps, selectedIp]);
+  const [overrideSelectedIp, setSelectedIp] = useState<string | null>(null);
+  const selectedIp =
+    overrideSelectedIp ??
+    localIps?.find((ip) => ip.isRecommended)?.address ??
+    localIps?.[0]?.address ??
+    '';
 
   // Local state for proxyConfig editing
   const [proxyConfig, setProxyConfig] = useState<ProxyConfig | undefined>(undefined);
@@ -187,6 +189,64 @@ function ProxyPage() {
             selectedIp={selectedIp}
             setSelectedIp={setSelectedIp}
           />
+          <GlobalSystemPromptCard
+            config={proxyConfig.global_system_prompt}
+            onChange={(global_system_prompt) =>
+              updateProxyConfig({ ...proxyConfig, global_system_prompt })
+            }
+          />
+          <AuditAndThoughtStoreCard
+            config={proxyConfig}
+            onChange={(patch) => updateProxyConfig({ ...proxyConfig, ...patch })}
+          />
+          <OpenCodeSyncCard baseUrl={baseUrl} models={exampleModels} />
+
+          {/* Experimental Features Card */}
+          <div className="rounded-lg border bg-card p-4 space-y-3">
+            <h3 className="text-sm font-semibold">{t('proxy.config.experimental_features', 'Experimental Features')}</h3>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>{t('proxy.config.cloud_code_meta')}</Label>
+                <p className="text-xs text-muted-foreground">{t('proxy.config.cloud_code_meta_desc')}</p>
+              </div>
+              <Switch
+                checked={proxyConfig.experimental?.enable_cloud_code_meta ?? false}
+                onCheckedChange={(checked) =>
+                  updateProxyConfig({
+                    ...proxyConfig,
+                    experimental: {
+                      ...proxyConfig.experimental,
+                      enable_cloud_code_meta: checked,
+                    },
+                  })
+                }
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="proxy-allow-local-video-paths">
+                  {t('proxy.config.allow-local-video-paths')}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t('proxy.config.allow-local-video-paths-desc')}
+                </p>
+              </div>
+              <Switch
+                id="proxy-allow-local-video-paths"
+                checked={proxyConfig.experimental?.allow_local_video_paths ?? false}
+                onCheckedChange={(checked) =>
+                  updateProxyConfig({
+                    ...proxyConfig,
+                    experimental: {
+                      ...proxyConfig.experimental,
+                      allow_local_video_paths: checked,
+                    },
+                  })
+                }
+              />
+            </div>
+          </div>
+
           <ProxyApiKeysCard
             proxyConfig={proxyConfig}
             updateProxyConfig={updateProxyConfig}
@@ -228,6 +288,7 @@ function ProxyPage() {
           />
         </TabsContent>
       </Tabs>
+
     </div>
   );
 }

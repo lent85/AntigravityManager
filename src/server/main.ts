@@ -11,6 +11,9 @@ import { attachOpenAIResponsesWebSocketServer } from '../modules/proxy-gateway/s
 import { parseResponsesRequestBody } from '../modules/proxy-gateway/server/modules/openai/responses/openai-responses-request';
 import { extractApiKeyToken } from '../modules/proxy-gateway/server/guards/api-key-auth.util';
 import { MAX_IMAGE_GENERATION_BODY_BYTES } from '@/modules/proxy-gateway/server/modules/openai/media/image-input-validation';
+import { registerTrafficAuditHttpHooks } from '@/modules/proxy-gateway/audit/traffic-audit-context';
+import { trafficAuditService } from '@/modules/proxy-gateway/audit/traffic-audit.service';
+import { thoughtStoreService } from '@/modules/proxy-gateway/thought-store/thought-store.service';
 
 import { ProxyConfig, ModelPricingConfig } from '@/modules/config/types';
 import { getServerConfig, setServerConfig } from './server-config';
@@ -149,6 +152,7 @@ export async function bootstrapNestServer(config: ProxyConfig): Promise<NestServ
   try {
     const fastifyAdapter = new FastifyAdapter();
     registerImageGenerationBodyLimit(fastifyAdapter.getInstance());
+    registerTrafficAuditHttpHooks(fastifyAdapter.getInstance());
 
     // Register request instrumentation hooks for usage tracking
     const fastifyInstance = fastifyAdapter.getInstance() as any;
@@ -234,7 +238,6 @@ export async function bootstrapNestServer(config: ProxyConfig): Promise<NestServ
       }
       done();
     });
-
     app = await NestFactory.create<NestFastifyApplication>(AppModule, fastifyAdapter, {
       abortOnError: false,
       logger: ['error', 'warn', 'log'],
@@ -322,6 +325,7 @@ export async function stopNestServer(): Promise<boolean> {
       detachResponsesWebSocketServer?.();
       detachResponsesWebSocketServer = null;
       await app.close();
+      await Promise.allSettled([trafficAuditService.close(), thoughtStoreService.close()]);
       app = null;
       currentPort = 0;
       logger.info('NestJS server stopped.');

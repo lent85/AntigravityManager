@@ -12,6 +12,7 @@ import {
   ChevronRight,
   RefreshCw,
   FlaskConical,
+  Activity,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -81,6 +82,11 @@ export const MainLayout: React.FC = () => {
           },
         ]
       : []),
+    {
+      to: '/traffic',
+      icon: Activity,
+      label: t('nav.traffic'),
+    },
     {
       to: '/settings',
       icon: Settings,

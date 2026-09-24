@@ -6,7 +6,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { Observable } from 'rxjs';
 import { transformClaudeRequestIn } from '@/modules/proxy-gateway/antigravity/ClaudeRequestMapper';
 import { cleanImageModelName } from '@/modules/proxy-gateway/antigravity/ImageGenerationConfig';
+import {
+  isMalformedFunctionCallFinishReason,
+  MALFORMED_FUNCTION_CALL_RECOVERY_TEXT,
+} from '@/modules/proxy-gateway/antigravity/GeminiFinishReason';
 import { transformResponse } from '@/modules/proxy-gateway/antigravity/ClaudeResponseMapper';
+import { usesAuthoritativeThinkingBudget } from '@/modules/proxy-gateway/antigravity/model-variant-registry';
 import {
   toOpenAIResponsesUsage,
   toOpenAIUsageFromGeminiUsageMetadata,
@@ -19,7 +24,10 @@ import {
 } from '@/modules/proxy-gateway/antigravity/CustomToolCall';
 import { optimizeApplyPatch } from '@/modules/proxy-gateway/antigravity/ApplyPatchPreflight';
 import { splitNamespaceToolName } from '@/modules/proxy-gateway/antigravity/ToolNamespace';
-import { resolveShellToolName } from '@/modules/proxy-gateway/antigravity/ShellToolName';
+import {
+  adaptCommandArguments,
+  selectClientCommandTool,
+} from '@/modules/proxy-gateway/antigravity/CommandToolAdapter';
 import { SignatureStore } from '@/modules/proxy-gateway/antigravity/SignatureStore';
 import { decodeSignature } from '@/modules/proxy-gateway/antigravity/signature-utils';
 import { decodeInternalSseData } from '@/modules/proxy-gateway/antigravity/internal-sse';
@@ -37,6 +45,10 @@ import {
 } from '@/modules/proxy-gateway/server/shared/services/model-variant-request.service';
 import { safeStringifyPacket } from '@/shared/security/sensitiveDataMasking';
 import { BaseProxyService } from '@/modules/proxy-gateway/server/common/base-proxy.service';
+import {
+  markProxyCleanComplete,
+  markProxyNormalizationStarted,
+} from '@/modules/proxy-gateway/server/common/proxy-response-timing';
 import {
   toGeminiUsageMetadata,
   toResponsesGroundingMetadata,
@@ -117,11 +129,15 @@ export class OpenAIService extends BaseProxyService {
       : routedRequest.model;
     const routeResolution = this.modelRoutingPolicy.resolveModelRouteForRequest(routingModel);
     const targetModel = routeResolution.resolvedModel;
+    const enforceAuthoritativeThinkingBudget =
+      usesAuthoritativeThinkingBudget(request.model) ||
+      usesAuthoritativeThinkingBudget(targetModel);
     const isImageRequest = isGeminiImageModel(routingModel) || isGeminiImageModel(targetModel);
     const extraHeaders = this.createModelSpecificHeaders(request.model);
     this.logger.log(
       `OpenAI-compatible request received: model=${request.model}, mappedModel=${targetModel}, stream=${request.stream}, routeSource=${routeResolution.source}`,
     );
+    markProxyCleanComplete();
 
     // Retry loop for account selection
     let lastError: unknown = null;
@@ -163,6 +179,7 @@ export class OpenAIService extends BaseProxyService {
         ? accountRequest.model
         : effectiveTargetModel;
 
+      markProxyNormalizationStarted();
       try {
         const claudeRequest = this.convertOpenAIToClaude(accountRequest, signatureReadSessionKey);
         const projectId = token.token.project_id ?? '';
@@ -188,6 +205,7 @@ export class OpenAIService extends BaseProxyService {
           geminiBody.model,
           token.id,
           effectiveVariantRequest.variant ?? undefined,
+          enforceAuthoritativeThinkingBudget,
         );
 
         // Use v1internal API (same as Anthropic handler)
@@ -240,7 +258,7 @@ export class OpenAIService extends BaseProxyService {
               signatureSessionKey: responseSessionKey,
               signatureMessageCount: claudeRequest.messages.length,
             });
-            const openaiResponse = convertClaudeToOpenAIResponse(
+            const openaiResponse = this.convertClaudeToOpenAIResponse(
               claudeResponse,
               request.model,
               clientToolNames,
@@ -279,7 +297,7 @@ export class OpenAIService extends BaseProxyService {
           this.logger.log(
             `Transformed Claude response snippet: ${safeStringifyPacket(claudeResponse).substring(0, 500)}`,
           );
-          return convertClaudeToOpenAIResponse(claudeResponse, request.model, clientToolNames);
+          return this.convertClaudeToOpenAIResponse(claudeResponse, request.model, clientToolNames);
         }
       } catch (err) {
         if (err instanceof Error && this.isProjectContextError(err.message)) {
@@ -287,6 +305,7 @@ export class OpenAIService extends BaseProxyService {
             `OpenAI compatibility request hit project context issue, retrying without project: ${err.message}`,
           );
           try {
+            markProxyNormalizationStarted();
             const claudeRequest = this.convertOpenAIToClaude(
               accountRequest,
               signatureReadSessionKey,
@@ -313,6 +332,7 @@ export class OpenAIService extends BaseProxyService {
               fallbackBody.model,
               token.id,
               effectiveVariantRequest.variant ?? undefined,
+              enforceAuthoritativeThinkingBudget,
             );
             if (request.stream) {
               const stream = await this.geminiClient.streamGenerateInternal(
@@ -354,7 +374,11 @@ export class OpenAIService extends BaseProxyService {
               signatureSessionKey: responseSessionKey,
               signatureMessageCount: claudeRequest.messages.length,
             });
-            return convertClaudeToOpenAIResponse(claudeResponse, request.model, clientToolNames);
+            return this.convertClaudeToOpenAIResponse(
+              claudeResponse,
+              request.model,
+              clientToolNames,
+            );
           } catch (fallbackErr) {
             lastError = fallbackErr;
           }
@@ -646,6 +670,7 @@ export class OpenAIService extends BaseProxyService {
       const decoder = new TextDecoder();
       let buffer = '';
       let hasEmittedChunk = false;
+      let hasEmittedContent = false;
       let hasSentDone = false;
       const requiresCleanImageEnd = isGeminiImageModel(signatureSourceModel);
       let sawImageData = false;
@@ -765,16 +790,21 @@ export class OpenAIService extends BaseProxyService {
 
                   const splitName = splitNamespaceToolName(functionCall.name);
                   const functionName = clientToolNames
-                    ? resolveShellToolName(splitName.name, clientToolNames)
+                    ? selectClientCommandTool(splitName.name, clientToolNames)
                     : splitName.name;
                   const rawArguments = toUnknownRecord(functionCall.args) ?? {};
+                  const adaptedCommandArguments = adaptCommandArguments(functionName, rawArguments);
+                  if (adaptedCommandArguments.fallbackApplied) {
+                    this.logger.debug('[OpenAI] command tool fallback_applied=true');
+                  }
                   const functionArguments = isCustomToolCall(functionName)
                     ? toCustomToolArguments(
                         functionName,
-                        optimizeApplyPatch(extractCustomToolInput(functionName, rawArguments))
-                          .input,
+                        optimizeApplyPatch(
+                          extractCustomToolInput(functionName, adaptedCommandArguments.arguments),
+                        ).input,
                       )
-                    : rawArguments;
+                    : adaptedCommandArguments.arguments;
                   const toolCallChunk = {
                     id: streamId,
                     object: 'chat.completion.chunk',
@@ -838,6 +868,14 @@ export class OpenAIService extends BaseProxyService {
                 pushChunk(reasoningChunk);
               }
 
+              const finishReason = isString(candidate?.finishReason)
+                ? candidate.finishReason
+                : undefined;
+              const isMalformedFunctionCall = isMalformedFunctionCallFinishReason(finishReason);
+              if (isMalformedFunctionCall && !responseContent && !hasEmittedContent) {
+                responseContent = MALFORMED_FUNCTION_CALL_RECOVERY_TEXT;
+              }
+
               if (responseContent) {
                 const contentChunk = {
                   id: streamId,
@@ -853,6 +891,7 @@ export class OpenAIService extends BaseProxyService {
                   ],
                 };
                 pushChunk(contentChunk);
+                hasEmittedContent = true;
               }
 
               if (candidate && isString(candidate.finishReason)) {
@@ -867,10 +906,11 @@ export class OpenAIService extends BaseProxyService {
                       delta: {},
                       // OpenAI clients only continue the tool loop when the finish reason reflects
                       // the emitted tool call, even if Gemini reports a generic STOP.
-                      finish_reason:
-                        emittedToolCalls.size > 0
+                      finish_reason: isMalformedFunctionCall
+                        ? 'stop'
+                        : emittedToolCalls.size > 0
                           ? 'tool_calls'
-                          : mapGeminiFinishReasonToOpenAIFinishReason(candidate.finishReason),
+                          : mapGeminiFinishReasonToOpenAIFinishReason(finishReason),
                     },
                   ],
                   usage: lastUsage,
@@ -1081,6 +1121,14 @@ export class OpenAIService extends BaseProxyService {
     model: string,
     clientToolNames?: ReadonlySet<string>,
   ): OpenAIChatResponse {
+    for (const contentBlock of claudeResponse.content) {
+      if (contentBlock.type !== 'tool_use') {
+        continue;
+      }
+      if (adaptCommandArguments(contentBlock.name, contentBlock.input).fallbackApplied) {
+        this.logger?.debug('[OpenAI] command tool fallback_applied=true');
+      }
+    }
     return convertClaudeToOpenAIResponse(claudeResponse, model, clientToolNames);
   }
 

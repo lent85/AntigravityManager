@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as EmulationRouteImport } from './routes/emulation'
 import { Route as ProxyRouteImport } from './routes/proxy'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as TrafficRouteImport } from './routes/traffic'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,18 +35,25 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TrafficRoute = TrafficRouteImport.update({
+  id: '/traffic',
+  path: '/traffic',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/emulation': typeof EmulationRoute
   '/proxy': typeof ProxyRoute
   '/settings': typeof SettingsRoute
+  '/traffic': typeof TrafficRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/emulation': typeof EmulationRoute
   '/proxy': typeof ProxyRoute
   '/settings': typeof SettingsRoute
+  '/traffic': typeof TrafficRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,14 @@ export interface FileRoutesById {
   '/emulation': typeof EmulationRoute
   '/proxy': typeof ProxyRoute
   '/settings': typeof SettingsRoute
+  '/traffic': typeof TrafficRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/emulation' | '/proxy' | '/settings'
+  fullPaths: '/' | '/emulation' | '/proxy' | '/settings' | '/traffic'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/emulation' | '/proxy' | '/settings'
-  id: '__root__' | '/' | '/emulation' | '/proxy' | '/settings'
+  to: '/' | '/emulation' | '/proxy' | '/settings' | '/traffic'
+  id: '__root__' | '/' | '/emulation' | '/proxy' | '/settings' | '/traffic'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +76,7 @@ export interface RootRouteChildren {
   EmulationRoute: typeof EmulationRoute
   ProxyRoute: typeof ProxyRoute
   SettingsRoute: typeof SettingsRoute
+  TrafficRoute: typeof TrafficRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,6 +109,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/traffic': {
+      id: '/traffic'
+      path: '/traffic'
+      fullPath: '/traffic'
+      preLoaderRoute: typeof TrafficRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,6 +124,7 @@ const rootRouteChildren: RootRouteChildren = {
   EmulationRoute: EmulationRoute,
   ProxyRoute: ProxyRoute,
   SettingsRoute: SettingsRoute,
+  TrafficRoute: TrafficRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

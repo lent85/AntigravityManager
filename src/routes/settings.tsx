@@ -28,7 +28,7 @@ import {
   useMetricsSyncDelayConfig,
   useSetMetricsSyncDelayConfig,
 } from '@/modules/cloud-account/hooks/useCloudAccounts';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ProxyConfig } from '@/modules/config/types';
 import {
   detectAgyCliExecutable,
@@ -81,13 +81,16 @@ function SettingsPage() {
   const { config, isLoading, saveConfig } = useAppConfig();
   const { toast } = useToast();
 
-  // Local state for configuration editing
-  const [proxyConfig, setProxyConfig] = useState<ProxyConfig | undefined>(undefined);
-  const [antigravityExecutable, setAntigravityExecutable] = useState('');
-  const [antigravityIdeExecutable, setAntigravityIdeExecutable] = useState('');
-  const [antigravityCliExecutable, setAntigravityCliExecutable] = useState('');
-  const [antigravityArgs, setAntigravityArgs] = useState('');
-  const [antigravityIdeArgs, setAntigravityIdeArgs] = useState('');
+  // Local draft overrides for executable paths and arguments
+  const [antigravityExecutableDraft, setAntigravityExecutable] = useState<string | null>(null);
+  const [antigravityIdeExecutableDraft, setAntigravityIdeExecutable] = useState<string | null>(
+    null,
+  );
+  const [antigravityCliExecutableDraft, setAntigravityCliExecutable] = useState<string | null>(
+    null,
+  );
+  const [antigravityArgsDraft, setAntigravityArgs] = useState<string | null>(null);
+  const [antigravityIdeArgsDraft, setAntigravityIdeArgs] = useState<string | null>(null);
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const [isDetectingAgy, setIsDetectingAgy] = useState(false);
   const [isPatchingAgy, setIsPatchingAgy] = useState(false);
@@ -95,17 +98,15 @@ function SettingsPage() {
   const { data: syncDelayConfig } = useMetricsSyncDelayConfig();
   const setSyncDelayMutation = useSetMetricsSyncDelayConfig();
 
-  // Sync config to local state when loaded
-  useEffect(() => {
-    if (config) {
-      setProxyConfig(config.proxy);
-      setAntigravityExecutable(config.antigravity_executable || '');
-      setAntigravityIdeExecutable(config.antigravity_ide_executable || '');
-      setAntigravityCliExecutable(config.antigravity_cli_executable || '');
-      setAntigravityArgs((config.antigravity_args || []).join(' '));
-      setAntigravityIdeArgs((config.antigravity_ide_args || []).join(' '));
-    }
-  }, [config]);
+  const proxyConfig = config?.proxy;
+  const antigravityExecutable = antigravityExecutableDraft ?? config?.antigravity_executable ?? '';
+  const antigravityIdeExecutable =
+    antigravityIdeExecutableDraft ?? config?.antigravity_ide_executable ?? '';
+  const antigravityCliExecutable =
+    antigravityCliExecutableDraft ?? config?.antigravity_cli_executable ?? '';
+  const antigravityArgs = antigravityArgsDraft ?? (config?.antigravity_args || []).join(' ');
+  const antigravityIdeArgs =
+    antigravityIdeArgsDraft ?? (config?.antigravity_ide_args || []).join(' ');
 
   const { data: appVersion } = useQuery({
     queryKey: ['app', 'version'],
@@ -129,7 +130,6 @@ function SettingsPage() {
 
   // Helper to update proxyConfig and auto-save
   const updateProxyConfig = async (newProxyConfig: ProxyConfig) => {
-    setProxyConfig(newProxyConfig);
     if (config) {
       await saveConfig({ ...config, proxy: newProxyConfig });
     }
@@ -147,7 +147,7 @@ function SettingsPage() {
 
   const saveAntigravityExecutable = async (value: string) => {
     const executablePath = value.trim();
-    setAntigravityExecutable(executablePath);
+    setAntigravityExecutable(null);
     if (config) {
       await saveConfig({
         ...config,
@@ -165,7 +165,7 @@ function SettingsPage() {
 
   const saveAntigravityIdeExecutable = async (value: string) => {
     const executablePath = value.trim();
-    setAntigravityIdeExecutable(executablePath);
+    setAntigravityIdeExecutable(null);
     if (config) {
       await saveConfig({
         ...config,
@@ -183,7 +183,7 @@ function SettingsPage() {
 
   const saveAntigravityCliExecutable = async (value: string) => {
     const executablePath = value.trim();
-    setAntigravityCliExecutable(executablePath);
+    setAntigravityCliExecutable(null);
     if (config) {
       await saveConfig({
         ...config,
@@ -249,7 +249,7 @@ function SettingsPage() {
 
   const saveAntigravityArgs = async (value: string) => {
     const launchArgs = parseArgsInput(value);
-    setAntigravityArgs(launchArgs.join(' '));
+    setAntigravityArgs(null);
     if (config) {
       await saveConfig({
         ...config,
@@ -260,8 +260,7 @@ function SettingsPage() {
 
   const handleDetectAntigravityArgs = async () => {
     const detectedArgs = await getAntigravityArgs('classic');
-    const nextValue = detectedArgs.join(' ');
-    setAntigravityArgs(nextValue);
+    setAntigravityArgs(null);
     if (config) {
       await saveConfig({
         ...config,
@@ -272,7 +271,7 @@ function SettingsPage() {
 
   const saveAntigravityIdeArgs = async (value: string) => {
     const launchArgs = parseArgsInput(value);
-    setAntigravityIdeArgs(launchArgs.join(' '));
+    setAntigravityIdeArgs(null);
     if (config) {
       await saveConfig({
         ...config,
@@ -283,8 +282,7 @@ function SettingsPage() {
 
   const handleDetectAntigravityIdeArgs = async () => {
     const detectedArgs = await getAntigravityArgs('ide');
-    const nextValue = detectedArgs.join(' ');
-    setAntigravityIdeArgs(nextValue);
+    setAntigravityIdeArgs(null);
     if (config) {
       await saveConfig({
         ...config,

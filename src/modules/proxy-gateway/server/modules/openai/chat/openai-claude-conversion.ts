@@ -15,9 +15,13 @@ import {
   toCustomToolArguments,
 } from '@/modules/proxy-gateway/antigravity/CustomToolCall';
 import { optimizeApplyPatch } from '@/modules/proxy-gateway/antigravity/ApplyPatchPreflight';
+import { mapGeminiFinishReasonToOpenAI } from '@/modules/proxy-gateway/antigravity/GeminiFinishReason';
 import { normalizeObjectJsonSchema } from '@/modules/proxy-gateway/antigravity/JsonSchemaUtils';
 import { toOpenAIUsage } from '@/modules/proxy-gateway/antigravity/OpenAIUsageMapper';
-import { resolveShellToolName } from '@/modules/proxy-gateway/antigravity/ShellToolName';
+import {
+  adaptCommandArguments,
+  selectClientCommandTool,
+} from '@/modules/proxy-gateway/antigravity/CommandToolAdapter';
 import { sanitizeSystemInstructionForCache } from '@/modules/proxy-gateway/antigravity/StablePromptPrefix';
 import {
   flattenOpenAITools,
@@ -39,6 +43,9 @@ export interface OpenAIConversionOptions {
   allowLocalVideoPaths?: boolean;
 }
 
+const STALE_CODEX_MODEL_IDENTITY = 'You are Codex, an agent based on GPT-5.';
+const GENERIC_CODEX_IDENTITY = 'You are Codex, an agent.';
+
 interface OpenAIPartsConversionOptions extends OpenAIConversionOptions {
   remoteImageFallback?: (url: string) => string;
   unreadableAudioFallback?: () => string;
@@ -55,7 +62,7 @@ export function convertOpenAIToClaude(
   const seenSystemPromptKeys = new Set<string>();
   const anthropicMessages: ClaudeRequest['messages'] = [];
   const addSystemPrompt = (text: string) => {
-    const trimmed = text.trim();
+    const trimmed = normalizeStaleCodexModelIdentity(text).trim();
     const key = sanitizeSystemInstructionForCache(trimmed).split(/\s+/).join(' ');
     if (key && !seenSystemPromptKeys.has(key)) {
       seenSystemPromptKeys.add(key);
@@ -185,6 +192,10 @@ export function convertOpenAIToClaude(
       signature_session_key: signatureSessionKey,
     },
   };
+}
+
+function normalizeStaleCodexModelIdentity(text: string): string {
+  return text.replaceAll(STALE_CODEX_MODEL_IDENTITY, GENERIC_CODEX_IDENTITY);
 }
 
 export function convertOpenAIPartsToAnthropicContent(
@@ -461,22 +472,7 @@ export function convertOpenAIToolsToAnthropicTools(
 }
 
 export function mapGeminiFinishReasonToOpenAIFinishReason(finishReason?: string): string | null {
-  if (!finishReason) {
-    return null;
-  }
-
-  const normalized = finishReason.toUpperCase();
-  if (normalized === 'STOP') {
-    return 'stop';
-  }
-  if (normalized === 'MAX_TOKENS') {
-    return 'length';
-  }
-  if (normalized === 'SAFETY' || normalized === 'RECITATION') {
-    return 'content_filter';
-  }
-
-  return finishReason.toLowerCase();
+  return mapGeminiFinishReasonToOpenAI(finishReason);
 }
 
 export function mapAnthropicStopReasonToOpenAIFinishReason(
@@ -556,14 +552,16 @@ export function convertClaudeToOpenAIResponse(
     .map((block, index: number) => {
       const splitName = splitNamespaceToolName(block.name || 'unknown_tool');
       const functionName = clientToolNames
-        ? resolveShellToolName(splitName.name, clientToolNames)
+        ? selectClientCommandTool(splitName.name, clientToolNames)
         : splitName.name;
+      const adaptedArguments = adaptCommandArguments(functionName, block.input);
       const argumentsInput = isCustomToolCall(functionName)
         ? toCustomToolArguments(
             functionName,
-            optimizeApplyPatch(extractCustomToolInput(functionName, block.input)).input,
+            optimizeApplyPatch(extractCustomToolInput(functionName, adaptedArguments.arguments))
+              .input,
           )
-        : block.input;
+        : adaptedArguments.arguments;
       return {
         id: block.id || `tool-call-${index}`,
         type: 'function' as const,

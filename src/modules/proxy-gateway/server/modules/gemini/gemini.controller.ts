@@ -14,7 +14,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { isEmpty, isFunction, isNumber, isString } from 'lodash-es';
+import { isEmpty, isNumber } from 'lodash-es';
 import { Observable } from 'rxjs';
 
 import { ProxyGuard } from '../../guards/proxy.guard';
@@ -33,7 +33,12 @@ import { getServerConfig } from '../../../../../server/server-config';
 import { getAllDynamicModels } from '../../../antigravity/ModelMapping';
 import { AccountLeaseService } from '../account-lease/account-lease.service';
 import { UpstreamRequestError } from '../../common/exceptions/upstream-request.exception';
-import { createProxyRequestAbortScope } from '../../common/base-proxy.controller';
+import {
+  applyProxyRetryAfterHeader,
+  createProxyRequestAbortScope,
+} from '../../common/base-proxy.controller';
+import { setProxyResponseTimingHeaders } from '../../common/proxy-response-timing';
+import { writeProxySseResponse } from '../../common/proxy-sse-response';
 import { setResponseUsage } from '../../shared/services/request-usage-context';
 
 type GeminiModelMetadata = {
@@ -159,7 +164,11 @@ export class GeminiController {
           ? this.proxyService.handleGeminiStreamGenerateContent(model, request, abortScope.signal)
           : this.proxyService.handleGeminiStreamGenerateContent(model, request));
         if (stream instanceof Observable) {
-          this.writeObservableSseResponse(res, stream, req, model);
+          writeProxySseResponse(res, stream, {
+            includeTiming: true,
+            request: req,
+            modelFallback: model,
+          });
           return;
         }
       }
@@ -173,6 +182,7 @@ export class GeminiController {
               abortScope.signal,
             )
           : this.proxyService.handleGeminiGenerateContent(model, request));
+        setProxyResponseTimingHeaders(res, req);
         if (req) {
           setResponseUsage(req, {
             protocol: 'gemini',
@@ -217,6 +227,7 @@ export class GeminiController {
           : action === 'countTokens'
             ? this.resolveCountTokensErrorHttpStatus(error)
             : HttpStatus.INTERNAL_SERVER_ERROR;
+      applyProxyRetryAfterHeader(res, error);
       res.status(status).send({
         error: {
           code: status,
@@ -374,110 +385,5 @@ export class GeminiController {
       normalized.trafficType = usageMetadata.trafficType;
     }
     return normalized;
-  }
-
-  private writeObservableSseResponse(
-    res: FastifyReply,
-    stream: Observable<unknown>,
-    req?: FastifyRequest,
-    modelName?: string,
-  ): void {
-    if (!res.raw || !isFunction(res.raw.writeHead) || !isFunction(res.raw.write)) {
-      res.header('Content-Type', 'text/event-stream');
-      res.header('Cache-Control', 'no-cache');
-      res.header('Connection', 'keep-alive');
-      res.send(stream);
-      return;
-    }
-
-    if (this.supportsReplyHijack(res)) {
-      res.hijack();
-    }
-
-    res.raw.writeHead(HttpStatus.OK, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-    });
-
-    let promptTokens = 0;
-    let completionTokens = 0;
-    let totalTokens = 0;
-
-    const subscription = stream.subscribe({
-      next: (chunk) => {
-        if (res.raw.writableEnded) {
-          return;
-        }
-        const payload = isString(chunk) ? chunk : String(chunk ?? '');
-        res.raw.write(payload);
-
-        if (payload.includes('"usageMetadata"')) {
-          try {
-            const trimmed = payload.trim();
-            for (const line of trimmed.split('\n')) {
-              if (line.startsWith('data: ')) {
-                const parsed = JSON.parse(line.slice(6));
-                if (parsed.usageMetadata) {
-                  if (typeof parsed.usageMetadata.promptTokenCount === 'number') {
-                    promptTokens = parsed.usageMetadata.promptTokenCount;
-                  }
-                  if (typeof parsed.usageMetadata.candidatesTokenCount === 'number') {
-                    completionTokens = parsed.usageMetadata.candidatesTokenCount;
-                  }
-                  if (typeof parsed.usageMetadata.totalTokenCount === 'number') {
-                    totalTokens = parsed.usageMetadata.totalTokenCount;
-                  }
-                }
-              }
-            }
-          } catch {
-            // ignore partial JSON
-          }
-        }
-      },
-      error: (error) => {
-        if (req) {
-          setResponseUsage(req, {
-            errorMessage: error instanceof Error ? error.message : String(error),
-          });
-        }
-        if (res.raw.writableEnded) {
-          return;
-        }
-        const message = error instanceof Error ? error.message : String(error);
-        res.raw.write(
-          `data: ${JSON.stringify({
-            error: {
-              message,
-              type: 'server_error',
-            },
-          })}\n\n`,
-        );
-        res.raw.end();
-      },
-      complete: () => {
-        if (req) {
-          setResponseUsage(req, {
-            protocol: 'gemini',
-            model: modelName?.replace(/^models\//, ''),
-            promptTokens,
-            completionTokens,
-            totalTokens: totalTokens || promptTokens + completionTokens,
-          });
-        }
-        if (!res.raw.writableEnded) {
-          res.raw.end();
-        }
-      },
-    });
-
-    res.raw.on('close', () => {
-      subscription.unsubscribe();
-    });
-  }
-
-  private supportsReplyHijack(reply: FastifyReply): reply is FastifyReply & { hijack: () => void } {
-    return isFunction((reply as { hijack?: unknown }).hijack);
   }
 }

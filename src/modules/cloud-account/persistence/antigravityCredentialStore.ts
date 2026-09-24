@@ -230,19 +230,35 @@ function writeViaNativeKeyring(payload: string): void {
   entry.setSecret(Buffer.from(payload, 'utf-8'));
 }
 
-function writeViaSecretTool(payload: string): void {
+type LinuxSecretServiceCollection = 'default' | 'login';
+
+function writeViaSecretTool(payload: string, collection: LinuxSecretServiceCollection): void {
+  const collectionArgs =
+    collection === 'login'
+      ? ['--collection=login', "--label=Password for 'antigravity' on 'gemini'"]
+      : ['--label=gemini'];
   const storeResult = spawnSync(
     'secret-tool',
-    ['store', '--label=gemini', 'service', 'gemini', 'username', 'antigravity'],
+    ['store', ...collectionArgs, 'service', 'gemini', 'username', 'antigravity'],
     { input: payload, encoding: 'utf-8', timeout: 10000 },
   );
   if (!storeResult.error && storeResult.status === 0) {
     return;
   }
 
-  throw new Error(
-    `Linux secret-tool failed: ${storeResult.stderr || storeResult.error?.message || 'unknown error'}`,
-  );
+  throw new Error('Linux secret-tool failed to store credential');
+}
+
+function tryWriteLinuxSecretServiceCollection(
+  payload: string,
+  collection: LinuxSecretServiceCollection,
+): boolean {
+  try {
+    writeViaSecretTool(payload, collection);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export type CredentialStoreWriteOptions = (
@@ -289,7 +305,7 @@ function credentialStoreItemExists(): boolean {
     ['find-generic-password', '-s', 'gemini', '-a', 'antigravity'],
     { stdio: 'ignore' },
   );
-  return result.status === 0;
+  return result?.status === 0;
 }
 
 function writeToSystemCredentialStore(payload: string): void {
@@ -312,12 +328,27 @@ function writeToSystemCredentialStore(payload: string): void {
   }
 
   if (process.platform === 'linux' && isSecretToolAvailable()) {
-    try {
-      writeViaSecretTool(payload);
+    const loginWritten = tryWriteLinuxSecretServiceCollection(payload, 'login');
+    const defaultWritten = tryWriteLinuxSecretServiceCollection(payload, 'default');
+
+    if (defaultWritten) {
+      if (loginWritten) {
+        logger.debug(
+          'Linux Secret Service credential synchronized to login and default collections',
+        );
+      } else {
+        logger.warn(
+          'Linux Secret Service login collection write failed; default collection remains current',
+        );
+      }
       return;
-    } catch (error) {
-      logger.warn('Linux secret-tool failed; falling back to native keyring', error);
     }
+
+    logger.warn(
+      loginWritten
+        ? 'Linux Secret Service default collection write failed; falling back to native keyring'
+        : 'Linux Secret Service login and default collection writes failed; falling back to native keyring',
+    );
   }
 
   writeViaNativeKeyring(payload);

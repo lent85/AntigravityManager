@@ -4,10 +4,15 @@ import { SignatureStore } from './SignatureStore';
 import { decodeSignature } from './signature-utils';
 import { optimizeApplyPatch, validateApplyPatchV4A } from './ApplyPatchPreflight';
 import { extractCustomToolInput, isCustomToolCall } from './CustomToolCall';
-import { resolveShellToolName } from './ShellToolName';
+import {
+  isMalformedFunctionCallFinishReason,
+  MALFORMED_FUNCTION_CALL_RECOVERY_TEXT,
+} from './GeminiFinishReason';
+import { adaptCommandArguments, selectClientCommandTool } from './CommandToolAdapter';
 import { splitNamespaceToolName } from './ToolNamespace';
 import { toIncompleteReason, type ResponsesOutputStatus } from './openai-responses-incomplete';
 import type { OpenAIResponsesUsage } from './OpenAIUsageMapper';
+import { logger } from '@/shared/logging/logger';
 
 export interface GeminiResponsesStreamPart {
   functionCall?: {
@@ -48,6 +53,16 @@ interface ResponsesMessageOutputItem {
   type: 'message';
 }
 
+interface ResponsesReasoningOutputItem {
+  id: string;
+  status: ResponsesOutputStatus;
+  summary: Array<{
+    text: string;
+    type: 'summary_text';
+  }>;
+  type: 'reasoning';
+}
+
 interface ResponsesFunctionCallOutputItem {
   arguments: string;
   call_id: string;
@@ -70,11 +85,19 @@ interface ResponsesCustomToolCallOutputItem {
 
 type ResponsesOutputItem =
   | ResponsesMessageOutputItem
+  | ResponsesReasoningOutputItem
   | ResponsesFunctionCallOutputItem
   | ResponsesCustomToolCallOutputItem;
 
 interface ActiveMessageOutput {
   item: ResponsesMessageOutputItem;
+  itemId: string;
+  outputIndex: number;
+  text: string;
+}
+
+interface ActiveReasoningOutput {
+  item: ResponsesReasoningOutputItem;
   itemId: string;
   outputIndex: number;
   text: string;
@@ -96,7 +119,7 @@ export class OpenAIResponsesStreamingMapper {
   private readonly itemIdPrefix = randomUUID().replaceAll('-', '').slice(0, 16);
   private readonly outputItems: ResponsesOutputItem[] = [];
   private activeMessage: ActiveMessageOutput | null = null;
-  private activeThought: ActiveMessageOutput | null = null;
+  private activeThought: ActiveReasoningOutput | null = null;
   private completed = false;
   private hasSeenRegularText = false;
   private hasToolCall = false;
@@ -197,12 +220,17 @@ export class OpenAIResponsesStreamingMapper {
       return [];
     }
 
+    const recoveryEvents =
+      isMalformedFunctionCallFinishReason(finishReason) && !this.hasSeenRegularText
+        ? this.processText(MALFORMED_FUNCTION_CALL_RECOVERY_TEXT)
+        : [];
     this.completed = true;
     // An answer upstream cut short is not a finished answer, and a client that is
     // told `completed` has no way to know it should continue.
     const incompleteReason = toIncompleteReason(finishReason);
     const status: ResponsesOutputStatus = incompleteReason ? 'incomplete' : 'completed';
     const events = [
+      ...recoveryEvents,
       ...this.closeThought(status),
       ...this.closeMessage(this.hasToolCall ? 'commentary' : 'final_answer', status),
     ];
@@ -224,18 +252,14 @@ export class OpenAIResponsesStreamingMapper {
     return events;
   }
 
-  private startMessage(kind: 'message' | 'thought'): string[] {
-    const existing = kind === 'thought' ? this.activeThought : this.activeMessage;
-    if (existing) {
+  private startMessage(): string[] {
+    if (this.activeMessage) {
       return [];
     }
 
     const outputIndex = this.nextOutputIndex;
     this.nextOutputIndex += 1;
-    const itemId =
-      kind === 'thought'
-        ? `msg_thought_${this.itemIdPrefix}_${this.messageCounter}`
-        : `msg_${this.itemIdPrefix}_${this.messageCounter}`;
+    const itemId = `msg_${this.itemIdPrefix}_${this.messageCounter}`;
     this.messageCounter += 1;
     const item: ResponsesMessageOutputItem = {
       content: [{ annotations: [], text: '', type: 'output_text' }],
@@ -245,17 +269,13 @@ export class OpenAIResponsesStreamingMapper {
       status: 'completed',
       type: 'message',
     };
-    const activeOutput = {
+    const activeOutput: ActiveMessageOutput = {
       item,
       itemId,
       outputIndex,
       text: '',
     };
-    if (kind === 'thought') {
-      this.activeThought = activeOutput;
-    } else {
-      this.activeMessage = activeOutput;
-    }
+    this.activeMessage = activeOutput;
     this.outputItems.push(item);
 
     return [
@@ -285,13 +305,61 @@ export class OpenAIResponsesStreamingMapper {
     ];
   }
 
+  private startThought(): string[] {
+    if (this.activeThought) {
+      return [];
+    }
+
+    const outputIndex = this.nextOutputIndex;
+    this.nextOutputIndex += 1;
+    const itemId = `rs_${this.itemIdPrefix}_${this.messageCounter}`;
+    this.messageCounter += 1;
+    const item: ResponsesReasoningOutputItem = {
+      id: itemId,
+      status: 'completed',
+      summary: [],
+      type: 'reasoning',
+    };
+    const activeOutput: ActiveReasoningOutput = {
+      item,
+      itemId,
+      outputIndex,
+      text: '',
+    };
+    this.activeThought = activeOutput;
+    this.outputItems.push(item);
+
+    return [
+      this.serialize({
+        item: {
+          id: itemId,
+          status: 'in_progress',
+          summary: [],
+          type: 'reasoning',
+        },
+        output_index: outputIndex,
+        type: 'response.output_item.added',
+      }),
+      this.serialize({
+        item_id: itemId,
+        output_index: outputIndex,
+        part: {
+          text: '',
+          type: 'summary_text',
+        },
+        summary_index: 0,
+        type: 'response.reasoning_summary_part.added',
+      }),
+    ];
+  }
+
   private closeThought(status: ResponsesOutputStatus = 'completed'): string[] {
     const thought = this.activeThought;
     if (!thought) {
       return [];
     }
     this.activeThought = null;
-    return this.finishMessage(thought, 'commentary', status);
+    return this.finishThought(thought, status);
   }
 
   private closeMessage(
@@ -341,13 +409,43 @@ export class OpenAIResponsesStreamingMapper {
     ];
   }
 
+  private finishThought(
+    thought: ActiveReasoningOutput,
+    status: ResponsesOutputStatus = 'completed',
+  ): string[] {
+    const summaryPart = { text: thought.text, type: 'summary_text' as const };
+    thought.item.status = status;
+    thought.item.summary = [summaryPart];
+    return [
+      this.serialize({
+        item_id: thought.itemId,
+        output_index: thought.outputIndex,
+        summary_index: 0,
+        text: thought.text,
+        type: 'response.reasoning_summary_text.done',
+      }),
+      this.serialize({
+        item_id: thought.itemId,
+        output_index: thought.outputIndex,
+        part: summaryPart,
+        summary_index: 0,
+        type: 'response.reasoning_summary_part.done',
+      }),
+      this.serialize({
+        item: thought.item,
+        output_index: thought.outputIndex,
+        type: 'response.output_item.done',
+      }),
+    ];
+  }
+
   private processFunctionCall(
     functionCall: NonNullable<GeminiResponsesStreamPart['functionCall']>,
     signature: string | undefined,
   ): string[] {
     const splitName = splitNamespaceToolName(functionCall.name);
     const functionName = this.options.clientToolNames
-      ? resolveShellToolName(splitName.name, this.options.clientToolNames)
+      ? selectClientCommandTool(splitName.name, this.options.clientToolNames)
       : splitName.name;
     const callId = functionCall.id || `call_${this.options.responseId}_${this.nextOutputIndex}`;
     if (signature) {
@@ -360,7 +458,11 @@ export class OpenAIResponsesStreamingMapper {
       this.emittedToolCallIds.add(callId);
     }
 
-    const normalizedArguments = this.normalizeShellArguments(functionName, functionCall.args);
+    const adaptedCommandArguments = adaptCommandArguments(functionName, functionCall.args);
+    if (adaptedCommandArguments.fallbackApplied) {
+      logger.debug('[OpenAI Responses] command tool fallback_applied=true');
+    }
+    const normalizedArguments = adaptedCommandArguments.arguments;
     const isCustomTool = isCustomToolCall(functionName) || functionName === 'shell';
     const argumentsString = JSON.stringify(normalizedArguments);
     let input = isCustomTool
@@ -496,7 +598,7 @@ export class OpenAIResponsesStreamingMapper {
   }
 
   private processText(text: string): string[] {
-    const events = [...this.closeThought(), ...this.startMessage('message')];
+    const events = [...this.closeThought(), ...this.startMessage()];
     const message = this.activeMessage;
     if (!message) {
       throw new Error('Responses text item failed to start');
@@ -528,7 +630,7 @@ export class OpenAIResponsesStreamingMapper {
       return [];
     }
 
-    const events = this.startMessage('thought');
+    const events = this.startThought();
     const thought = this.activeThought;
     if (!thought) {
       throw new Error('Responses thought item failed to start');
@@ -536,34 +638,14 @@ export class OpenAIResponsesStreamingMapper {
     thought.text += cleanText;
     events.push(
       this.serialize({
-        content_index: 0,
         delta: cleanText,
         item_id: thought.itemId,
         output_index: thought.outputIndex,
-        type: 'response.output_text.delta',
+        summary_index: 0,
+        type: 'response.reasoning_summary_text.delta',
       }),
     );
     return events;
-  }
-
-  private normalizeShellArguments(
-    functionName: string,
-    args: Record<string, unknown>,
-  ): Record<string, unknown> {
-    if (!['shell', 'bash', 'local_shell'].includes(functionName) || 'command' in args) {
-      return args;
-    }
-
-    for (const alternativeKey of ['cmd', 'code', 'script', 'shell_command']) {
-      if (alternativeKey in args) {
-        const { [alternativeKey]: command, ...remainingArgs } = args;
-        return {
-          ...remainingArgs,
-          command,
-        };
-      }
-    }
-    return args;
   }
 
   private serialize(event: Record<string, unknown>): string {

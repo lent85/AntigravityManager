@@ -7,7 +7,10 @@ import { transformClaudeRequestIn } from '@/modules/proxy-gateway/antigravity/Cl
 import { transformResponse } from '@/modules/proxy-gateway/antigravity/ClaudeResponseMapper';
 import { SignatureStore } from '@/modules/proxy-gateway/antigravity/SignatureStore';
 import { rewriteInvalidThoughtSignatureRequest } from '@/modules/proxy-gateway/antigravity/thought-signature-recovery';
-import type { ResolvedModelVariant } from '@/modules/proxy-gateway/antigravity/model-variant-registry';
+import {
+  usesAuthoritativeThinkingBudget,
+  type ResolvedModelVariant,
+} from '@/modules/proxy-gateway/antigravity/model-variant-registry';
 import { normalizeThoughtSignatureModelContext } from '@/modules/proxy-gateway/antigravity/thought-signature-model';
 import {
   PartProcessor,
@@ -130,7 +133,7 @@ export class AnthropicService extends BaseProxyService {
       const token = await this.selectRetryToken(retryState, targetModel, sessionKey);
       if (!token) {
         if (lastError !== null) {
-          throw lastError;
+          throw this.resolveTerminalRetryError(retryState, lastError);
         }
 
         throw new Error('No available accounts');
@@ -325,6 +328,7 @@ export class AnthropicService extends BaseProxyService {
         }
 
         lastError = error;
+        this.recordRetryFailure(retryState, lastError);
         if (
           !appliedVariantRequest.variant &&
           (await this.prepareGraceRetry(retryState, token, lastError, 'Anthropic'))
@@ -334,7 +338,10 @@ export class AnthropicService extends BaseProxyService {
         await this.applyUpstreamPenalty(token.id, accountTargetModel, error);
       }
     }
-    throw lastError || new Error('Request failed after retries');
+    throw this.resolveTerminalRetryError(
+      retryState,
+      lastError || new Error('Request failed after retries'),
+    );
   }
 
   private async executeAnthropicAccountRequest(params: {
@@ -368,7 +375,13 @@ export class AnthropicService extends BaseProxyService {
           signatureTargetFamilyModel: params.targetModel,
         },
       );
-      this.applyInternalGenerationConstraints(body, body.model, params.accountId, params.variant);
+      this.applyInternalGenerationConstraints(
+        body,
+        body.model,
+        params.accountId,
+        params.variant,
+        usesAuthoritativeThinkingBudget(params.request.model),
+      );
 
       if (params.stream) {
         return {

@@ -167,7 +167,9 @@ export function CloudAccountList() {
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [authCode, setAuthCode] = useState('');
-  const [selectedOAuthClientKey, setSelectedOAuthClientKey] = useState('');
+  const [overrideOAuthClientKey, setSelectedOAuthClientKey] = useState<string | null>(null);
+  const selectedOAuthClientKey =
+    overrideOAuthClientKey ?? oauthClients.find((client) => client.is_active)?.key ?? '';
   const [identityAccount, setIdentityAccount] = useState<CloudAccount | null>(null);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
@@ -213,15 +215,6 @@ export function CloudAccountList() {
     [addMutation, authCode, oauthClients, selectedOAuthClientKey, t, toast],
   );
 
-  useEffect(() => {
-    if (selectedOAuthClientKey !== '') {
-      return;
-    }
-    const activeClientKey = oauthClients.find((client) => client.is_active)?.key;
-    if (activeClientKey) {
-      setSelectedOAuthClientKey(activeClientKey);
-    }
-  }, [oauthClients, selectedOAuthClientKey]);
   // Listen for Google Auth Code
   useEffect(() => {
     if (window.electron?.onGoogleAuthCode) {
@@ -251,22 +244,11 @@ export function CloudAccountList() {
   }, [addMutation.isPending, authCode, isAddDialogOpen, submitAuthCode]);
 
   // Batch Operations State
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [rawSelectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isEmulationDialogOpen, setIsEmulationDialogOpen] = useState(false);
   const [isFamilyDialogOpen, setIsFamilyDialogOpen] = useState(false);
   const [familyDialogTargetGroupId, setFamilyDialogTargetGroupId] = useState<string | undefined>();
   const [familyDialogInitialAccountIds, setFamilyDialogInitialAccountIds] = useState<string[]>([]);
-
-  const handleOpenFamilyDialog = (groupIdOrAccountId?: string) => {
-    if (groupIdOrAccountId) {
-      setFamilyDialogTargetGroupId(groupIdOrAccountId);
-      setFamilyDialogInitialAccountIds([groupIdOrAccountId]);
-    } else {
-      setFamilyDialogTargetGroupId(undefined);
-      setFamilyDialogInitialAccountIds(Array.from(selectedIds));
-    }
-    setIsFamilyDialogOpen(true);
-  };
 
   const handleToggleFamilyGrouped = async () => {
     if (config) {
@@ -274,33 +256,6 @@ export function CloudAccountList() {
       await saveConfig({
         ...config,
         group_family_accounts_enabled: !current,
-      });
-    }
-  };
-
-  const hasFamilyAccountSelected = useMemo(() => {
-    return Array.from(selectedIds).some((id) =>
-      familyGroups.some((group) => group.accountIds.includes(id)),
-    );
-  }, [selectedIds, familyGroups]);
-
-  const handleUnlinkSelectedAccounts = async () => {
-    const unlinkIds = Array.from(selectedIds).filter((id) =>
-      familyGroups.some((group) => group.accountIds.includes(id)),
-    );
-    if (unlinkIds.length === 0) return;
-    try {
-      for (const accountId of unlinkIds) {
-        await unlinkFamilyMutation.mutateAsync(accountId);
-      }
-      toast({
-        title: t('cloud.family.unlinkSuccess', 'Đã gỡ tài khoản khỏi nhóm gia đình'),
-      });
-      setSelectedIds(new Set());
-    } catch {
-      toast({
-        title: t('cloud.family.unlinkFailed', 'Gỡ tài khoản thất bại'),
-        variant: 'destructive',
       });
     }
   };
@@ -655,13 +610,10 @@ export function CloudAccountList() {
     });
   };
 
-  useEffect(() => {
+  const selectedIds = useMemo(() => {
     const visibleAccountIdSet = new Set(visibleAccountIds);
-    setSelectedIds((prev) => {
-      const next = new Set(Array.from(prev).filter((id) => visibleAccountIdSet.has(id)));
-      return next.size === prev.size ? prev : next;
-    });
-  }, [visibleAccountIds]);
+    return new Set(Array.from(rawSelectedIds).filter((id) => visibleAccountIdSet.has(id)));
+  }, [rawSelectedIds, visibleAccountIds]);
 
   const toggleSelectAllAccounts = () => {
     const allVisibleSelected =
@@ -673,6 +625,45 @@ export function CloudAccountList() {
       setSelectedIds(new Set(visibleAccountIds));
     }
   };
+
+  const handleOpenFamilyDialog = (groupIdOrAccountId?: string) => {
+    if (groupIdOrAccountId) {
+      setFamilyDialogTargetGroupId(groupIdOrAccountId);
+      setFamilyDialogInitialAccountIds([groupIdOrAccountId]);
+    } else {
+      setFamilyDialogTargetGroupId(undefined);
+      setFamilyDialogInitialAccountIds(Array.from(selectedIds));
+    }
+    setIsFamilyDialogOpen(true);
+  };
+
+  const hasFamilyAccountSelected = useMemo(() => {
+    return Array.from(selectedIds).some((id) =>
+      familyGroups.some((group) => group.accountIds.includes(id)),
+    );
+  }, [selectedIds, familyGroups]);
+
+  const handleUnlinkSelectedAccounts = async () => {
+    const unlinkIds = Array.from(selectedIds).filter((id) =>
+      familyGroups.some((group) => group.accountIds.includes(id)),
+    );
+    if (unlinkIds.length === 0) return;
+    try {
+      for (const accountId of unlinkIds) {
+        await unlinkFamilyMutation.mutateAsync(accountId);
+      }
+      toast({
+        title: t('cloud.family.unlinkSuccess', 'Đã gỡ tài khoản khỏi nhóm gia đình'),
+      });
+      setSelectedIds(new Set());
+    } catch {
+      toast({
+        title: t('cloud.family.unlinkFailed', 'Gỡ tài khoản thất bại'),
+        variant: 'destructive',
+      });
+    }
+  };
+
 
   const toggleTierFilter = async (tierKey: string, checked: boolean) => {
     if (!config) {
