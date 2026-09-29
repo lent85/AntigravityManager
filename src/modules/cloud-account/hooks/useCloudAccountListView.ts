@@ -14,6 +14,10 @@ import {
   type AccountSortKey,
   type QuotaStatus,
 } from '@/modules/cloud-account/utils/quota-display';
+import {
+  calculateProvidersGlobalQuota,
+  type ProviderGlobalQuota,
+} from '@/modules/cloud-account/utils/quota-provider-summary';
 
 export interface CloudAccountListView {
   sortedAccounts: CloudAccount[];
@@ -27,6 +31,8 @@ export interface CloudAccountListView {
   rateLimitedAccounts: number;
   overallQuotaPercentage: number | null;
   effectiveQuotaStatus: QuotaStatus;
+  geminiQuota: ProviderGlobalQuota;
+  claudeQuota: ProviderGlobalQuota;
 }
 
 function calculateOverallQuotaPercentage(
@@ -95,6 +101,11 @@ export function useCloudAccountListView(
     [modelVisibility, sortedAccounts],
   );
 
+  const providersQuota = useMemo(
+    () => calculateProvidersGlobalQuota(sortedAccounts, modelVisibility),
+    [modelVisibility, sortedAccounts],
+  );
+
   const overallQuotaStatus =
     overallQuotaPercentage === null ? null : getQuotaStatus(overallQuotaPercentage);
 
@@ -111,5 +122,7 @@ export function useCloudAccountListView(
       .length,
     overallQuotaPercentage,
     effectiveQuotaStatus: overallQuotaStatus ?? 'low',
+    geminiQuota: providersQuota.gemini,
+    claudeQuota: providersQuota.claude,
   };
 }

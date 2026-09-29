@@ -26,16 +26,39 @@ export const OAUTH_HINTS = [
   'appeal_url',
 ] as const;
 
+export const FORBIDDEN_HINTS = [
+  'forbidden',
+  '403',
+  'ineligible',
+  'not eligible',
+  'permission denied',
+  'permission_denied',
+  'caller does not have permission',
+  'account is blocked',
+  'blocked',
+  'restricted',
+  'location_ineligible',
+  'account_forbidden',
+  'license_required',
+] as const;
+
 function includesAny(text: string, hints: readonly string[]): boolean {
   return hints.some((hint) => text.includes(hint));
 }
 
-export function isRateLimitReason(reason: string): boolean {
+export function isRateLimitReason(reason?: string | null): boolean {
+  if (!reason) return false;
   return includesAny(reason.toLowerCase(), RATE_LIMIT_HINTS);
 }
 
-export function isOAuthReauthReason(reason: string): boolean {
+export function isOAuthReauthReason(reason?: string | null): boolean {
+  if (!reason) return false;
   return includesAny(reason.toLowerCase(), OAUTH_HINTS);
+}
+
+export function isForbiddenReason(reason?: string | null): boolean {
+  if (!reason) return false;
+  return includesAny(reason.toLowerCase(), FORBIDDEN_HINTS);
 }
 
 export function extractErrorMessage(error: unknown): string {
@@ -50,7 +73,7 @@ export function extractErrorMessage(error: unknown): string {
 
 export function classifyAccountStatusFromError(
   error: unknown,
-): { status: 'rate_limited' | 'expired'; reason: string } | null {
+): { status: 'rate_limited' | 'expired' | 'paused'; reason: string } | null {
   const reason = extractErrorMessage(error).trim();
   if (!reason) {
     return null;
@@ -68,5 +91,10 @@ export function classifyAccountStatusFromError(
     return { status: 'expired', reason };
   }
 
+  if (isForbiddenReason(normalizedReason)) {
+    return { status: 'paused', reason };
+  }
+
   return null;
 }
+

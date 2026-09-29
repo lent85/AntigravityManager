@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next';
 import type { CloudAccount } from '@/modules/cloud-account/types';
 import {
+  isForbiddenReason,
   isOAuthReauthReason,
   isRateLimitReason,
 } from '@/modules/cloud-account/utils/account-status';
@@ -24,16 +25,24 @@ export function getCloudAccountHealthBlockKind(
 }
 
 export function getValidationBlockedStatusLabel(
-  status: 'active' | 'rate_limited' | 'expired' | undefined,
+  status: 'active' | 'rate_limited' | 'expired' | 'paused' | undefined,
   reason: string | undefined,
   t: TFunction,
 ): string | null {
   const normalizedReason = (reason || '').toLowerCase();
   const hasReason = normalizedReason !== '';
-  const isBlockedByStatus = status === 'rate_limited' || status === 'expired';
+  const isBlockedByStatus =
+    status === 'rate_limited' || status === 'expired' || status === 'paused';
 
   if (!isBlockedByStatus && !hasReason) {
     return null;
+  }
+
+  if (status === 'paused') {
+    if (isForbiddenReason(normalizedReason)) {
+      return t('cloud.card.statusForbidden', 'Forbidden / Ineligible');
+    }
+    return t('cloud.card.statusPaused', 'Paused');
   }
 
   if (status === 'rate_limited' || isRateLimitReason(normalizedReason)) {
@@ -42,6 +51,10 @@ export function getValidationBlockedStatusLabel(
 
   if (status === 'expired' || isOAuthReauthReason(normalizedReason)) {
     return t('cloud.card.validationOAuthReauthRequired');
+  }
+
+  if (isForbiddenReason(normalizedReason)) {
+    return t('cloud.card.statusForbidden', 'Forbidden / Ineligible');
   }
 
   return t('cloud.card.validationRequired');

@@ -14,6 +14,8 @@ export const FALLBACK_PROXY_EXAMPLE_MODELS: readonly ProxyExampleModel[] = [
   { id: 'gemini-3.5-flash-low', name: 'Gemini 3.5 Flash (Low)' },
   { id: 'gemini-3.5-flash-medium', name: 'Gemini 3.5 Flash (Medium)' },
   { id: 'gemini-3.5-flash-high', name: 'Gemini 3.5 Flash (High)' },
+  { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite' },
+  { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite' },
   { id: 'gemini-3.1-pro-low', name: 'Gemini 3.1 Pro (Low)' },
   { id: 'gemini-3.1-pro-high', name: 'Gemini 3.1 Pro (High)' },
   { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
@@ -26,6 +28,33 @@ export const FALLBACK_PROXY_EXAMPLE_MODELS: readonly ProxyExampleModel[] = [
   { id: 'claude-opus-4-6-thinking', name: 'Claude Opus 4.6 (Thinking)' },
   { id: 'gpt-oss-120b-medium', name: 'GPT-OSS 120B (Medium)' },
 ];
+
+const CANONICAL_FALLBACK_BY_ID = new Map(
+  FALLBACK_PROXY_EXAMPLE_MODELS.map((m) => [m.id.toLowerCase(), m.name]),
+);
+
+function resolveSanitizedDisplayName(
+  modelId: string,
+  rawDisplayName: string | undefined,
+  currentName?: string,
+): string {
+  const normalizedId = modelId.toLowerCase();
+  const canonicalName = CANONICAL_FALLBACK_BY_ID.get(normalizedId);
+
+  if (!rawDisplayName) {
+    return currentName || modelId;
+  }
+
+  // Detect Google quota display_name mislabeling where the version in modelId
+  // (e.g. 2.5) contradicts the version in display_name (e.g. 3.5).
+  const idVersionMatch = /(?:^|-)(2\.5|3\.[0-9]+)(?:-|$)/i.exec(normalizedId);
+  const nameVersionMatch = /\b(2\.5|3\.[0-9]+)\b/i.exec(rawDisplayName);
+  if (idVersionMatch && nameVersionMatch && idVersionMatch[1] !== nameVersionMatch[1]) {
+    return canonicalName || currentName || modelId;
+  }
+
+  return rawDisplayName;
+}
 
 type ProxyExampleAccount = Pick<CloudAccount, 'quota'>;
 
@@ -42,12 +71,14 @@ export function buildProxyExampleModels(
       }
 
       const normalizedId = modelId.toLowerCase();
-      const displayName = info.display_name?.trim();
+      const rawDisplayName = info.display_name?.trim();
       const current = modelsByNormalizedId.get(normalizedId);
-      if (!current || displayName) {
+      const name = resolveSanitizedDisplayName(modelId, rawDisplayName, current?.name);
+
+      if (!current || rawDisplayName) {
         modelsByNormalizedId.set(normalizedId, {
           id: current?.id ?? modelId,
-          name: displayName || current?.name || modelId,
+          name,
         });
       }
     }

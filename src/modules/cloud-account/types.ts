@@ -91,7 +91,7 @@ export interface CloudAccount {
   device_history?: DeviceProfileVersion[];
   created_at: number;
   last_used: number; // Unix timestamp
-  status?: 'active' | 'rate_limited' | 'expired';
+  status?: 'active' | 'rate_limited' | 'expired' | 'paused';
   status_reason?: string;
   is_active?: boolean;
   is_active_classic?: boolean;
@@ -206,7 +206,7 @@ export const CloudAccountSchema = z.object({
   device_history: z.array(DeviceProfileVersionSchema).optional(),
   created_at: z.number(),
   last_used: z.number(),
-  status: z.enum(['active', 'rate_limited', 'expired']).optional(),
+  status: z.enum(['active', 'rate_limited', 'expired', 'paused']).optional(),
   status_reason: z.string().optional(),
   is_active: z.boolean().optional(),
   is_active_classic: z.boolean().optional(),
@@ -235,7 +235,7 @@ export const CloudAccountExportSchema = z.object({
       device_profile: DeviceProfileSchema.optional(),
       device_history: z.array(DeviceProfileVersionSchema).optional(),
       proxy_url: ImportedProxyUrlSchema.optional().nullable(),
-      status: z.enum(['active', 'rate_limited', 'expired']).optional(),
+      status: z.enum(['active', 'rate_limited', 'expired', 'paused']).optional(),
       status_reason: z.string().optional(),
     }),
   ),

@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ClientToolsRouteImport } from './routes/client-tools'
 import { Route as EmulationRouteImport } from './routes/emulation'
 import { Route as ProxyRouteImport } from './routes/proxy'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -18,6 +19,11 @@ import { Route as TrafficRouteImport } from './routes/traffic'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClientToolsRoute = ClientToolsRouteImport.update({
+  id: '/client-tools',
+  path: '/client-tools',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EmulationRoute = EmulationRouteImport.update({
@@ -43,6 +49,7 @@ const TrafficRoute = TrafficRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/client-tools': typeof ClientToolsRoute
   '/emulation': typeof EmulationRoute
   '/proxy': typeof ProxyRoute
   '/settings': typeof SettingsRoute
@@ -50,6 +57,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/client-tools': typeof ClientToolsRoute
   '/emulation': typeof EmulationRoute
   '/proxy': typeof ProxyRoute
   '/settings': typeof SettingsRoute
@@ -58,6 +66,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/client-tools': typeof ClientToolsRoute
   '/emulation': typeof EmulationRoute
   '/proxy': typeof ProxyRoute
   '/settings': typeof SettingsRoute
@@ -65,14 +74,28 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/emulation' | '/proxy' | '/settings' | '/traffic'
+  fullPaths:
+    | '/'
+    | '/client-tools'
+    | '/emulation'
+    | '/proxy'
+    | '/settings'
+    | '/traffic'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/emulation' | '/proxy' | '/settings' | '/traffic'
-  id: '__root__' | '/' | '/emulation' | '/proxy' | '/settings' | '/traffic'
+  to: '/' | '/client-tools' | '/emulation' | '/proxy' | '/settings' | '/traffic'
+  id:
+    | '__root__'
+    | '/'
+    | '/client-tools'
+    | '/emulation'
+    | '/proxy'
+    | '/settings'
+    | '/traffic'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ClientToolsRoute: typeof ClientToolsRoute
   EmulationRoute: typeof EmulationRoute
   ProxyRoute: typeof ProxyRoute
   SettingsRoute: typeof SettingsRoute
@@ -86,6 +109,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/client-tools': {
+      id: '/client-tools'
+      path: '/client-tools'
+      fullPath: '/client-tools'
+      preLoaderRoute: typeof ClientToolsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/emulation': {
@@ -121,6 +151,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ClientToolsRoute: ClientToolsRoute,
   EmulationRoute: EmulationRoute,
   ProxyRoute: ProxyRoute,
   SettingsRoute: SettingsRoute,

@@ -21,6 +21,14 @@ export function deleteCloudAccount(input: { accountId: string }) {
   return ipc.client.cloud.deleteCloudAccount(input);
 }
 
+export function togglePauseCloudAccount(input: { accountId: string; paused: boolean }) {
+  return ipc.client.cloud.togglePauseCloudAccount(input);
+}
+
+export function batchSetCloudAccountsPaused(input: { accountIds: string[]; paused: boolean }) {
+  return ipc.client.cloud.batchSetCloudAccountsPaused(input);
+}
+
 export function openAccountValidationLink(input: { accountId: string }) {
   return ipc.client.cloud.openAccountValidationLink(input);
 }

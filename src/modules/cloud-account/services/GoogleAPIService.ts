@@ -299,6 +299,7 @@ export interface QuotaData {
   model_forwarding_rules?: Record<string, string>;
   subscription_tier?: string;
   is_forbidden?: boolean;
+  isForbidden?: boolean;
   ai_credits?: { credits: number; expiryDate: string };
   quota_groups?: QuotaGroup[];
 }
@@ -1012,10 +1013,12 @@ export class GoogleAPIService {
     data: FetchModelsResponse,
     subscriptionTier: string | undefined,
   ): QuotaData {
+    const isRestricted = Boolean(subscriptionTier && subscriptionTier.includes('(Restricted)'));
     const result: QuotaData = {
       models: {},
       subscription_tier: subscriptionTier,
-      is_forbidden: false,
+      is_forbidden: isRestricted,
+      isForbidden: isRestricted,
     };
 
     for (const [modelName, modelInfoRaw] of Object.entries(data.models || {})) {
@@ -1113,9 +1116,13 @@ export class GoogleAPIService {
 
           const data = parseFetchModelsResponse(response.data);
           const result = this.toQuotaData(data, subscriptionTier);
-          const quotaGroups = await this.fetchQuotaSummary(accessToken, projectId, axiosOptions);
-          if (quotaGroups) {
-            result.quota_groups = quotaGroups;
+          const quotaSummary = await this.fetchQuotaSummary(accessToken, projectId, axiosOptions);
+          if (quotaSummary?.quotaGroups) {
+            result.quota_groups = quotaSummary.quotaGroups;
+          }
+          if (quotaSummary?.isForbidden) {
+            result.is_forbidden = true;
+            result.isForbidden = true;
           }
 
           if (endpointIndex > 0) {
@@ -1154,7 +1161,7 @@ export class GoogleAPIService {
     accessToken: string,
     projectId: string | undefined,
     axiosOptions: GoogleApiProxyOptions,
-  ): Promise<QuotaGroup[] | undefined> {
+  ): Promise<{ quotaGroups?: QuotaGroup[]; isForbidden?: boolean } | undefined> {
     const payload: { project?: string } = projectId ? { project: projectId } : {};
 
     for (const endpoint of QUOTA_SUMMARY_ENDPOINTS) {
@@ -1183,13 +1190,16 @@ export class GoogleAPIService {
               retriedWithoutProject = true;
               continue;
             }
+            if (response.status === 403) {
+              return { isForbidden: true };
+            }
             if (response.status >= 400 && response.status < 500 && response.status !== 429) {
               return undefined;
             }
             break;
           }
 
-          return toQuotaGroups(parseQuotaSummaryResponse(response.data));
+          return { quotaGroups: toQuotaGroups(parseQuotaSummaryResponse(response.data)) };
         } catch (error) {
           logger.warn(`[GoogleAPIService] Quota summary API request failed at ${endpoint}`, error);
           break;

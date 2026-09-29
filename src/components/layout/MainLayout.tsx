@@ -13,6 +13,7 @@ import {
   RefreshCw,
   FlaskConical,
   Activity,
+  Wrench,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -71,6 +72,11 @@ export const MainLayout: React.FC = () => {
       to: '/proxy',
       icon: Network,
       label: t('nav.proxy'),
+    },
+    {
+      to: '/client-tools',
+      icon: Wrench,
+      label: t('nav.client-tools', 'Client Tools'),
     },
     ...(config?.show_emulation_ui
       ? [

@@ -40,7 +40,10 @@ import {
   Users,
   UserMinus,
   ExternalLink,
+  Pause,
+  Play,
 } from 'lucide-react';
+import { isForbiddenReason } from '@/modules/cloud-account/utils/account-status';
 import {
   useFamilyGroups,
   useUnlinkAccountFromFamily,
@@ -61,7 +64,10 @@ import {
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ipc } from '@/ipc/manager';
-import { useSetAccountProxy } from '@/modules/cloud-account/hooks/useCloudAccounts';
+import {
+  useSetAccountProxy,
+  useTogglePauseCloudAccount,
+} from '@/modules/cloud-account/hooks/useCloudAccounts';
 import { isValidProxyUrl } from '@/shared/utils/url';
 import { getCloudAccountBlockedStatusLabel } from '@/modules/cloud-account/utils/accountValidationStatus';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
@@ -260,6 +266,14 @@ export function CloudAccountCard({
     toggleProviderCollapse,
   } = useProviderGrouping();
   const setAccountProxy = useSetAccountProxy();
+  const togglePauseMutation = useTogglePauseCloudAccount();
+  const isPaused = account.status === 'paused';
+  const handleTogglePause = () => {
+    togglePauseMutation.mutate({
+      accountId: account.id,
+      paused: !isPaused,
+    });
+  };
   const [proxyUrl, setProxyUrl] = useState(account.proxy_url || '');
   const [proxySaved, setProxySaved] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -648,7 +662,17 @@ export function CloudAccountCard({
             )}
 
             {validationBlockedStatusLabel && (
-              <span className="text-destructive bg-destructive/10 border-destructive/20 rounded border px-1.5 py-0 text-[10px] font-semibold h-5 flex items-center">
+              <span
+                className={cn(
+                  'rounded border px-1.5 py-0 text-[10px] font-semibold h-5 flex items-center',
+                  account.status === 'paused'
+                    ? isForbiddenReason(account.status_reason)
+                      ? 'text-rose-500 bg-rose-500/10 border-rose-500/20 dark:text-rose-400'
+                      : 'text-amber-500 bg-amber-500/10 border-amber-500/20 dark:text-amber-400'
+                    : 'text-destructive bg-destructive/10 border-destructive/20',
+                )}
+                title={account.status_reason || undefined}
+              >
                 {validationBlockedStatusLabel}
               </span>
             )}
@@ -1111,6 +1135,32 @@ export function CloudAccountCard({
                 <TooltipContent className="text-xs">{t('cloud.card.refresh')}</TooltipContent>
               </Tooltip>
 
+              {/* Pause / Resume Button */}
+              <Tooltip delayDuration={300}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className={cn(
+                      'hover:bg-accent border-border/50 h-7 w-7 cursor-pointer rounded-md',
+                      isPaused &&
+                        'text-amber-500 hover:text-amber-400 bg-amber-500/10 border-amber-500/30',
+                    )}
+                    onClick={handleTogglePause}
+                    disabled={togglePauseMutation.isPending}
+                  >
+                    {isPaused ? (
+                      <Play className="h-3.5 w-3.5" />
+                    ) : (
+                      <Pause className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs">
+                  {isPaused ? t('cloud.card.resume') : t('cloud.card.pause')}
+                </TooltipContent>
+              </Tooltip>
+
               {/* Profile Button */}
               <Tooltip delayDuration={300}>
                 <TooltipTrigger asChild>
@@ -1266,6 +1316,14 @@ export function CompactCloudAccountCard({
   const { config } = useAppConfig();
   const { data: familyGroups = [] } = useFamilyGroups();
   const unlinkMutation = useUnlinkAccountFromFamily();
+  const togglePauseMutation = useTogglePauseCloudAccount();
+  const isPaused = account.status === 'paused';
+  const handleTogglePause = () => {
+    togglePauseMutation.mutate({
+      accountId: account.id,
+      paused: !isPaused,
+    });
+  };
   const familyGroup = familyGroups.find((g) => g.accountIds.includes(account.id));
   const isFamilyOwner = familyGroup?.primaryAccountId === account.id;
 
@@ -1425,7 +1483,17 @@ export function CompactCloudAccountCard({
             </span>
           )}
           {validationBlockedStatusLabel && (
-            <span className="text-destructive shrink-0 font-medium text-[10px]">
+            <span
+              className={cn(
+                'shrink-0 font-medium text-[10px]',
+                account.status === 'paused'
+                  ? isForbiddenReason(account.status_reason)
+                    ? 'text-rose-500 dark:text-rose-400'
+                    : 'text-amber-500 dark:text-amber-400'
+                  : 'text-destructive',
+              )}
+              title={account.status_reason || undefined}
+            >
               {validationBlockedStatusLabel}
             </span>
           )}
@@ -1927,6 +1995,23 @@ export function CompactCloudAccountCard({
             <DropdownMenuItem onClick={() => onRefresh(account.id)} disabled={isRefreshing} className="flex cursor-pointer items-center py-2 text-xs">
               <RefreshCw className={cn('mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground', isRefreshing && 'animate-spin')} />
               <span className="whitespace-nowrap">{t('cloud.card.refresh', 'Refresh Quota')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={handleTogglePause}
+              disabled={togglePauseMutation.isPending}
+              className="flex cursor-pointer items-center py-2 text-xs"
+            >
+              {isPaused ? (
+                <>
+                  <Play className="mr-2 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                  <span className="whitespace-nowrap">{t('cloud.card.resume', 'Resume Account')}</span>
+                </>
+              ) : (
+                <>
+                  <Pause className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="whitespace-nowrap">{t('cloud.card.pause', 'Pause Account')}</span>
+                </>
+              )}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onManageIdentity(account.id)} className="flex cursor-pointer items-center py-2 text-xs">
               <Fingerprint className="mr-2 h-3.5 w-3.5 shrink-0 text-purple-400" />

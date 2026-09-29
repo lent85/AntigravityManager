@@ -1,4 +1,4 @@
-import { RefreshCw, Trash2, Users, UserMinus, X } from 'lucide-react';
+import { Pause, Play, RefreshCw, Trash2, Users, UserMinus, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 
@@ -7,6 +7,8 @@ interface CloudAccountBatchActionBarProps {
   onClearSelection: () => void;
   onRefreshSelected: () => void;
   onDeleteSelected: () => void;
+  onPauseSelected?: () => void;
+  onResumeSelected?: () => void;
   onLinkFamilySelected?: () => void;
   onUnlinkFamilySelected?: () => void;
   hasFamilyAccountSelected?: boolean;
@@ -17,6 +19,8 @@ export function CloudAccountBatchActionBar({
   onClearSelection,
   onRefreshSelected,
   onDeleteSelected,
+  onPauseSelected,
+  onResumeSelected,
   onLinkFamilySelected,
   onUnlinkFamilySelected,
   hasFamilyAccountSelected,
@@ -59,6 +63,18 @@ export function CloudAccountBatchActionBar({
           >
             <UserMinus className="mr-2 h-3.5 w-3.5" />
             {t('cloud.family.unlinkSelected', 'Tách khỏi gia đình')}
+          </Button>
+        )}
+        {onPauseSelected && (
+          <Button variant="secondary" size="sm" onClick={onPauseSelected}>
+            <Pause className="mr-2 h-3 w-3 text-amber-500" />
+            {t('cloud.batch.pause', 'Pause Selected')}
+          </Button>
+        )}
+        {onResumeSelected && (
+          <Button variant="secondary" size="sm" onClick={onResumeSelected}>
+            <Play className="mr-2 h-3 w-3 text-green-500" />
+            {t('cloud.batch.resume', 'Resume Selected')}
           </Button>
         )}
         <Button variant="secondary" size="sm" onClick={onRefreshSelected}>

@@ -276,6 +276,16 @@ export class AccountLeaseService implements OnModuleInit, OnModuleDestroy {
     this.limitPolicy.markAsForbidden(accountIdOrEmail);
   }
 
+  async markAccountPaused(accountIdOrEmail: string, reason: string): Promise<void> {
+    const accountId = this.resolveAccountId(accountIdOrEmail) ?? accountIdOrEmail;
+    try {
+      await this.accountStore.setAccountStatus?.(accountId, 'paused', reason);
+    } catch (err) {
+      this.logger.warn(`Failed to persist paused status for account ${accountId}`, err);
+    }
+    this.evictAccount(accountId);
+  }
+
   markModelSuccess(accountIdOrEmail: string, model: string): void {
     this.limitPolicy.markModelSuccess(accountIdOrEmail, model);
   }

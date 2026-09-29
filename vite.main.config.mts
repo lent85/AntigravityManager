@@ -43,9 +43,15 @@ function resolvePathPlugin() {
         return null;
       }
 
+      let cleanImporter = importer;
+      const match = cleanImporter.match(/([a-zA-Z]:[\\\/].*)/);
+      if (match) {
+        cleanImporter = match[1];
+      }
+
       let targetPath: string | null = null;
       if (source.startsWith('.')) {
-        targetPath = path.resolve(path.dirname(importer), source);
+        targetPath = path.resolve(path.dirname(cleanImporter), source);
       } else if (source.startsWith('@/')) {
         targetPath = path.resolve(process.cwd(), 'src', source.slice(2));
       } else if (path.isAbsolute(source)) {

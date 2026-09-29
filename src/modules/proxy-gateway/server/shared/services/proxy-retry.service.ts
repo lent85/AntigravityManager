@@ -48,6 +48,7 @@ export interface ProxyRetryAccountLeaseService {
   }): Promise<{ token: CloudAccount; permit: ImageSchedulerPermit }>;
   recordParityError(): void;
   markAsForbidden(accountIdOrEmail: string): void;
+  markAccountPaused?(accountIdOrEmail: string, reason: string): Promise<void>;
   markAsRateLimited(accountIdOrEmail: string): void;
   markFromUpstreamError(params: {
     accountIdOrEmail: string;
@@ -380,6 +381,12 @@ export class ProxyRetryService {
       }
       if (status === 401 || status === 403) {
         this.accountLeaseService.markAsForbidden(accountId);
+        if (status === 403) {
+          await this.accountLeaseService.markAccountPaused?.(
+            accountId,
+            `Google 403 Forbidden: Upstream request rejected (${error.message})`,
+          );
+        }
         return;
       }
 
@@ -405,6 +412,10 @@ export class ProxyRetryService {
 
     if (penaltyDecision.markAsForbidden) {
       this.accountLeaseService.markAsForbidden(accountId);
+      await this.accountLeaseService.markAccountPaused?.(
+        accountId,
+        `Google 403 Forbidden: ${error.message}`,
+      );
       return;
     }
 

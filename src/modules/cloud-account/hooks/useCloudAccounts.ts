@@ -3,6 +3,8 @@ import {
   listCloudAccounts,
   addGoogleAccount,
   deleteCloudAccount,
+  togglePauseCloudAccount,
+  batchSetCloudAccountsPaused,
   refreshAccountQuota,
   setAccountProxy,
   listOAuthClients,
@@ -111,6 +113,32 @@ export function useDeleteCloudAccount() {
 
   return useMutation({
     mutationFn: deleteCloudAccount,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cloudAccounts });
+    },
+  });
+}
+
+export function useTogglePauseCloudAccount() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: togglePauseCloudAccount,
+    onSuccess: (updatedAccount: CloudAccount) => {
+      queryClient.setQueryData(QUERY_KEYS.cloudAccounts, (oldData: CloudAccount[] | undefined) => {
+        if (!oldData) return [updatedAccount];
+        return oldData.map((acc) => (acc.id === updatedAccount.id ? updatedAccount : acc));
+      });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cloudAccounts });
+    },
+  });
+}
+
+export function useBatchSetCloudAccountsPaused() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: batchSetCloudAccountsPaused,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cloudAccounts });
     },

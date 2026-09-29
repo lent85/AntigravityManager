@@ -133,6 +133,10 @@ async function persistMonitorAccountStatusFromError(
   const classified = classifyAccountStatusFromError(error);
   if (classified) {
     await CloudAccountRepo.setAccountStatus(accountId, classified.status, classified.reason);
+    if (classified.status === 'paused' || classified.status === 'expired') {
+      const { evictAccountFromActiveLeaseCache } = await import('./CloudAccountHealthService');
+      await evictAccountFromActiveLeaseCache(accountId);
+    }
   }
 }
 
@@ -487,6 +491,9 @@ export class CloudMonitorService {
 
       this.setSyncingAccountId(account.id);
       try {
+        if (account.status === 'paused') {
+          continue;
+        }
         if (account.health?.oauth?.refresh_blocked) {
           continue;
         }
@@ -627,6 +634,21 @@ export class CloudMonitorService {
         // 3. Update DB & clear failures
         await CloudAccountRepo.updateQuota(account.id, quota);
         account.quota = quota;
+
+        if (quota.is_forbidden || quota.isForbidden) {
+          logger.warn(
+            `Monitor: Account ${account.email} is forbidden / ineligible for quota summary; auto-pausing account.`,
+          );
+          const pauseReason =
+            'Google account forbidden or ineligible for Cloud Code Assist (no weekly quota)';
+          await CloudAccountRepo.setAccountStatus(account.id, 'paused', pauseReason);
+          account.status = 'paused';
+          account.status_reason = pauseReason;
+          const { evictAccountFromActiveLeaseCache } = await import('./CloudAccountHealthService');
+          await evictAccountFromActiveLeaseCache(account.id);
+          continue;
+        }
+
         await CloudAccountRepo.setAccountStatus(account.id, 'active', null);
         await clearValidationHealthAfterSuccessfulProbe(account);
         account.status = 'active';

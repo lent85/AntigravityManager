@@ -29,7 +29,7 @@ export interface EmulatedAccountProfile {
   avatar_url?: string | null;
   tier: 'Free' | 'Pro' | 'Ultra';
   strategy: AccountEmulationStrategyConfig;
-  status: 'active' | 'rate_limited' | 'expired';
+  status: 'active' | 'rate_limited' | 'expired' | 'paused';
   status_reason?: string;
   quota: CloudQuotaData;
   created_at: number;
@@ -46,7 +46,7 @@ export const EmulatedAccountProfileSchema = z.object({
   avatar_url: z.string().nullable().optional(),
   tier: z.enum(['Free', 'Pro', 'Ultra']),
   strategy: AccountEmulationStrategyConfigSchema,
-  status: z.enum(['active', 'rate_limited', 'expired']),
+  status: z.enum(['active', 'rate_limited', 'expired', 'paused']),
   status_reason: z.string().optional(),
   quota: z.any(), // CloudQuotaData validated separately
   created_at: z.number(),

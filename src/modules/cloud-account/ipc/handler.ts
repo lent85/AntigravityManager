@@ -273,6 +273,12 @@ async function markAccountStatusFromError(account: CloudAccount, error: unknown)
   account.status = classified.status;
   account.status_reason = classified.reason;
   await CloudAccountRepo.setAccountStatus(account.id, classified.status, classified.reason);
+  if (classified.status === 'paused' || classified.status === 'expired') {
+    const { evictAccountFromActiveLeaseCache } = await import(
+      '../services/CloudAccountHealthService'
+    );
+    await evictAccountFromActiveLeaseCache(account.id);
+  }
 }
 
 async function clearAccountStatus(account: CloudAccount): Promise<void> {
@@ -610,6 +616,50 @@ export async function deleteCloudAccount(accountId: string): Promise<void> {
   await CloudAccountRepo.removeAccount(accountId);
 }
 
+export async function togglePauseCloudAccount(
+  accountId: string,
+  paused: boolean,
+): Promise<CloudAccount> {
+  const account = await CloudAccountRepo.getAccount(accountId);
+  if (!account) {
+    throw new Error(`Account not found: ${accountId}`);
+  }
+
+  if (paused) {
+    account.status = 'paused';
+    account.status_reason = 'Paused by user';
+    await CloudAccountRepo.setAccountStatus(accountId, 'paused', 'Paused by user');
+    const { evictAccountFromActiveLeaseCache } = await import(
+      '../services/CloudAccountHealthService'
+    );
+    await evictAccountFromActiveLeaseCache(accountId);
+  } else {
+    account.status = 'active';
+    account.status_reason = undefined;
+    await CloudAccountRepo.setAccountStatus(accountId, 'active', null);
+    const { reloadNestServerAccountLeaseCache } = await import('@/server/main');
+    await reloadNestServerAccountLeaseCache();
+  }
+
+  return account;
+}
+
+export async function batchSetCloudAccountsPaused(
+  accountIds: string[],
+  paused: boolean,
+): Promise<CloudAccount[]> {
+  const results: CloudAccount[] = [];
+  for (const accountId of accountIds) {
+    try {
+      const updated = await togglePauseCloudAccount(accountId, paused);
+      results.push(updated);
+    } catch (error) {
+      logger.error(`Failed to set pause status for account ${accountId}`, error);
+    }
+  }
+  return results;
+}
+
 async function syncFamilyQuotaToSiblings(
   accountId: string,
   quota: CloudAccount['quota'],
@@ -724,6 +774,23 @@ export async function refreshAccountQuota(accountId: string): Promise<CloudAccou
     await syncFamilyQuotaToSiblings(account.id, account.quota);
     await CloudAccountRepo.updateLastUsed(account.id);
     account.last_used = Math.floor(Date.now() / 1000);
+
+    if (quota.is_forbidden || quota.isForbidden) {
+      logger.warn(
+        `Account ${account.email} is forbidden / ineligible for quota summary; auto-pausing account.`,
+      );
+      const pauseReason =
+        'Google account forbidden or ineligible for Cloud Code Assist (no weekly quota)';
+      await CloudAccountRepo.setAccountStatus(account.id, 'paused', pauseReason);
+      account.status = 'paused';
+      account.status_reason = pauseReason;
+      const { evictAccountFromActiveLeaseCache } = await import(
+        '../services/CloudAccountHealthService'
+      );
+      await evictAccountFromActiveLeaseCache(account.id);
+      return account;
+    }
+
     await clearAccountStatus(account);
     await clearValidationHealthAfterSuccessfulProbe(account);
     proxyModelAvailabilityStore.clearCapabilityFailures(account.id);
@@ -774,6 +841,23 @@ export async function refreshAccountQuota(accountId: string): Promise<CloudAccou
         await syncFamilyQuotaToSiblings(account.id, account.quota);
         await CloudAccountRepo.updateLastUsed(account.id);
         account.last_used = Math.floor(Date.now() / 1000);
+
+        if (quota.is_forbidden || quota.isForbidden) {
+          logger.warn(
+            `Account ${account.email} is forbidden / ineligible for quota summary; auto-pausing account.`,
+          );
+          const pauseReason =
+            'Google account forbidden or ineligible for Cloud Code Assist (no weekly quota)';
+          await CloudAccountRepo.setAccountStatus(account.id, 'paused', pauseReason);
+          account.status = 'paused';
+          account.status_reason = pauseReason;
+          const { evictAccountFromActiveLeaseCache } = await import(
+            '../services/CloudAccountHealthService'
+          );
+          await evictAccountFromActiveLeaseCache(account.id);
+          return account;
+        }
+
         await clearAccountStatus(account);
         await clearValidationHealthAfterSuccessfulProbe(account);
         proxyModelAvailabilityStore.clearCapabilityFailures(account.id);

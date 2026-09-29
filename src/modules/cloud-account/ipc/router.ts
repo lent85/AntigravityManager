@@ -7,6 +7,8 @@ import {
   deleteCloudIdentityProfileRevision,
   listCloudAccounts,
   deleteCloudAccount,
+  togglePauseCloudAccount,
+  batchSetCloudAccountsPaused,
   openAccountValidationLink,
   getCloudIdentityProfiles,
   openCloudIdentityStorageFolder,
@@ -207,6 +209,20 @@ export const cloudRouter = os.router({
     .output(z.void())
     .handler(async ({ input }) => {
       await deleteCloudAccount(input.accountId);
+    }),
+
+  togglePauseCloudAccount: os
+    .input(z.object({ accountId: z.string(), paused: z.boolean() }))
+    .output(CloudAccountSchema)
+    .handler(async ({ input }) => {
+      return togglePauseCloudAccount(input.accountId, input.paused);
+    }),
+
+  batchSetCloudAccountsPaused: os
+    .input(z.object({ accountIds: z.array(z.string()), paused: z.boolean() }))
+    .output(z.array(CloudAccountSchema))
+    .handler(async ({ input }) => {
+      return batchSetCloudAccountsPaused(input.accountIds, input.paused);
     }),
 
   openAccountValidationLink: os

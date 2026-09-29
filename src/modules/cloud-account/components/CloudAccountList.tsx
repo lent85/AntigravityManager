@@ -19,6 +19,7 @@ import {
   useImportCloudAccounts,
   useEmulationState,
   useSyncingAccountId,
+  useBatchSetCloudAccountsPaused,
 } from '@/modules/cloud-account/hooks/useCloudAccounts';
 import {
   useFamilyGroups,
@@ -77,6 +78,7 @@ export function CloudAccountList() {
   const { config, saveConfig } = useAppConfig();
   const refreshMutation = useRefreshQuota();
   const deleteMutation = useDeleteCloudAccount();
+  const batchSetPausedMutation = useBatchSetCloudAccountsPaused();
   const addMutation = useAddGoogleAccount();
   const switchMutation = useSwitchCloudAccount();
   const markActiveMutation = useMarkActiveAccount();
@@ -125,6 +127,8 @@ export function CloudAccountList() {
     rateLimitedAccounts,
     overallQuotaPercentage,
     effectiveQuotaStatus,
+    geminiQuota,
+    claudeQuota,
   } = useCloudAccountListView(accounts, config, currentSort);
 
   const displayedAccounts = useMemo(() => {
@@ -763,6 +767,42 @@ export function CloudAccountList() {
     }
   };
 
+  const pauseSelectedAccounts = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    try {
+      await batchSetPausedMutation.mutateAsync({ accountIds: ids, paused: true });
+      toast({
+        title: t('cloud.toast.batchPauseSuccess', { count: ids.length }),
+      });
+      setSelectedIds(new Set());
+    } catch (error) {
+      toast({
+        title: t('cloud.error.loadFailed'),
+        description: getLocalizedErrorMessage(error, t),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const resumeSelectedAccounts = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    try {
+      await batchSetPausedMutation.mutateAsync({ accountIds: ids, paused: false });
+      toast({
+        title: t('cloud.toast.batchResumeSuccess', { count: ids.length }),
+      });
+      setSelectedIds(new Set());
+    } catch (error) {
+      toast({
+        title: t('cloud.error.loadFailed'),
+        description: getLocalizedErrorMessage(error, t),
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleImportDialogOpenChange = (open: boolean) => {
     setIsImportDialogOpen(open);
     if (!open) {
@@ -843,6 +883,8 @@ export function CloudAccountList() {
         rateLimitedAccounts={rateLimitedAccounts}
         overallQuotaPercentage={overallQuotaPercentage}
         effectiveQuotaStatus={effectiveQuotaStatus}
+        geminiQuota={geminiQuota}
+        claudeQuota={claudeQuota}
       />
 
       <CloudAccountToolbar
@@ -958,6 +1000,8 @@ export function CloudAccountList() {
           setSelectedIds(new Set());
         }}
         onRefreshSelected={refreshSelectedAccounts}
+        onPauseSelected={pauseSelectedAccounts}
+        onResumeSelected={resumeSelectedAccounts}
         onDeleteSelected={deleteSelectedAccounts}
         onLinkFamilySelected={() => {
           handleOpenFamilyDialog();

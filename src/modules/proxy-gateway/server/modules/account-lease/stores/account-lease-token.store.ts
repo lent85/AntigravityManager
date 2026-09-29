@@ -43,7 +43,11 @@ export class AccountLeaseTokenCache {
   }
 
   mapAccountToTokenData(account: CloudAccount): AccountLeaseTokenData | null {
-    if (!account.token || account.health?.oauth?.refresh_blocked === true) {
+    if (
+      !account.token ||
+      account.health?.oauth?.refresh_blocked === true ||
+      account.status === 'paused'
+    ) {
       return null;
     }
 
