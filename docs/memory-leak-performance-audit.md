@@ -44,6 +44,7 @@ private readonly failureCounts = new Map<string, FailureCountEntry>();
 **Impact**: Medium. With many accounts and diverse models, the maps can accumulate hundreds of stale entries over days of uptime.
 
 **Recommendation**:
+
 - Add a periodic `cleanupExpired()` call on a timer (e.g., every 10 minutes) that also sweeps stale `failureCounts`.
 - Alternatively, add a `size` guard and evict oldest entries when a ceiling is reached.
 
@@ -119,6 +120,7 @@ Every ORPC IPC message triggers a **synchronous disk write** (`appendFileSync`) 
 **Impact**: High on busy workloads. ORPC messages flow on every renderer↔main interaction. Under load, this serializes the main process event loop on disk I/O.
 
 **Recommendation**:
+
 - Switch to `fs.appendFile` (async) or buffer writes and flush periodically.
 - Consider making packet logging opt-in via an environment variable or debug flag.
 - Move logging off the critical IPC path.
@@ -154,6 +156,7 @@ nodeIntegration: true,
 ```
 
 While not a direct memory leak, disabling context isolation and enabling `nodeIntegration` in the renderer:
+
 - Gives the renderer access to the full Node.js API, risking accidental resource creation (file handles, child processes, timers) that are harder to track.
 - Makes Electron security recommendations impossible to follow.
 
@@ -177,6 +180,7 @@ await new Promise((r) => setTimeout(r, 1000)); // L529 — hard-coded 1s delay
 **Impact**: With 20 accounts, a single poll round takes ~12 minutes minimum, which may exceed the default 5-minute poll interval. The service handles this gracefully (schedules next poll immediately), but the stale data window grows.
 
 **Recommendation**:
+
 - Consider batching concurrent refreshes for accounts in the same family group.
 - Consider making the inter-account delay configurable down to 0 for power users.
 - Remove the hard-coded 1-second delay on L529 or make it configurable.
@@ -228,14 +232,14 @@ Harmless but indicates a copy-paste error.
 
 ### Timer Lifecycle Management ✓
 
-| Service | Timer | Cleanup |
-|---------|-------|---------|
-| `OpenAIUploadsService` | `sweepTimer` (setInterval) | `onModuleDestroy()` calls `clearInterval` |
-| `FileContentStore` | `sweepTimer` (setInterval) | `onModuleDestroy()` calls `clearInterval` |
-| `CloudMonitorService` | `nextPollTimeout` (setTimeout) | `stop()` clears timeout |
-| `AccountEmulationService` | `tickerTimer` (setInterval) | `stopTicker()` clears interval |
-| `SidebarIndicators` | `setInterval` in useEffect | Returns cleanup `clearInterval` |
-| `PerformanceRecorder` | `metricsTimer`, `eventLoopTimer` | `stop()` calls `clearInterval` |
+| Service                   | Timer                            | Cleanup                                   |
+| ------------------------- | -------------------------------- | ----------------------------------------- |
+| `OpenAIUploadsService`    | `sweepTimer` (setInterval)       | `onModuleDestroy()` calls `clearInterval` |
+| `FileContentStore`        | `sweepTimer` (setInterval)       | `onModuleDestroy()` calls `clearInterval` |
+| `CloudMonitorService`     | `nextPollTimeout` (setTimeout)   | `stop()` clears timeout                   |
+| `AccountEmulationService` | `tickerTimer` (setInterval)      | `stopTicker()` clears interval            |
+| `SidebarIndicators`       | `setInterval` in useEffect       | Returns cleanup `clearInterval`           |
+| `PerformanceRecorder`     | `metricsTimer`, `eventLoopTimer` | `stop()` calls `clearInterval`            |
 
 ### NestJS Server Shutdown ✓
 
@@ -261,16 +265,16 @@ Harmless but indicates a copy-paste error.
 
 ## Summary of Recommendations
 
-| # | Finding | Severity | Effort | Action |
-|---|---------|----------|--------|--------|
-| 1 | `notifiedManualUpdateVersions` unbounded Set | 🔴 Low | Trivial | Cap or clear on window re-create |
-| 2 | `RateLimitTrackerService` maps no periodic cleanup | 🔴 Medium | Low | Add periodic `cleanupExpired()` timer |
-| 3 | `sessionBindings` stale entry accumulation | 🔴 Medium | Low | Add periodic sweep or max-size cap |
-| 4 | `accountCooldowns` never evicted | 🔴 Low-Med | Trivial | Sweep on read or periodic timer |
-| 5 | `failedUntil` unbounded in context cache | 🔴 Low | Trivial | Add max-entries cap |
-| 6 | `logPacket` sync disk write on IPC hot path | 🟡 High | Medium | Switch to async or buffered writes |
-| 7 | `backgroundThrottling: false` — always-on renderer | 🟡 Medium | Medium | Pause renderer intervals when hidden |
-| 8 | `contextIsolation: false` broadens leak surface | 🟡 Medium | Large | Long-term migration path |
-| 9 | `CloudMonitorService.poll()` sequential + sleep | 🟡 Medium | Medium | Consider parallel family batches |
-| 10 | `DurableRecordStore.get()` persists on every read | 🟡 Medium | Medium | Add LRU-touch-only mode |
-| 11 | Duplicate log line in `before-exit` | 🟢 Trivial | Trivial | Remove duplicate |
+| #   | Finding                                            | Severity   | Effort  | Action                                |
+| --- | -------------------------------------------------- | ---------- | ------- | ------------------------------------- |
+| 1   | `notifiedManualUpdateVersions` unbounded Set       | 🔴 Low     | Trivial | Cap or clear on window re-create      |
+| 2   | `RateLimitTrackerService` maps no periodic cleanup | 🔴 Medium  | Low     | Add periodic `cleanupExpired()` timer |
+| 3   | `sessionBindings` stale entry accumulation         | 🔴 Medium  | Low     | Add periodic sweep or max-size cap    |
+| 4   | `accountCooldowns` never evicted                   | 🔴 Low-Med | Trivial | Sweep on read or periodic timer       |
+| 5   | `failedUntil` unbounded in context cache           | 🔴 Low     | Trivial | Add max-entries cap                   |
+| 6   | `logPacket` sync disk write on IPC hot path        | 🟡 High    | Medium  | Switch to async or buffered writes    |
+| 7   | `backgroundThrottling: false` — always-on renderer | 🟡 Medium  | Medium  | Pause renderer intervals when hidden  |
+| 8   | `contextIsolation: false` broadens leak surface    | 🟡 Medium  | Large   | Long-term migration path              |
+| 9   | `CloudMonitorService.poll()` sequential + sleep    | 🟡 Medium  | Medium  | Consider parallel family batches      |
+| 10  | `DurableRecordStore.get()` persists on every read  | 🟡 Medium  | Medium  | Add LRU-touch-only mode               |
+| 11  | Duplicate log line in `before-exit`                | 🟢 Trivial | Trivial | Remove duplicate                      |

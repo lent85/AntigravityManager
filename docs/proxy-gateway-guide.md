@@ -103,7 +103,43 @@ The gateway integrates natively with Google Vertex AI / Gemini's `cachedContents
 
 ---
 
-## 5. Verification and Parity Testing
+## 5. Proxy Administration Console (`/proxy` Route)
+
+The gateway includes an Electron UI dashboard for monitoring, configuration, and diagnostics:
+
+- **Dashboard Tab (`ProxyDashboardTab.tsx`)**: Displays aggregate throughput (requests/sec), active account leases, error rates, and upstream health status.
+- **Logs Tab (`ProxyLogsTab.tsx`)**: Real-time streaming log inspector filtering by status code, model name, client IP, and lease ID.
+- **Docs & Prompts Tab (`ProxyDocsPromptsTab.tsx`)**: Copyable code snippets (cURL, Python, Node.js, OpenAI SDK, Anthropic SDK) for integrating external tools.
+- **Web Portal Tab (`ProxyWebPortalTab.tsx`)**: Configures the embedded public-facing landing page accessible directly over HTTP.
+- **Pricing Tab (`ProxyGatewayPricingTab.tsx`)**: Configurable cost calculation matrices per model (input/output/cached token pricing).
+- **API Keys Card (`ProxyApiKeysCard.tsx`)**: Generates and manages scoped proxy API keys with individual token allowances.
+- **Thought Diagnostics (`ThoughtDiagnosticsPanel.tsx`)**: Visual inspection of reasoning token streams and thought store retention.
+
+---
+
+## 6. Advanced Account Scheduling & Lease Policies
+
+Located in `src/modules/proxy-gateway/server/modules/account-lease/policies/account-lease-selection.policy.ts`, the lease engine supports multiple scheduling strategies:
+
+- `round-robin`: Evenly cycles requests across healthy accounts.
+- `random`: Uniformly selects random healthy accounts to distribute burst loads.
+- `quota-priority`: Prioritizes accounts with the highest remaining quota for the requested model.
+- `failover`: Sticks to a designated primary account and shifts only upon rate-limiting or quota exhaustion.
+- `balance`: Session-sticky balancing to preserve prompt cache affinity across related turns.
+- `cache-first`: Directs traffic to accounts possessing active Vertex/Gemini cached contents.
+- `performance-first`: Prioritizes accounts with historically lowest upstream response latency.
+
+---
+
+## 7. Traffic Monitoring, Thought Store & Web Portal
+
+- **SQLite Worker Architecture**: `bounded-sqlite-worker.ts` offloads audit logging and traffic recording to dedicated Node.js worker threads to prevent event-loop latency.
+- **Thought Store**: `thought-store.service.ts` saves and restores multi-turn model reasoning tokens, ensuring Claude 3.7 and Gemini Flash Thinking chains persist across client restarts.
+- **Embedded Web Portal**: Fastify serves an embedded web portal (`landing.controller.ts`) so developers on the local network can view status and docs without opening the Electron UI.
+
+---
+
+## 8. Verification and Parity Testing
 
 Because the proxy gateway is a critical external compatibility surface, changes must be verified against dedicated test suites:
 

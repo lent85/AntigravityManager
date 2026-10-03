@@ -47,6 +47,7 @@ The proxy-gateway adapter uses the existing Claude mapper or the native Gemini e
 ### 1.7 Identity Masking (Privacy Mode)
 
 Users can toggle identity masking via the toolbar eye icon or application settings (`mask_account_info`). When active:
+
 - Email addresses are obfuscated (e.g. `jo***@gmail.com`).
 - Full names are replaced with clean placeholders.
 - Avatar initials are sanitized to protect user privacy during live demonstrations, screen sharing, or recording sessions.
@@ -54,6 +55,7 @@ Users can toggle identity masking via the toolbar eye icon or application settin
 ### 1.8 Dual Quota Window & Layout Customization
 
 The toolbar supports three quota window perspectives:
+
 - **5-Hour (`5h`)**: Real-time 5-hour operational quota buckets for models like Gemini 2.5 and Claude 3.5.
 - **Weekly (`weekly`)**: Weekly allowance buckets for Claude and Gemini.
 - **Dual Window (`dual`)**: Side-by-side visualization showing both 5h and weekly quota levels simultaneously on each account card.
@@ -67,6 +69,7 @@ The polling cadence for background process discovery and model metrics can be tu
 ### 1.10 Account Emulation & Quota Simulation System
 
 The emulation system empowers developers to test UI layout edge cases, auto-switching failovers, and quota exhaustion thresholds without consuming real API quota or requiring multiple genuine OAuth accounts:
+
 - **Live Consumption Ticker**: Simulates realistic quota consumption in the background with customizable tick frequencies (3s, 5s, 15s).
 - **Consumption Strategies**:
   - `linear`: Quota steadily drains by a configured percentage per tick.
@@ -74,9 +77,43 @@ The emulation system empowers developers to test UI layout edge cases, auto-swit
   - `static`: Holds quota at pre-configured fixed percentages (e.g., 3% to test low-quota warnings).
   - `rate_limited`: Simulates HTTP 429 `RESOURCE_EXHAUSTED` conditions to test fallback routing.
   - `auto_recover`: Drains to 0% and automatically resets back to 100% after cooldown.
-- **Pre-configured Presets**: Includes *Live Drain Demo*, *Auto-Switch Benchmark*, *Bursty Workload*, and *Balanced Pool*.
+- **Pre-configured Presets**: Includes _Live Drain Demo_, _Auto-Switch Benchmark_, _Bursty Workload_, and _Balanced Pool_.
 - **Safe Sandbox Isolation**: Stored separately in application settings (`cloud_account_emulation_state`). Mock tokens never touch the IDE's SQLite database (`state.vscdb`) or the real `accounts` table.
-- **Toolbar & Filter Integration**: Users can toggle Emulation Mode ON/OFF at any time, or filter the account list between *All*, *Real only*, and *Emulated only*.
+- **Toolbar & Filter Integration**: Users can toggle Emulation Mode ON/OFF at any time, or filter the account list between _All_, _Real only_, and _Emulated only_.
+
+### 1.11 Family Group Management
+
+To streamline managing dozens of cloud accounts across teams, family plans, or client allocations:
+
+- **Logical Groupings**: Group accounts into named family entities (e.g., "Dev Team", "Staging Pool", "Personal Primary").
+- **Family Cards (`FamilyCloudAccountCard`)**: Aggregate pooled quota visualization, active member counts, and collective health status.
+- **Primary Account Selection**: Designate a primary account within each family group for preferred traffic dispatch.
+- **Persistence**: Managed through `FamilyGroupStore` via `CloudAccountSettingsStore` under `account_family_groups`.
+
+### 1.12 Batch Account Operations
+
+The account list integrates a multi-select batch action bar (`CloudAccountBatchActionBar`) providing bulk controls:
+
+- **Batch Quota Refresh**: Concurrently refreshes quota metrics across all selected accounts.
+- **Batch Enable / Disable**: Toggles availability state across multiple accounts simultaneously.
+- **Batch Warmup Dispatch**: Queues selected eligible accounts into the `WeeklyWarmupService` pipeline.
+- **Batch Delete**: Prompts for confirmation and purges selected accounts from local SQLite storage.
+
+### 1.13 Quota Provider Summary
+
+`src/modules/cloud-account/utils/quota-provider-summary.ts` calculates real-time aggregated metrics across all registered accounts:
+
+- Aggregates remaining token and request quotas across Google Cloud, Anthropic, and OpenAI providers.
+- Computes distribution across account tiers (Free, Tier 1, Tier 2, Enterprise).
+- Renders global health gauges in the account view summary header.
+
+### 1.14 Local CLI Token Matching & Discovery
+
+To avoid re-authorizing accounts already authenticated in developer CLI tools:
+
+- **CLI Discovery**: `agyCliTokenReader.ts` scans standard local paths for existing OAuth tokens from the Antigravity CLI and Google Cloud SDK.
+- **Token Matching**: `accountTokenMatcher.ts` compares token signatures and profile identifiers against registered accounts to prevent redundant imports or stale token overrides.
+- **Import Dialog**: `LocalAccountImportDialog.tsx` allows one-click import and assignment of discovered CLI credentials into the managed account pool.
 
 ## 2. Technical Implementation
 
@@ -167,7 +204,7 @@ Account mutations outside this lease hot path keep their existing awaited persis
 ### 2.7 Emulation Sandbox Architecture
 
 All mock accounts are stored in the SQLite `settings` table under `cloud_account_emulation_state` via `CloudAccountSettingsStore`.
+
 - **Zero Production Pollution**: Real accounts in `accounts` table are strictly separated from emulated accounts.
 - **Safe Mock Switching**: Selecting an emulated account updates in-memory IDE active pointers without executing token injection into `state.vscdb` or terminating Antigravity OS processes.
 - **Reactive Polling**: When emulation mode is active, the renderer adjusts account polling to 3 seconds to provide fluid visual feedback as quotas drain.
-

@@ -20,6 +20,7 @@ This directory contains authoritative technical documentation for contributors a
 
 | Document | Purpose |
 | --- | --- |
+| [client-tools.md](client-tools.md) | Interactive developer sandbox for LLM function calling, JSON-schema inspection, and chat simulation |
 | [feature-development-guide.md](feature-development-guide.md) | End-to-end recipe for creating or extending a feature module in `src/modules/` |
 | [proxy-gateway-guide.md](proxy-gateway-guide.md) | Architecture, protocol mappers (OpenAI, Anthropic, Gemini), streaming, context caching, and testing for the embedded proxy gateway |
 | [openai-api-compatibility.md](openai-api-compatibility.md) | Dated OpenAI route matrix, authentication scopes, deviations, extensions, retention, and client examples |
@@ -29,7 +30,8 @@ This directory contains authoritative technical documentation for contributors a
 
 | Document | Description |
 | --- | --- |
-| [cloud_features.md](cloud_features.md) | Cloud account pools, quota monitoring, auto-switching, and weekly warmup |
+| [cloud_features.md](cloud_features.md) | Cloud account pools, quota monitoring, family groups, auto-switching, emulation, and weekly warmup |
+| [memory-leak-performance-audit.md](memory-leak-performance-audit.md) | Memory leak audit findings, renderer/main process resource profiles, and leak prevention patterns |
 | [proxy-compatibility.md](proxy-compatibility.md) | Protocol compatibility edge-cases, Responses history normalization, tool configs, and context caching |
 | [proxyman-debugging.md](proxyman-debugging.md) | Troubleshooting proxy traffic with Proxyman on Windows and macOS |
 | [proxyman-install.md](proxyman-install.md) | Installation and certificate setup for local Proxyman interception |
