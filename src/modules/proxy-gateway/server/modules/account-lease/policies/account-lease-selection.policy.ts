@@ -14,6 +14,7 @@ export interface AccountLeaseRateLimitReader {
 }
 
 export interface AccountLeaseSelectionConfig {
+  quotaAwareSchedulingEnabled: boolean;
   parityEnabled: boolean;
   parityShadowEnabled: boolean;
   schedulingMode: AccountLeaseSelectionMode;
@@ -30,6 +31,7 @@ interface AccountLeaseSelectionLogger {
 
 export interface AccountLeaseSelectionRequest<T> {
   allTokens: Array<AccountLeaseSelectionEntry<T>>;
+  getModelQuota?: (accountId: string, token: T, model: string) => number | undefined;
   sessionKey?: string;
   model?: string;
   now: number;
@@ -268,16 +270,33 @@ export class AccountLeaseSelectionPolicy {
     return bestCandidate;
   }
 
+  private weightedCandidates<T>(
+    candidates: Array<AccountLeaseSelectionEntry<T>>,
+    request: AccountLeaseSelectionRequest<T>,
+  ): Array<AccountLeaseSelectionEntry<T>> {
+    const model = request.model;
+    const getModelQuota = request.getModelQuota;
+    if (!request.config.quotaAwareSchedulingEnabled || !model || !getModelQuota) {
+      return candidates;
+    }
+    return candidates.flatMap((candidate) => {
+      const quota = getModelQuota(candidate[0], candidate[1], model);
+      const weight =
+        quota === undefined || !Number.isFinite(quota) ? 1 : quota >= 75 ? 3 : quota >= 25 ? 2 : 1;
+      return Array.from({ length: weight }, () => candidate);
+    });
+  }
+
   private pickByStrategy<T>(
     candidates: Array<AccountLeaseSelectionEntry<T>>,
     mode: AccountLeaseSelectionMode,
-    model?: string,
+    request: AccountLeaseSelectionRequest<T>,
   ): AccountLeaseSelectionEntry<T> | null {
     switch (mode) {
       case 'random':
         return this.pickRandomEntry(candidates);
       case 'quota-priority':
-        return this.pickQuotaPriorityEntry(candidates, model);
+        return this.pickQuotaPriorityEntry(candidates, request.model);
       case 'failover':
         return this.pickFailoverEntry(candidates);
       case 'round-robin':
@@ -285,7 +304,7 @@ export class AccountLeaseSelectionPolicy {
       case 'cache-first':
       case 'performance-first':
       default:
-        return this.pickRoundRobinEntry(candidates);
+        return this.pickRoundRobinEntry(this.weightedCandidates(candidates, request));
     }
   }
 
@@ -327,7 +346,7 @@ export class AccountLeaseSelectionPolicy {
       }
     }
 
-    return this.pickByStrategy(availableTokens, mode, request.model);
+    return this.pickByStrategy(availableTokens, mode, request);
   }
 
   private async selectParityTokenCandidate<T>(
@@ -388,12 +407,12 @@ export class AccountLeaseSelectionPolicy {
           return stickyAfterWait;
         }
         if (refreshedAvailable.length > 0) {
-          return this.pickByStrategy(refreshedAvailable, mode, request.model);
+          return this.pickByStrategy(refreshedAvailable, mode, request);
         }
       }
     }
 
-    return this.pickByStrategy(availableTokens, mode, request.model);
+    return this.pickByStrategy(availableTokens, mode, request);
   }
 
   private predictLegacyAccountCandidateId<T>(
@@ -419,7 +438,7 @@ export class AccountLeaseSelectionPolicy {
       return stickyToken[0];
     }
 
-    return this.peekRoundRobinCandidateAccountId(availableTokens);
+    return this.peekRoundRobinCandidateAccountId(this.weightedCandidates(availableTokens, request));
   }
 
   private predictParityAccountCandidateId<T>(
@@ -453,7 +472,7 @@ export class AccountLeaseSelectionPolicy {
       return stickyToken[0];
     }
 
-    return this.peekRoundRobinCandidateAccountId(availableTokens);
+    return this.peekRoundRobinCandidateAccountId(this.weightedCandidates(availableTokens, request));
   }
 
   private executeShadowComparison<T>(request: AccountLeaseSelectionRequest<T>): void {
