@@ -61,6 +61,7 @@ import { getQuickObservabilityConfig } from '@/shared/observability/observabilit
 import { registerPerformanceRecorderIpc } from '@/modules/app-shell/performance-recorder/ipc';
 import { configurePerformanceRecorderCommandLine } from '@/modules/app-shell/performance-recorder/main-recorder';
 import { waitForViteDevServer } from '@/modules/app-shell/utils/wait-for-vite-dev-server';
+import { isTrustedExternalUrl } from '@/modules/app-shell/utils/externalUrlPolicy';
 
 if (!app.isPackaged) {
   const devUserData = path.join(
@@ -278,19 +279,6 @@ function flushPendingManualUpdateNotification() {
   emitManualUpdateNotification(update);
 }
 
-function isTrustedReleaseUrl(url: string): boolean {
-  try {
-    const parsedUrl = new URL(url);
-    return (
-      parsedUrl.protocol === 'https:' &&
-      parsedUrl.hostname === 'github.com' &&
-      parsedUrl.pathname.startsWith('/Draculabo/AntigravityManager/releases/')
-    );
-  } catch {
-    return false;
-  }
-}
-
 async function checkWindowsUpdate(): Promise<Awaited<ReturnType<typeof checkManualUpdate>>> {
   const electronUpdaterResult = await checkElectronUpdaterUpdate();
   if (electronUpdaterResult.status === 'available') {
@@ -346,7 +334,7 @@ ipcMain.handle(IPC_CHANNELS.DISMISS_MANUAL_UPDATE, async (_event, version: unkno
 });
 
 ipcMain.handle(IPC_CHANNELS.OPEN_EXTERNAL_URL, async (_event, url: unknown) => {
-  if (typeof url !== 'string' || !isTrustedReleaseUrl(url)) {
+  if (typeof url !== 'string' || !isTrustedExternalUrl(url)) {
     logger.warn(`Blocked untrusted external URL request: ${String(url)}`);
     return;
   }

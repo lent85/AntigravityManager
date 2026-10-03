@@ -1,7 +1,12 @@
+import {
+  prepareLaunchContext,
+  prepareClientAccountWrite,
+  resolveClientAccountStorage,
+} from '@/modules/antigravity-runtime';
+import { prepareDesktopIdentityStorage } from '@/modules/identity-profile/public';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { CloudAccountRepo } from '@/modules/cloud-account/persistence/cloudHandler';
-import { CredentialStoreInjectionAdapter } from '@/modules/cloud-account/persistence/credential-store-injection-adapter';
 import { CloudAccountDeviceBindingStore } from '@/modules/cloud-account/persistence/cloud-account-device-binding-store';
 import { CloudAccountSettingsStore } from '@/modules/cloud-account/persistence/cloud-account-settings-store';
 import {
@@ -50,8 +55,8 @@ import {
   buildCredentialStorePayload,
   readAntigravityCredentialStoreToken,
   writeAntigravityCredentialStoreToken,
-} from '@/modules/cloud-account/persistence/antigravityCredentialStore';
-import { writeAgyCliToken } from '@/modules/cloud-account/persistence/agyCliTokenStore';
+} from '@/modules/antigravity-runtime/credentials/antigravityCredentialStore';
+import { writeAgyCliToken } from '@/modules/antigravity-runtime/credentials/agyCliTokenStore';
 import { matchAccountFromCredentialToken } from '@/modules/cloud-account/services/accountTokenMatcher';
 import { IdeAccountImportAdapter } from '@/modules/cloud-account/persistence/ide-account-import-adapter';
 import type { DeviceProfile, DeviceProfilesSnapshot } from '@/modules/identity-profile/types';
@@ -62,7 +67,6 @@ import {
 } from '@/modules/cloud-account/utils/account-status';
 import { withTimingTrace } from '@/shared/observability/timingTrace';
 import { AppError } from '@/shared/errors/appError';
-import { hasErrorCode } from '@/shared/errors/error-guards';
 import { CloudMonitorService } from '@/modules/cloud-account/services/CloudMonitorService';
 import { AccountEmulationService } from '@/modules/cloud-account/emulation/AccountEmulationService';
 import type {
@@ -433,6 +437,7 @@ export async function addGoogleAccount(
       logger.warn(`No refresh token received for ${account.email}. Account will expire in 1 hour.`);
     }
 
+    await prepareDesktopIdentityStorage();
     await CloudAccountRepo.addAccount(account);
     await CloudAccountRefreshService.clearFailureState(account.id);
 
@@ -488,13 +493,13 @@ export async function listCloudAccounts(): Promise<CloudAccount[]> {
     logger.warn('Failed to read current classic account info during listing', err);
   }
   const classicUsesCredentialStore =
-    CredentialStoreInjectionAdapter.shouldInjectTokenIntoCredentialStore('classic');
+    (await resolveClientAccountStorage('classic')) === 'credential-store';
 
   // 1. Resolve live or effective active classic account
   let effectiveActiveClassicAccountId = '';
   if (classicUsesCredentialStore) {
     try {
-      const credToken = readAntigravityCredentialStoreToken();
+      const credToken = await readAntigravityCredentialStoreToken();
       if (credToken) {
         const matched = await matchAccountFromCredentialToken(credToken, accounts);
         if (matched) {
@@ -517,7 +522,6 @@ export async function listCloudAccounts(): Promise<CloudAccount[]> {
     effectiveActiveClassicAccountId =
       CloudAccountSettingsStore.getActiveAccountIdForTarget('classic');
   }
-
   try {
     const ideInfo = getCurrentAccountInfo('ide');
     if (ideInfo.isAuthenticated) {
@@ -912,133 +916,123 @@ export async function switchCloudAccount(
     logger.info(`Switched to emulated account: ${accountId}`);
     return;
   }
-  await runWithSwitchGuard('cloud-account-switch', async () => {
-    try {
-      const account = await CloudAccountRepo.getAccount(accountId);
-      if (!account) {
-        throw new Error(`Account not found: ${accountId}`);
-      }
+  await runWithSwitchGuard(
+    'cloud-account-switch',
+    async () => {
+      try {
+        const account = await CloudAccountRepo.getAccount(accountId);
+        if (!account) {
+          throw new Error(`Account not found: ${accountId}`);
+        }
 
-      logger.info(`Switching to cloud account: ${account.email} (${account.id})`);
-      const usesCredentialStore =
-        CredentialStoreInjectionAdapter.shouldInjectTokenIntoCredentialStore(appTarget);
-      await withTimingTrace(
-        'switch.cloud.prepare',
-        {
-          accountId: account.id,
-          appTarget: appTarget || 'classic',
-        },
-        async (trace) => {
-          await trace.phase('refreshProcessCacheMs', async () => {
-            await refreshAntigravityProcessCache(appTarget);
-          });
-
-          trace.phaseSync('deviceProfileSetupMs', () => {
-            if (appTarget !== 'agy') {
-              ensureGlobalOriginalFromCurrentStorage(appTarget);
-            }
-
-            if (!account.device_profile) {
-              const generated = generateDeviceProfile();
-              CloudAccountDeviceBindingStore.setDeviceBinding(
-                account.id,
-                generated,
-                'auto_generated',
-              );
-              saveGlobalOriginalProfile(generated);
-              account.device_profile = generated;
-            }
-          });
-
-          const tokenRefreshPromise = (async () => {
-            const now = Math.floor(Date.now() / 1000);
-            if (
-              !isString(account.token.refresh_token) ||
-              isEmpty(account.token.refresh_token.trim())
-            ) {
-              logger.warn(
-                `Token for ${account.email} has no refresh token; switched IDE session may expire without recovery.`,
-              );
-              return;
-            }
-
-            logger.info(`Refreshing token for ${account.email} before IDE injection...`);
-            try {
-              const refreshedToken = await CloudAccountRefreshService.refreshAccessToken(
-                createCloudAccountRefreshRequest(account),
-              );
-
-              const updatedToken = mergeRefreshedToken(account.token, refreshedToken, now);
-              await CloudAccountRepo.updateToken(account.id, updatedToken);
-
-              account.token = updatedToken;
-              logger.info(`Token refreshed for ${account.email}`);
-            } catch (error) {
-              logger.warn('Failed to refresh token before IDE injection', error);
-              await markAccountStatusFromError(account, error);
-              throw new Error(formatSwitchRefreshError(error));
-            }
-          })();
-
-          await trace.phase('tokenRefreshMs', async () => {
-            await tokenRefreshPromise;
-          });
-
-          await trace.phase('enterpriseProjectReadyMs', async () => {
-            await ensureEnterpriseProjectReady(account);
-          });
-        },
-      );
-
-      await executeSwitchFlow({
-        scope: 'cloud',
-        appTarget,
-        targetProfile: account.device_profile || null,
-        applyFingerprint: isIdentityProfileApplyEnabled(),
-        useCredentialStore: usesCredentialStore,
-        processExitTimeoutMs: 10000,
-        skipRefreshProcessCache: true,
-        performSwitch: async () => {
-          const injectionMode = usesCredentialStore ? 'credential-store' : 'sqlite';
-
-          if (injectionMode === 'sqlite') {
-            // 3. Backup Database (Optimized to avoid race conditions)
-            const dbPaths = getAntigravityDbPaths(appTarget);
-            for (const dbPath of dbPaths) {
-              try {
-                const backupPath = `${dbPath}.backup`;
-                await fs.promises.copyFile(dbPath, backupPath);
-                logger.info(`Backed up database to ${backupPath}`);
-                break; // Success, stop trying other paths
-              } catch (error) {
-                // If file not found, just try the next path
-                if (hasErrorCode(error, 'ENOENT')) {
-                  continue;
-                }
-                logger.error(`Failed to backup database at ${dbPath}`, error);
+        const launchContext =
+          appTarget === 'agy'
+            ? undefined
+            : await prepareLaunchContext(appTarget === 'ide' ? 'ide' : 'classic');
+        logger.info(`Switching to cloud account: ${account.email} (${account.id})`);
+        await withTimingTrace(
+          'switch.cloud.prepare',
+          {
+            accountId: account.id,
+            appTarget: appTarget || 'classic',
+          },
+          async (trace) => {
+            trace.phaseSync('deviceProfileSetupMs', () => {
+              if (appTarget !== 'agy') {
+                ensureGlobalOriginalFromCurrentStorage(appTarget, launchContext?.pathOptions);
               }
-            }
-          }
 
-          // 4. Inject Token
-          CredentialStoreInjectionAdapter.injectCloudTokenWithStorageStrategy(account, appTarget);
-        },
-        afterSwitchSuccess: async () => {
-          CloudAccountRepo.updateLastUsed(account.id);
-          CloudAccountRepo.setActive(account.id);
-          CloudAccountSettingsStore.setActiveForTarget(appTarget, account.id);
-          await clearAccountStatus(account);
+              if (!account.device_profile) {
+                const generated = generateDeviceProfile();
+                CloudAccountDeviceBindingStore.setDeviceBinding(
+                  account.id,
+                  generated,
+                  'auto_generated',
+                );
+                saveGlobalOriginalProfile(generated);
+                account.device_profile = generated;
+              }
+            });
 
-          logger.info(`Successfully switched to cloud account: ${account.email}`);
-          notifyTrayUpdate(account);
-        },
-      });
-    } catch (error) {
-      logger.error('Failed to switch cloud account', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Switch failed: ${errorMessage || 'Unknown error'}`);
-    }
-  });
+            const tokenRefreshPromise = (async () => {
+              const now = Math.floor(Date.now() / 1000);
+              if (
+                !isString(account.token.refresh_token) ||
+                isEmpty(account.token.refresh_token.trim())
+              ) {
+                logger.warn(
+                  `Token for ${account.email} has no refresh token; switched IDE session may expire without recovery.`,
+                );
+                return;
+              }
+
+              logger.info(`Refreshing token for ${account.email} before IDE injection...`);
+              try {
+                const refreshedToken = await CloudAccountRefreshService.refreshAccessToken(
+                  createCloudAccountRefreshRequest(account),
+                );
+
+                const updatedToken = mergeRefreshedToken(account.token, refreshedToken, now);
+                await CloudAccountRepo.updateToken(account.id, updatedToken);
+
+                account.token = updatedToken;
+                logger.info(`Token refreshed for ${account.email}`);
+              } catch (error) {
+                logger.warn('Failed to refresh token before IDE injection', error);
+                await markAccountStatusFromError(account, error);
+                throw new Error(formatSwitchRefreshError(error));
+              }
+            })();
+
+            await trace.phase('tokenRefreshMs', async () => {
+              await tokenRefreshPromise;
+            });
+
+            await trace.phase('enterpriseProjectReadyMs', async () => {
+              await ensureEnterpriseProjectReady(account);
+            });
+          },
+        );
+
+        const preparedWrite = await prepareClientAccountWrite(
+          {
+            email: account.email,
+            name: account.name || account.email,
+            token: account.token,
+          },
+          appTarget,
+          launchContext?.pathOptions,
+        );
+        await executeSwitchFlow({
+          scope: 'cloud',
+          appTarget,
+          targetProfile: account.device_profile || null,
+          applyFingerprint: isIdentityProfileApplyEnabled(),
+          useCredentialStore: preparedWrite.storage === 'credential-store',
+          processExitTimeoutMs: 10000,
+          launchContext,
+          performSwitch: preparedWrite.write,
+          afterSwitchSuccess: async () => {
+            CloudAccountRepo.updateLastUsed(account.id);
+            CloudAccountRepo.setActive(account.id);
+            CloudAccountSettingsStore.setActiveForTarget(appTarget, account.id);
+            await clearAccountStatus(account);
+
+            logger.info(`Successfully switched to cloud account: ${account.email}`);
+            notifyTrayUpdate(account);
+          },
+        });
+      } catch (error) {
+        logger.error('Failed to switch cloud account', error);
+        if (error instanceof AppError) {
+          throw error;
+        }
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        throw new Error(`Switch failed: ${errorMessage || 'Unknown error'}`);
+      }
+    },
+    appTarget,
+  );
 }
 
 export interface DetectedActiveAccountsResult {
@@ -1075,33 +1069,21 @@ export async function markActiveAccount(
       logger.warn('Failed to synchronize CLI token for marked account', err);
     }
   } else {
-    const usesCredentialStore =
-      CredentialStoreInjectionAdapter.shouldInjectTokenIntoCredentialStore(normalizedTarget);
-    if (usesCredentialStore) {
-      try {
-        writeAntigravityCredentialStoreToken(
-          {
-            access_token: account.token.access_token,
-            refresh_token: account.token.refresh_token,
-            expiry_timestamp: account.token.expiry_timestamp,
-          },
-          { syncGoogleOAuthFiles: true, email: account.email, syncAgyCliToken: false },
-        );
-        logger.info(
-          `Synchronized credential store token for marked active account: ${account.email}`,
-        );
-      } catch (err) {
-        logger.warn('Failed to synchronize credential store token for marked account', err);
-      }
-    } else {
-      try {
-        CredentialStoreInjectionAdapter.injectCloudToken(account, normalizedTarget);
-        logger.info(
-          `Synchronized SQLite token for marked active account: ${account.email}`,
-        );
-      } catch (err) {
-        logger.warn('Failed to synchronize SQLite token for marked account', err);
-      }
+    try {
+      const preparedWrite = await prepareClientAccountWrite(
+        {
+          email: account.email,
+          name: account.name || account.email,
+          token: account.token,
+        },
+        normalizedTarget,
+      );
+      await preparedWrite.write();
+      logger.info(
+        `Synchronized ${preparedWrite.storage} token for marked active account: ${account.email}`,
+      );
+    } catch (err) {
+      logger.warn('Failed to synchronize client account for marked account', err);
     }
   }
 
@@ -1177,7 +1159,7 @@ export async function detectActiveAccounts(): Promise<DetectedActiveAccountsResu
     // Step 2c: Fallback to Credential Store only if SQLite has no active account
     if (!ideAccount) {
       try {
-        const credToken = readAntigravityCredentialStoreToken();
+        const credToken = await readAntigravityCredentialStoreToken();
         if (credToken) {
           ideAccount = await matchAccountFromCredentialToken(credToken, accounts);
         }
@@ -1198,11 +1180,11 @@ export async function detectActiveAccounts(): Promise<DetectedActiveAccountsResu
   try {
     let classicAccount: CloudAccount | undefined;
     const classicUsesCredentialStore =
-      CredentialStoreInjectionAdapter.shouldInjectTokenIntoCredentialStore('classic');
+      (await resolveClientAccountStorage('classic')) === 'credential-store';
 
     if (classicUsesCredentialStore) {
       try {
-        const credToken = readAntigravityCredentialStoreToken();
+        const credToken = await readAntigravityCredentialStoreToken();
         if (credToken) {
           classicAccount = await matchAccountFromCredentialToken(credToken, accounts);
         }
@@ -1224,7 +1206,7 @@ export async function detectActiveAccounts(): Promise<DetectedActiveAccountsResu
 
     if (!classicAccount && !classicUsesCredentialStore) {
       try {
-        const credToken = readAntigravityCredentialStoreToken();
+        const credToken = await readAntigravityCredentialStoreToken();
         if (credToken) {
           classicAccount = await matchAccountFromCredentialToken(credToken, accounts);
         }
@@ -1491,6 +1473,14 @@ export async function importCloudAccounts(
 
   const existingAccounts = await CloudAccountRepo.getAccounts();
   const existingByEmail = new Map(existingAccounts.map((a) => [a.email.toLowerCase(), a]));
+
+  const hasAccountToImport = validated.data.accounts.some((account) => {
+    const existing = existingByEmail.get(account.email.toLowerCase());
+    return existing ? strategy !== 'skip-existing' : !!account.token;
+  });
+  if (hasAccountToImport) {
+    await prepareDesktopIdentityStorage();
+  }
 
   for (const importedAccount of validated.data.accounts) {
     try {

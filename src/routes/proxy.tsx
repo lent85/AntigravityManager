@@ -131,7 +131,6 @@ function ProxyPage() {
           </p>
         </div>
       </div>
-
       {/* Main Tabs Navigation */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3">
         <TabsList className="grid h-9 w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-6 bg-muted/60 p-0.5">

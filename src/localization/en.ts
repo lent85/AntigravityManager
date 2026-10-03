@@ -1,5 +1,27 @@
 const en = {
   appName: 'Antigravity Manager',
+  'process-runtime': {
+    'close-failed': 'Could not close Antigravity. Check permissions and retry.',
+    'exit-unconfirmed':
+      'Could not confirm that Antigravity exited. Check the application before retrying.',
+    working: 'Processing...',
+    busy: 'Antigravity is busy. Wait for the current operation to finish.',
+    'missing-executable':
+      'Antigravity executable was not found or cannot be executed. Check its configured path.',
+    'target-conflict':
+      'The configured executable and the running Antigravity belong to different installations. Resolve the conflict before switching accounts.',
+    'directory-conflict':
+      'The configured and running user data directories conflict. Resolve the conflict before switching accounts.',
+    'probe-failed': 'Antigravity process status could not be checked within the deadline.',
+    'launch-failed':
+      'The Antigravity launch command failed. Check the executable path and permissions.',
+    'startup-unconfirmed':
+      'Antigravity startup could not be confirmed within six seconds. No additional launch was attempted. Check the app before retrying.',
+    'switched-hot-unconfirmed':
+      'Account data was updated, but the IDE hot switch could not be confirmed. Check the current account in the IDE before retrying.',
+    'switched-startup-unconfirmed':
+      'Account data was updated, but Antigravity startup could not be confirmed. No additional launch was attempted. Check the app before retrying.',
+  },
   common: {
     loading: 'Loading...',
     error: 'Error',
@@ -725,10 +747,22 @@ const en = {
       'weekly-short': 'Week',
       dual: 'Dual (5h & Weekly)',
       'dual-short': 'Dual',
+      'compact-weekly-short': 'Wk',
+      'both-short': 'Both',
       'no-5h-quota': 'No 5h quota data',
       'no-weekly-quota': 'No weekly quota data',
       'weekly-summary-unavailable': 'The upstream service did not return a weekly quota summary.',
       'weekly-bucket-unavailable': 'The quota summary contains no recognizable weekly bucket.',
+    },
+    recommendation: {
+      badge: 'Recommended Next',
+      description: 'Automatically selected from the latest fetched {{context}} quota.',
+      context: {
+        overall: 'overall',
+        claude: 'Claude',
+        pro3: 'Gemini Pro',
+        flash: 'Gemini Flash',
+      },
     },
     authDialog: {
       title: 'Add Google Account',
@@ -1003,6 +1037,14 @@ const en = {
         'This will invalidate the current API key immediately. Any applications using the old key will stop working.',
       cancel: 'Cancel',
       confirm: 'Regenerate',
+    },
+    'risk-confirmation': {
+      title: 'Confirm the risks before starting the proxy',
+      description:
+        'Since February, Google has intensified enforcement. Simply switching accounts with this software will not affect your Google account.\n\nHowever, using it as a reverse proxy or for similar purposes violates Google’s Terms of Service and may result in account suspension.',
+      'account-advice': 'Only use accounts you can afford to lose.',
+      cancel: 'Cancel',
+      confirm: 'I understand the risks. Start the proxy',
     },
     service: {
       title: 'Service Status',

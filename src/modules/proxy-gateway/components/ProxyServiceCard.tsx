@@ -17,6 +17,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { ipc } from '@/ipc/manager';
 import type { ProxyConfig } from '@/modules/config/types';
 import { Copy, Eye, EyeOff, RefreshCw, Zap } from 'lucide-react';
+import { ProxyServiceControl } from '@/modules/proxy-gateway/components/ProxyServiceControl';
 
 interface ProxyServiceCardProps {
   proxyConfig: ProxyConfig;
@@ -77,48 +78,6 @@ export function ProxyServiceCard({
     }
   };
 
-  const handleToggleService = async () => {
-    try {
-      if (proxyConfig.enabled) {
-        await ipc.client.gateway.stop();
-        setGatewayError(null);
-        await updateProxyConfig({ ...proxyConfig, enabled: false });
-        return;
-      }
-
-      const result = await ipc.client.gateway.start({ port: proxyConfig.port });
-      if (result.success) {
-        setGatewayError(null);
-        await updateProxyConfig({ ...proxyConfig, port: result.port, enabled: true });
-        return;
-      }
-
-      const description =
-        result.reason === 'address-in-use'
-          ? t('proxy.service.port_in_use_description', { port: result.port })
-          : result.message;
-      setGatewayError(description);
-      await updateProxyConfig({ ...proxyConfig, enabled: false });
-      toast({
-        title:
-          result.reason === 'address-in-use'
-            ? t('proxy.service.port_in_use_title')
-            : t('proxy.service.start_failed'),
-        description,
-        variant: 'destructive',
-      });
-    } catch (error) {
-      const description =
-        error instanceof Error ? error.message : t('proxy.service.start_failed');
-      setGatewayError(description);
-      await updateProxyConfig({ ...proxyConfig, enabled: false });
-      toast({
-        title: t('proxy.service.start_failed'),
-        description,
-        variant: 'destructive',
-      });
-    }
-  };
 
   return (
     <div className="space-y-3">
@@ -176,15 +135,14 @@ export function ProxyServiceCard({
               </div>
             </div>
 
-            {/* Start/Stop Button directly in Header */}
-            <Button
-              size="sm"
-              className="h-7 px-3 text-xs font-semibold"
-              variant={proxyConfig.enabled ? 'destructive' : 'default'}
-              onClick={handleToggleService}
-            >
-              {proxyConfig.enabled ? t('proxy.service.stop', 'Stop Service') : t('proxy.service.start', 'Start Service')}
-            </Button>
+            {/* Start/Stop Button directly in Header with risk acknowledgement */}
+            <div className="flex items-center">
+              <ProxyServiceControl
+                config={proxyConfig}
+                onConfigChange={updateProxyConfig}
+                onError={setGatewayError}
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-3 sm:p-4 space-y-3">

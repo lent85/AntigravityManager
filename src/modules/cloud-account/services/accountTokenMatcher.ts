@@ -1,6 +1,6 @@
 import { logger } from '@/shared/logging/logger';
 import type { CloudAccount } from '@/modules/cloud-account/types';
-import type { CredentialStoreToken } from '@/modules/cloud-account/persistence/antigravityCredentialStore';
+import type { CredentialStoreToken } from '@/modules/antigravity-runtime/credentials/antigravityCredentialStore';
 import { GoogleAPIService } from '@/modules/cloud-account/services/GoogleAPIService';
 import { CloudAccountRepo } from '@/modules/cloud-account/persistence/cloudHandler';
 

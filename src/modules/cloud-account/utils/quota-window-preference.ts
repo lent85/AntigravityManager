@@ -13,12 +13,12 @@ export function readQuotaWindowPreference(
   try {
     const resolved = typeof storage === 'function' ? storage() : storage;
     const value = resolved.getItem(QUOTA_WINDOW_STORAGE_KEY);
-    if (value === 'weekly' || value === 'dual' || value === '5h') {
+    if (value === 'weekly' || value === 'dual' || value === 'both' || value === '5h') {
       return value;
     }
-    return '5h';
+    return 'both';
   } catch {
-    return '5h';
+    return 'both';
   }
 }
 

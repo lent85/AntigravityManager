@@ -1,10 +1,10 @@
 import fs from 'fs';
 import { logger } from '@/shared/logging/logger';
-import { getAgyCliTokenPaths } from './agyCliTokenPaths';
+import { getAgyCliTokenPaths } from '@/modules/antigravity-runtime/credentials/agyCliTokenPaths';
 import {
   parseCredentialStorePayload,
   type CredentialStoreToken,
-} from './antigravityCredentialStore';
+} from '@/modules/antigravity-runtime/credentials/antigravityCredentialStore';
 
 /**
  * Reads and parses the Antigravity CLI token payload from any discovered session file.

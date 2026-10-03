@@ -18,12 +18,14 @@ import type { QuotaWindow } from '@/modules/cloud-account/utils/quota-groups';
 import { useFamilyGroups } from '@/modules/cloud-account/hooks/useFamilyGroups';
 import { useAppConfig } from '@/modules/config/hooks/useAppConfig';
 import type { AccountFamilyGroup } from '@/modules/cloud-account/persistence/family-group-store';
+import type { ManualAccountRecommendation } from '@/modules/cloud-account/utils/manual-account-recommendation';
 
 interface CloudAccountGridProps {
   accounts: CloudAccount[];
   sourceAccountCount: number;
   gridLayout: GridLayout;
   quotaWindow: QuotaWindow;
+  manualRecommendation: ManualAccountRecommendation | null;
   selectedIds: Set<string>;
   hasActiveTierFilter: boolean;
   refreshingAccountId?: string;
@@ -49,6 +51,7 @@ export function CloudAccountGrid({
   sourceAccountCount,
   gridLayout,
   quotaWindow,
+  manualRecommendation,
   selectedIds,
   hasActiveTierFilter,
   refreshingAccountId,
@@ -176,6 +179,11 @@ export function CloudAccountGrid({
               isDeleting={deletingAccountId === account.id}
               isSwitching={switchingAccountId === account.id}
               switchingTarget={switchingAccountId === account.id ? switchingTarget : undefined}
+              recommendationContext={
+                manualRecommendation?.accountId === account.id
+                  ? manualRecommendation.context
+                  : undefined
+              }
             />
           );
         }
@@ -196,6 +204,11 @@ export function CloudAccountGrid({
             isRefreshing={refreshingAccountId === account.id}
             isDeleting={deletingAccountId === account.id}
             isSwitching={switchingAccountId === account.id}
+            recommendationContext={
+              manualRecommendation?.accountId === account.id
+                ? manualRecommendation.context
+                : undefined
+            }
           />
         );
       })}

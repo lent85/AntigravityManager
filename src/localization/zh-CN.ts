@@ -1,5 +1,23 @@
 const zhCn = {
   appName: 'Antigravity 管理器',
+  'process-runtime': {
+    'close-failed': '未能关闭 Antigravity。请检查权限后重试。',
+    'exit-unconfirmed': '未能确认 Antigravity 已退出。请检查应用状态后再重试。',
+    working: '正在处理…',
+    busy: 'Antigravity 正在处理操作，请等待当前操作完成。',
+    'missing-executable': '未找到 Antigravity 可执行文件，或文件无法执行。请检查配置的路径。',
+    'target-conflict':
+      '配置的可执行文件与正在运行的 Antigravity 属于不同安装。请先解决冲突再切换账户。',
+    'directory-conflict': '配置与运行中的用户数据目录存在冲突。请先解决冲突再切换账户。',
+    'probe-failed': '未能在规定时间内检查 Antigravity 进程状态。',
+    'launch-failed': 'Antigravity 启动命令失败。请检查可执行文件路径和权限。',
+    'startup-unconfirmed':
+      '未能在六秒内确认 Antigravity 已启动，未再次自动启动。请检查应用状态后再重试。',
+    'switched-hot-unconfirmed':
+      '账户数据已更新，但未能确认 IDE 热切换完成。请检查 IDE 中的当前账户后重试。',
+    'switched-startup-unconfirmed':
+      '账户数据已更新，但未能确认 Antigravity 已启动，未再次自动启动。请检查应用状态后再重试。',
+  },
   common: {
     loading: '加载中...',
     error: '错误',
@@ -590,10 +608,22 @@ const zhCn = {
       'weekly-short': '每周',
       dual: '双周期 (5小时与周)',
       'dual-short': '双周期',
+      'compact-weekly-short': '周',
+      'both-short': '全部',
       'no-5h-quota': '暂无 5 小时配额数据',
       'no-weekly-quota': '暂无每周配额数据',
       'weekly-summary-unavailable': '上游服务未返回该账号的每周配额摘要。',
       'weekly-bucket-unavailable': '配额摘要中没有可识别的每周配额桶。',
+    },
+    recommendation: {
+      badge: '推荐下一个',
+      description: '根据最近一次获取的 {{context}} 配额自动推荐。',
+      context: {
+        overall: '综合',
+        claude: 'Claude',
+        pro3: 'Gemini Pro',
+        flash: 'Gemini Flash',
+      },
     },
     authDialog: {
       title: '添加 Google 账号',
@@ -978,6 +1008,14 @@ const zhCn = {
       reviewer_desc: '从安全漏洞、API 契约一致性与设计规范维度进行代码审查。',
       fullstack_title: '现代全栈 TypeScript 专家',
       fullstack_desc: '精通 React 19、TypeScript 5+、NestJS、Fastify 与 Electron 桌面开发。',
+    },
+    'risk-confirmation': {
+      title: '开启反向代理前，请确认风险',
+      description:
+        '自二月份以来，谷歌已加大打击力度。在使用此软件期间，仅仅切换账户不会对您的谷歌账户造成任何影响。\n\n但是，如果您将其用于反向代理等用途，则违反了谷歌的服务条款，并可能导致账户被暂停。',
+      'account-advice': '请使用您可以承受损失的账户。',
+      cancel: '取消',
+      confirm: '我已了解风险，开启反向代理',
     },
     service: {
       title: '服务状态',

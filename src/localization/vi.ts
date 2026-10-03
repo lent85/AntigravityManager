@@ -1,5 +1,25 @@
 const vi = {
   appName: 'Antigravity Manager',
+  'process-runtime': {
+    'close-failed': 'Không thể đóng Antigravity. Kiểm tra quyền truy cập rồi thử lại.',
+    'exit-unconfirmed':
+      'Không thể xác nhận Antigravity đã thoát. Kiểm tra ứng dụng trước khi thử lại.',
+    working: 'Đang xử lý...',
+    busy: 'Antigravity đang bận. Vui lòng đợi thao tác hoàn tất.',
+    'missing-executable': 'Không tìm thấy hoặc không thể chạy tệp thực thi. Kiểm tra đường dẫn.',
+    'target-conflict':
+      'Đường dẫn cấu hình và tiến trình đang chạy thuộc các bản cài đặt khác nhau. Giải quyết xung đột trước khi chuyển tài khoản.',
+    'directory-conflict':
+      'Thư mục dữ liệu cấu hình và đang dùng khác nhau. Giải quyết xung đột trước khi chuyển tài khoản.',
+    'probe-failed': 'Không thể kiểm tra tiến trình trong thời gian quy định.',
+    'launch-failed': 'Khởi chạy thất bại. Kiểm tra đường dẫn và quyền truy cập.',
+    'startup-unconfirmed':
+      'Chưa xác nhận khởi chạy trong sáu giây. Không tự khởi chạy lại. Kiểm tra ứng dụng trước khi thử lại.',
+    'switched-hot-unconfirmed':
+      'Dữ liệu tài khoản đã được cập nhật nhưng chưa xác nhận được việc chuyển đổi nóng trong IDE. Hãy kiểm tra tài khoản hiện tại trong IDE trước khi thử lại.',
+    'switched-startup-unconfirmed':
+      'Dữ liệu tài khoản đã cập nhật nhưng chưa xác nhận khởi chạy. Không tự khởi chạy lại. Kiểm tra ứng dụng trước khi thử lại.',
+  },
   common: {
     loading: 'Đang tải...',
     error: 'Lỗi',
@@ -619,6 +639,8 @@ const vi = {
       'weekly-short': 'Tuần',
       dual: 'Gộp (5h & Tuần)',
       'dual-short': 'Gộp',
+      'compact-weekly-short': 'Tuần',
+      'both-short': 'Cả hai',
       'no-5h-quota': 'Không có dữ liệu hạn mức 5h',
       'no-weekly-quota': 'Không có dữ liệu hạn mức hàng tuần',
       'weekly-summary-unavailable':
@@ -952,6 +974,14 @@ const vi = {
         'Đánh giá thay đổi mã theo tiêu chuẩn bảo mật, tương thích hợp đồng API và chất lượng.',
       fullstack_title: 'Chuyên gia Full-Stack TypeScript',
       fullstack_desc: 'Thành thạo React 19, TypeScript 5+, NestJS, Fastify và ứng dụng Electron.',
+    },
+    'risk-confirmation': {
+      title: 'Xác nhận rủi ro trước khi khởi động proxy',
+      description:
+        'Kể từ tháng Hai, Google đã tăng cường các biện pháp kiểm soát. Việc chỉ chuyển đổi tài khoản bằng phần mềm này sẽ không ảnh hưởng đến tài khoản Google của bạn.\n\nTuy nhiên, sử dụng phần mềm làm proxy ngược hoặc cho các mục đích tương tự vi phạm Điều khoản dịch vụ của Google và có thể khiến tài khoản bị đình chỉ.',
+      'account-advice': 'Chỉ sử dụng những tài khoản mà bạn có thể chấp nhận mất.',
+      cancel: 'Hủy',
+      confirm: 'Tôi hiểu rủi ro. Khởi động proxy',
     },
     service: {
       title: 'Trạng thái dịch vụ',

@@ -77,8 +77,11 @@ import {
   selectWeeklyQuotaItems,
   type QuotaWindow,
 } from '@/modules/cloud-account/utils/quota-groups';
-import { WeeklyQuotaDisplay } from '@/modules/cloud-account/components/WeeklyQuotaDisplay';
 import { DetailedQuotaDisplay } from '@/modules/cloud-account/components/DetailedQuotaDisplay';
+import { AccountQuotaWindowSections } from '@/modules/cloud-account/components/AccountQuotaWindowSections';
+import { CompactModelQuotaDisplay } from '@/modules/cloud-account/components/CompactModelQuotaDisplay';
+import { ManualRecommendationBadge } from '@/modules/cloud-account/components/ManualRecommendationBadge';
+import type { ManualRecommendationContext } from '@/modules/cloud-account/utils/manual-account-recommendation';
 import { QUOTA_TEXT_COLOR_CLASS_BY_STATUS, QUOTA_BAR_COLOR_CLASS_BY_STATUS } from './quota-colors';
 import { isWeeklyQuotaBucket } from '@/modules/cloud-account/utils/quota-groups';
 import {
@@ -231,11 +234,12 @@ interface CloudAccountCardProps {
   isRefreshing?: boolean;
   isDeleting?: boolean;
   isSwitching?: boolean;
+  recommendationContext?: ManualRecommendationContext;
 }
 
 export function CloudAccountCard({
   account,
-  quotaWindow = '5h',
+  quotaWindow = 'both',
   onRefresh,
   onDelete,
   onSwitch,
@@ -247,6 +251,7 @@ export function CloudAccountCard({
   isRefreshing,
   isDeleting,
   isSwitching,
+  recommendationContext,
 }: CloudAccountCardProps) {
   const { t } = useTranslation();
   const { config, saveConfig } = useAppConfig();
@@ -660,6 +665,9 @@ export function CloudAccountCard({
                 {t('cloud.emulation.badgeShort', 'Emulated')}
               </span>
             )}
+            {recommendationContext ? (
+              <ManualRecommendationBadge context={recommendationContext} />
+            ) : null}
 
             {validationBlockedStatusLabel && (
               <span
@@ -944,28 +952,30 @@ export function CloudAccountCard({
 
       <CardContent className="flex-1 px-4 pt-2 pb-4">
         <div className="space-y-2">
-          {quotaWindow === 'weekly' ? (
-            <WeeklyQuotaDisplay
-              items={weeklyQuotaItems}
-              hasQuotaSummary={account.quota?.quota_groups !== undefined}
-            />
-          ) : providerGroupingsEnabled ? (
-            <>
-              {providerGroupedQuotaSection}
-              {!providerGroupedQuotaSection && !hasDetailedQuota ? emptyQuotaState : null}
-            </>
-          ) : hasVisibleQuotaModels ? (
-            <div className="space-y-3">
-              {renderQuotaModelGroup(t('cloud.card.groupGoogleGemini'), geminiModels)}
-              <div className="pt-1" />
-              {renderQuotaModelGroup(t('cloud.card.groupAnthropicClaude'), claudeModels)}
-            </div>
-          ) : hasDetailedQuota ? null : (
-            emptyQuotaState
-          )}
-          {(quotaWindow === '5h' || quotaWindow === 'dual') && (
-            <DetailedQuotaDisplay groups={detailedGroups} quotaWindow={quotaWindow} />
-          )}
+          <AccountQuotaWindowSections
+            quotaWindow={quotaWindow}
+            weeklyItems={weeklyQuotaItems}
+            hasQuotaSummary={account.quota?.quota_groups !== undefined}
+            fiveHourContent={
+              <>
+                {providerGroupingsEnabled ? (
+                  <>
+                    {providerGroupedQuotaSection}
+                    {!providerGroupedQuotaSection && !hasDetailedQuota ? emptyQuotaState : null}
+                  </>
+                ) : hasVisibleQuotaModels ? (
+                  <div className="space-y-3">
+                    {renderQuotaModelGroup(t('cloud.card.groupGoogleGemini'), geminiModels)}
+                    <div className="pt-1" />
+                    {renderQuotaModelGroup(t('cloud.card.groupAnthropicClaude'), claudeModels)}
+                  </div>
+                ) : hasDetailedQuota ? null : (
+                  emptyQuotaState
+                )}
+                <DetailedQuotaDisplay groups={detailedGroups} quotaWindow={quotaWindow} />
+              </>
+            }
+          />
         </div>
       </CardContent>
 
@@ -1295,11 +1305,12 @@ interface CompactCloudAccountCardProps {
   isDeleting?: boolean;
   isSwitching?: boolean;
   switchingTarget?: AntigravityAppTarget;
+  recommendationContext?: ManualRecommendationContext;
 }
 
 export function CompactCloudAccountCard({
   account,
-  quotaWindow = '5h',
+  quotaWindow = 'both',
   onRefresh,
   onDelete,
   onSwitch,
@@ -1311,6 +1322,7 @@ export function CompactCloudAccountCard({
   isRefreshing,
   isDeleting,
   isSwitching,
+  recommendationContext,
 }: CompactCloudAccountCardProps) {
   const { t } = useTranslation();
   const { config } = useAppConfig();
@@ -1338,10 +1350,6 @@ export function CompactCloudAccountCard({
     account.is_active_agy
   );
 
-  const _getQuotaBarColorClass = (percentage: number) => {
-    const quotaStatus = getQuotaStatus(percentage);
-    return QUOTA_BAR_COLOR_CLASS_BY_STATUS[quotaStatus];
-  };
 
   const mergedModelQuotas = getVisibleQuotaModelsForPresentation(
     account.quota?.models || {},
@@ -1351,6 +1359,11 @@ export function CompactCloudAccountCard({
   const compactModels = Object.entries(mergedModelQuotas).sort(
     (a, b) => b[1].percentage - a[1].percentage,
   );
+  const compactQuotaItems = compactModels.map(([modelName, info]) => ({
+    id: modelName,
+    label: formatModelDisplayName(modelName),
+    percentage: info.percentage,
+  }));
   const weeklyQuotaItems = selectWeeklyQuotaItems(account.quota?.quota_groups);
 
   const aiCredits = account.quota?.ai_credits;
@@ -1395,12 +1408,12 @@ export function CompactCloudAccountCard({
         <img
           src={account.avatar_url}
           alt={displayName}
-          className="bg-muted h-7 w-7 shrink-0 rounded-full border"
+          className="bg-muted mt-1 h-7 w-7 shrink-0 self-start rounded-full border"
         />
       ) : (
         <div
           className={cn(
-            'bg-primary/10 text-primary flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold',
+            'bg-primary/10 text-primary mt-1 flex h-7 w-7 shrink-0 items-center justify-center self-start rounded-full border text-xs font-semibold',
             isMasked && 'bg-muted text-muted-foreground',
           )}
         >
@@ -1467,6 +1480,13 @@ export function CompactCloudAccountCard({
               {t('cloud.emulation.badgeShort', 'Emulated')}
             </span>
           )}
+          {recommendationContext ? (
+            <ManualRecommendationBadge context={recommendationContext} />
+          ) : null}
+        </div>
+
+        <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
+          <span className="truncate">{displayEmail}</span>
           {account.is_active_classic && (
             <span className="rounded border border-green-500/20 bg-green-500/10 px-1 text-[9px] font-bold text-green-600 dark:text-green-400">
               App
@@ -1526,196 +1546,13 @@ export function CompactCloudAccountCard({
           )}
         </div>
 
-        {quotaWindow === 'dual' ? (
-          <div className="mt-1 flex flex-wrap items-center gap-3">
-            <div
-              className={cn(
-                'border-border/40 bg-muted/40 flex rounded-md border px-2 py-0.5',
-                shouldBreakClaude5h ? 'items-start py-1 gap-1.5' : 'items-center gap-1.5',
-              )}
-            >
-              <span
-                className={cn(
-                  'text-muted-foreground flex items-center gap-0.5 text-[10px] font-semibold shrink-0',
-                  shouldBreakClaude5h && 'pt-0.5',
-                )}
-              >
-                <Clock3 className="h-2.5 w-2.5" />
-                5h
-              </span>
-              <div
-                className={cn(
-                  'ml-0.5 flex',
-                  shouldBreakClaude5h ? 'flex-col gap-1' : 'flex-wrap items-center gap-2',
-                )}
-              >
-                {gemini5hModels.length > 0 && (
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground/60 text-[9px] font-bold uppercase shrink-0 w-2.5 text-center">
-                      G
-                    </span>
-                    <div className="flex flex-wrap items-center gap-1">
-                      {gemini5hModels.map(([modelName, info]) => (
-                        <QuotaIndicatorTooltip
-                          key={modelName}
-                          name={modelName}
-                          percentage={info.percentage}
-                          periodType="5h"
-                          resetTime={info.resetTime}
-                          barWidth="w-7 sm:w-8"
-                          barHeight="h-1.5"
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {claude5hModels.length > 0 && (
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground/60 text-[9px] font-bold uppercase shrink-0 w-2.5 text-center">
-                      C
-                    </span>
-                    <div className="flex flex-wrap items-center gap-1">
-                      {claude5hModels.map(([modelName, info]) => (
-                        <QuotaIndicatorTooltip
-                          key={modelName}
-                          name={modelName}
-                          percentage={info.percentage}
-                          periodType="5h"
-                          resetTime={info.resetTime}
-                          barWidth="w-7 sm:w-8"
-                          barHeight="h-1.5"
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div
-              className={cn(
-                'border-border/40 bg-muted/40 flex rounded-md border px-2 py-0.5',
-                shouldBreakClaudeWeekly ? 'items-start py-1 gap-1.5' : 'items-center gap-1.5',
-              )}
-            >
-              <span
-                className={cn(
-                  'text-muted-foreground flex items-center gap-0.5 text-[10px] font-semibold shrink-0',
-                  shouldBreakClaudeWeekly && 'pt-0.5',
-                )}
-              >
-                <CalendarDays className="h-2.5 w-2.5" />
-                Week
-              </span>
-              <div
-                className={cn(
-                  'ml-0.5 flex',
-                  shouldBreakClaudeWeekly ? 'flex-col gap-1' : 'flex-wrap items-center gap-2',
-                )}
-              >
-                {geminiWeeklyItems.length > 0 && (
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground/60 text-[9px] font-bold uppercase shrink-0 w-2.5 text-center">
-                      G
-                    </span>
-                    <div className="flex flex-wrap items-center gap-1">
-                      {geminiWeeklyItems.map((item) => (
-                        <QuotaIndicatorTooltip
-                          key={item.id}
-                          name={item.groupName}
-                          label={item.bucketLabel}
-                          percentage={item.percentage}
-                          periodType="weekly"
-                          resetTime={item.resetTime}
-                          barWidth="w-7 sm:w-8"
-                          barHeight="h-1.5"
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {claudeWeeklyItems.length > 0 && (
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground/60 text-[9px] font-bold uppercase shrink-0 w-2.5 text-center">
-                      C
-                    </span>
-                    <div className="flex flex-wrap items-center gap-1">
-                      {claudeWeeklyItems.map((item) => (
-                        <QuotaIndicatorTooltip
-                          key={item.id}
-                          name={item.groupName}
-                          label={item.bucketLabel}
-                          percentage={item.percentage}
-                          periodType="weekly"
-                          resetTime={item.resetTime}
-                          barWidth="w-7 sm:w-8"
-                          barHeight="h-1.5"
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {weeklyQuotaItems.length === 0 && (
-                  <span className="text-muted-foreground text-[10px] italic">N/A</span>
-                )}
-              </div>
-            </div>
-          </div>
-        ) : quotaWindow === 'weekly' ? (
-          <WeeklyQuotaDisplay
-            items={weeklyQuotaItems}
-            hasQuotaSummary={account.quota?.quota_groups !== undefined}
-            variant="compact"
-          />
-        ) : compactModels.length > 0 ? (
-          <div
-            className={cn(
-              'mt-1 flex',
-              shouldBreakClaude5h ? 'flex-col gap-1' : 'flex-wrap items-center gap-2',
-            )}
-          >
-            {gemini5hModels.length > 0 && (
-              <div className="flex items-center gap-1">
-                <span className="text-muted-foreground/60 text-[9px] font-bold uppercase shrink-0 w-2.5 text-center">
-                  G
-                </span>
-                <div className="flex flex-wrap items-center gap-1">
-                  {gemini5hModels.map(([modelName, info]) => (
-                    <QuotaIndicatorTooltip
-                      key={modelName}
-                      name={modelName}
-                      percentage={info.percentage}
-                      periodType="5h"
-                      resetTime={info.resetTime}
-                      barWidth="w-7 sm:w-8"
-                      barHeight="h-1.5"
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-            {claude5hModels.length > 0 && (
-              <div className="flex items-center gap-1">
-                <span className="text-muted-foreground/60 text-[9px] font-bold uppercase shrink-0 w-2.5 text-center">
-                  C
-                </span>
-                <div className="flex flex-wrap items-center gap-1">
-                  {claude5hModels.map(([modelName, info]) => (
-                    <QuotaIndicatorTooltip
-                      key={modelName}
-                      name={modelName}
-                      percentage={info.percentage}
-                      periodType="5h"
-                      resetTime={info.resetTime}
-                      barWidth="w-7 sm:w-8"
-                      barHeight="h-1.5"
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        ) : null}
+        <AccountQuotaWindowSections
+          quotaWindow={quotaWindow}
+          weeklyItems={weeklyQuotaItems}
+          hasQuotaSummary={account.quota?.quota_groups !== undefined}
+          variant="compact"
+          fiveHourContent={<CompactModelQuotaDisplay items={compactQuotaItems} />}
+        />
       </div>
 
       <div className="flex shrink-0 items-center gap-1">

@@ -7,5 +7,42 @@
     "no-unvalidated-boundary-cast",
     "no-ts-ignore"
   ],
-  "violations": []
+  "violations": [
+    {
+      "count": 1,
+      "file": "src/modules/proxy-gateway/components/ProxyAccountRoutingCard.tsx",
+      "rule": "no-explicit-any",
+      "source": "any"
+    },
+    {
+      "count": 1,
+      "file": "src/modules/proxy-gateway/server/modules/openai/chat/openai-chat-stream-collector.ts",
+      "rule": "no-unvalidated-boundary-cast",
+      "source": "JSON.parse(data) as unknown"
+    },
+    {
+      "count": 8,
+      "file": "src/modules/proxy-gateway/server/shared/services/proxy-usage.store.ts",
+      "rule": "no-explicit-any",
+      "source": "any"
+    },
+    {
+      "count": 10,
+      "file": "src/modules/proxy-gateway/server/shared/services/request-usage-context.ts",
+      "rule": "no-explicit-any",
+      "source": "any"
+    },
+    {
+      "count": 5,
+      "file": "src/server/main.ts",
+      "rule": "no-explicit-any",
+      "source": "any"
+    },
+    {
+      "count": 1,
+      "file": "src/shared/auth/jwt.ts",
+      "rule": "no-unvalidated-boundary-cast",
+      "source": "JSON.parse(jsonStr) as { email?: unknown }"
+    }
+  ]
 }

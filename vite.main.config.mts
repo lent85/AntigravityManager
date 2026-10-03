@@ -83,6 +83,7 @@ const mainProcessExternals = [
   'keytar',
   'koffi',
   '@napi-rs/keyring',
+  '@draculabo/sysinfo-process-enhanced',
   '@opentelemetry/api',
   '@opentelemetry/exporter-metrics-otlp-http',
   '@opentelemetry/exporter-trace-otlp-http',
@@ -90,7 +91,6 @@ const mainProcessExternals = [
   '@opentelemetry/sdk-metrics',
   '@opentelemetry/sdk-node',
   '@opentelemetry/sdk-trace-node',
-  'ps-list',
   'utf-8-validate',
 ];
 

@@ -119,8 +119,6 @@ const switchMetricsSnapshotSchema = z.object({
 });
 const switchGuardSnapshotSchema = z.object({
   activeOwner: switchOwnerSchema.nullable(),
-  pendingOwners: z.array(switchOwnerSchema),
-  pendingCount: z.number(),
 });
 const switchStatusSnapshotSchema = z.object({
   metrics: switchMetricsSnapshotSchema,

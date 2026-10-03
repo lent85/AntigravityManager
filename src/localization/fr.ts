@@ -2,6 +2,27 @@ import en from './en';
 
 const fr = {
   appName: 'Antigravity Manager',
+  'process-runtime': {
+    'close-failed': 'Impossible de fermer Antigravity. Vérifiez les permissions et réessayez.',
+    'exit-unconfirmed':
+      'Impossible de confirmer la fermeture d’Antigravity. Vérifiez l’application avant de réessayer.',
+    working: 'Traitement...',
+    busy: 'Antigravity est occupé. Attendez la fin de l’opération.',
+    'missing-executable':
+      'Exécutable Antigravity introuvable ou non exécutable. Vérifiez le chemin configuré.',
+    'target-conflict':
+      'Le chemin configuré et le processus actif appartiennent à des installations différentes. Résolvez ce conflit avant de changer de compte.',
+    'directory-conflict':
+      'Les répertoires de données configuré et utilisé sont différents. Résolvez ce conflit avant de changer de compte.',
+    'probe-failed': 'Impossible de vérifier le processus Antigravity dans le délai prévu.',
+    'launch-failed': 'Le démarrage a échoué. Vérifiez le chemin et les permissions.',
+    'startup-unconfirmed':
+      'Démarrage non confirmé en six secondes. Aucun autre démarrage tenté. Vérifiez l’application avant de réessayer.',
+    'switched-hot-unconfirmed':
+      'Les données du compte ont été mises à jour, mais le changement à chaud dans l’IDE n’a pas pu être confirmé. Vérifiez le compte actuel dans l’IDE avant de réessayer.',
+    'switched-startup-unconfirmed':
+      'Données du compte mises à jour, mais démarrage non confirmé. Aucun autre démarrage tenté. Vérifiez l’application avant de réessayer.',
+  },
   common: {
     loading: 'Chargement...',
     error: 'Erreur',
@@ -631,12 +652,24 @@ const fr = {
       'weekly-short': 'Semaine',
       dual: 'Double (5h et Semaine)',
       'dual-short': 'Double',
+      'compact-weekly-short': 'Sem.',
+      'both-short': 'Les deux',
       'no-5h-quota': 'Aucune donnée de quota sur 5h',
       'no-weekly-quota': 'Aucune donnée de quota hebdomadaire',
       'weekly-summary-unavailable':
         "Le service en amont n'a renvoyé aucun résumé de quota hebdomadaire.",
       'weekly-bucket-unavailable':
         'Le résumé du quota ne contient aucun compartiment hebdomadaire reconnu.',
+    },
+    recommendation: {
+      badge: 'Prochain recommandé',
+      description: 'Sélectionné automatiquement à partir du dernier quota {{context}} récupéré.',
+      context: {
+        overall: 'global',
+        claude: 'Claude',
+        pro3: 'Gemini Pro',
+        flash: 'Gemini Flash',
+      },
     },
     authDialog: {
       title: 'Ajouter un compte Google',
@@ -977,6 +1010,14 @@ const fr = {
         'Cela invalidera immediatement la cle API actuelle. Toute application utilisant l ancienne cle cessera de fonctionner.',
       cancel: 'Annuler',
       confirm: 'Regenerer',
+    },
+    'risk-confirmation': {
+      title: 'Confirmez les risques avant de démarrer le proxy',
+      description:
+        'Depuis février, Google a renforcé ses mesures de contrôle. Le simple fait de changer de compte avec ce logiciel n’affecte pas votre compte Google.\n\nCependant, son utilisation comme proxy inverse ou à des fins similaires enfreint les conditions d’utilisation de Google et peut entraîner la suspension du compte.',
+      'account-advice': 'Utilisez uniquement des comptes que vous pouvez vous permettre de perdre.',
+      cancel: 'Annuler',
+      confirm: 'Je comprends les risques. Démarrer le proxy',
     },
     service: {
       title: 'Statut du service',
