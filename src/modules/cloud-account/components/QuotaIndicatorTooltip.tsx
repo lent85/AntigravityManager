@@ -7,9 +7,13 @@ import {
   formatModelDisplayName,
   formatResetTimeLabel,
   formatResetTimeTitle,
-  getQuotaStatus,
 } from '@/modules/cloud-account/utils/quota-display';
-import { QUOTA_BAR_COLOR_CLASS_BY_STATUS, QUOTA_TEXT_COLOR_CLASS_BY_STATUS } from './quota-colors';
+import {
+  getModelQuotaBarColorClass,
+  getModelQuotaTextColorClass,
+  detectModelGeneration,
+  MODEL_GENERATION_METAS,
+} from './quota-colors';
 import { cn } from '@/shared/ui/utils';
 
 export interface QuotaIndicatorTooltipProps {
@@ -45,9 +49,12 @@ export function QuotaIndicatorTooltip({
 }: QuotaIndicatorTooltipProps) {
   const effectivePeriodLabel = periodLabel || label;
   const { t } = useTranslation();
-  const status = getQuotaStatus(percentage);
   const clamped = clampQuotaPercentage(percentage);
   const title = displayName || formatModelDisplayName(name);
+  const genKey = detectModelGeneration(name);
+  const genMeta = MODEL_GENERATION_METAS[genKey];
+  const barColorClass = getModelQuotaBarColorClass(name, percentage);
+  const textColorClass = getModelQuotaTextColorClass(name, percentage);
 
   const defaultPeriodLabel =
     effectivePeriodLabel ||
@@ -84,10 +91,7 @@ export function QuotaIndicatorTooltip({
             )}
           >
             <div
-              className={cn(
-                'h-full rounded-full transition-all duration-300',
-                QUOTA_BAR_COLOR_CLASS_BY_STATUS[status],
-              )}
+              className={cn('h-full rounded-full transition-all duration-300', barColorClass)}
               style={{ width: `${clamped}%` }}
             />
           </div>
@@ -99,7 +103,19 @@ export function QuotaIndicatorTooltip({
         >
           {/* Header: Title & Period Badge */}
           <div className="flex items-start justify-between gap-2">
-            <span className="truncate text-xs font-semibold text-foreground">{title}</span>
+            <div className="flex min-w-0 items-center gap-1.5">
+              {genMeta && (
+                <span
+                  className={cn(
+                    'rounded border px-1 py-0 text-[9px] font-bold shrink-0',
+                    genMeta.badgeClass,
+                  )}
+                >
+                  {genMeta.badgeLabel}
+                </span>
+              )}
+              <span className="truncate text-xs font-semibold text-foreground">{title}</span>
+            </div>
             <Badge
               variant="outline"
               className="flex shrink-0 items-center gap-1 px-1.5 py-0 text-[9px] font-medium"
@@ -119,13 +135,13 @@ export function QuotaIndicatorTooltip({
               <span className="text-muted-foreground text-[11px]">
                 {t('cloud.card.quotaStatus', 'Quota Remaining')}
               </span>
-              <span className={cn('font-mono font-bold text-xs', QUOTA_TEXT_COLOR_CLASS_BY_STATUS[status])}>
+              <span className={cn('font-mono font-bold text-xs', textColorClass)}>
                 {percentage}%
               </span>
             </div>
             <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
               <div
-                className={cn('h-full rounded-full transition-all duration-300', QUOTA_BAR_COLOR_CLASS_BY_STATUS[status])}
+                className={cn('h-full rounded-full transition-all duration-300', barColorClass)}
                 style={{ width: `${clamped}%` }}
               />
             </div>

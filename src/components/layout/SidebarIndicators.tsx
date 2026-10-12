@@ -186,9 +186,27 @@ export const SidebarIndicators: React.FC<SidebarIndicatorsProps> = ({ isCollapse
     }
     const intervalMs = currentInterval * 60 * 1000;
     const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
       handleReloadMetrics();
     }, intervalMs);
-    return () => clearInterval(timer);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        handleReloadMetrics();
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
+    return () => {
+      clearInterval(timer);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+    };
   }, [currentInterval, handleReloadMetrics]);
 
   if (isCollapsed) {

@@ -8,7 +8,10 @@ import {
   formatResetTimeTitle,
   getQuotaStatus,
 } from '@/modules/cloud-account/utils/quota-display';
-import { QUOTA_TEXT_COLOR_CLASS_BY_STATUS, QUOTA_BAR_COLOR_CLASS_BY_STATUS } from './quota-colors';
+import {
+  getQuotaBarColorClassByPercentage,
+  getQuotaTextColorClassByPercentage,
+} from './quota-colors';
 
 /** Retains detailed quota buckets based on the active quota window. */
 export function DetailedQuotaDisplay({
@@ -74,7 +77,7 @@ export function DetailedQuotaDisplay({
                       <div className="mb-1 flex justify-between gap-2 text-xs">
                         <span className="font-medium">{label}</span>
                         <span
-                          className={QUOTA_TEXT_COLOR_CLASS_BY_STATUS[getQuotaStatus(percentage)]}
+                          className={getQuotaTextColorClassByPercentage(percentage)}
                         >
                           {percentage}%
                         </span>
@@ -88,7 +91,7 @@ export function DetailedQuotaDisplay({
                         className="bg-muted h-1.5 overflow-hidden rounded-full"
                       >
                         <div
-                          className={`h-full rounded-full transition-all duration-300 ${QUOTA_BAR_COLOR_CLASS_BY_STATUS[getQuotaStatus(percentage)]}`}
+                          className={`h-full rounded-full transition-all duration-300 ${getQuotaBarColorClassByPercentage(percentage)}`}
                           style={{ width: `${clampQuotaPercentage(percentage)}%` }}
                         />
                       </div>

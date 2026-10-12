@@ -11,7 +11,10 @@ import {
   getQuotaStatus,
 } from '@/modules/cloud-account/utils/quota-display';
 
-import { QuotaIndicatorTooltip } from '@/modules/cloud-account/components/QuotaIndicatorTooltip';
+import {
+  getQuotaBarColorClassByPercentage,
+  getQuotaTextColorClassByPercentage,
+} from '@/modules/cloud-account/components/quota-colors';
 import { cn } from '@/shared/ui/utils';
 
 interface WeeklyQuotaDisplayProps {
@@ -19,18 +22,6 @@ interface WeeklyQuotaDisplayProps {
   hasQuotaSummary: boolean;
   variant?: 'card' | 'compact';
 }
-
-const BAR_CLASS = {
-  high: 'bg-gradient-to-r from-emerald-400 to-teal-500',
-  medium: 'bg-gradient-to-r from-amber-400 to-orange-500',
-  low: 'bg-gradient-to-r from-rose-500 to-red-600',
-} as const;
-
-const TEXT_CLASS = {
-  high: 'text-emerald-600 dark:text-emerald-400',
-  medium: 'text-amber-600 dark:text-amber-500',
-  low: 'text-rose-600 dark:text-rose-400',
-} as const;
 
 export function WeeklyQuotaDisplay({
   items,
@@ -84,7 +75,10 @@ export function WeeklyQuotaDisplay({
                       className="bg-muted h-1.5 w-full overflow-hidden rounded-full"
                     >
                       <div
-                        className={`h-full rounded-full transition-all duration-300 ${BAR_CLASS[status]}`}
+                        className={cn(
+                          'h-full rounded-full transition-all duration-300',
+                          getQuotaBarColorClassByPercentage(item.percentage),
+                        )}
                         style={{ width: `${clampQuotaPercentage(item.percentage)}%` }}
                       />
                     </div>
@@ -127,7 +121,6 @@ export function WeeklyQuotaDisplay({
       </div>
       <div className={cn('grid gap-2', gridColsClass)}>
         {items.map((item) => {
-          const status = getQuotaStatus(item.percentage);
           return (
             <div key={item.id} className="bg-muted/25 rounded-lg border px-2 py-2">
               <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -137,13 +130,21 @@ export function WeeklyQuotaDisplay({
                   </div>
                   <div className="text-muted-foreground truncate text-[9px]">{item.bucketLabel}</div>
                 </div>
-                <span className={`font-mono text-xs font-bold ${TEXT_CLASS[status]}`}>
+                <span
+                  className={cn(
+                    'font-mono text-xs font-bold',
+                    getQuotaTextColorClassByPercentage(item.percentage),
+                  )}
+                >
                   {item.percentage}%
                 </span>
               </div>
               <div className="bg-muted h-1.5 overflow-hidden rounded-full">
                 <div
-                  className={`h-full rounded-full transition-all duration-300 ${BAR_CLASS[status]}`}
+                  className={cn(
+                    'h-full rounded-full transition-all duration-300',
+                    getQuotaBarColorClassByPercentage(item.percentage),
+                  )}
                   style={{ width: `${clampQuotaPercentage(item.percentage)}%` }}
                 />
               </div>

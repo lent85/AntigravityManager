@@ -15,8 +15,8 @@ interface ProviderGroupProps {
   stats: ProviderStats;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
-  getQuotaTextColorClass: (percentage: number) => string;
-  getQuotaBarColorClass: (percentage: number) => string;
+  getQuotaTextColorClass: (percentage: number, modelId?: string) => string;
+  getQuotaBarColorClass: (percentage: number, modelId?: string) => string;
   formatQuotaLabel: (percentage: number) => string;
   leftLabel: string;
 }
@@ -134,7 +134,7 @@ export const ProviderGroup: React.FC<ProviderGroupProps> = ({
                   </span>
                   <div className="flex items-baseline gap-1 shrink-0">
                     <span
-                      className={`font-mono text-xs leading-none font-bold ${getQuotaTextColorClass(model.percentage)}`}
+                      className={`font-mono text-xs leading-none font-bold ${getQuotaTextColorClass(model.percentage, model.id)}`}
                     >
                       {formatQuotaLabel(model.percentage)}
                     </span>
@@ -148,7 +148,7 @@ export const ProviderGroup: React.FC<ProviderGroupProps> = ({
                 <div className="flex items-center gap-2">
                   <div className="bg-muted h-1.5 flex-1 overflow-hidden rounded-full">
                     <div
-                      className={`h-full rounded-full transition-all duration-300 ${getQuotaBarColorClass(model.percentage)}`}
+                      className={`h-full rounded-full transition-all duration-300 ${getQuotaBarColorClass(model.percentage, model.id)}`}
                       style={{ width: `${clampQuotaPercentage(model.percentage)}%` }}
                     />
                   </div>

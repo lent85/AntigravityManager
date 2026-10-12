@@ -11,11 +11,17 @@ This document explains the cloud AI account management and switching capabilitie
 - **Status monitoring**: Show real-time account status (Active, Rate Limited, Expired) and whether the account is currently active.
 - **Delete accounts**: Remove accounts from the local database.
 
-### 1.2 Real-Time Quota Monitoring
+### 1.2 Real-Time Quota Monitoring & Model Generation Visualization
 
-- **Multi-model support**: Track quota usage for models such as `gemini-pro`, `claude-3-5-sonnet`, and more.
+- **Multi-model support**: Track quota usage for models such as Gemini 4.0, Gemini 3.8, Gemini 3.7, Gemini 3.6, Gemini 3.1 Pro, Gemini 3.5 & Flash, Claude Sonnet/Opus, and GPT OSS.
+- **Model Generation Grouping**: Models are categorized into distinct generation groups on account cards (`Gemini 4.0`, `Gemini 3.8`, `Gemini 3.7`, `Gemini 3.6`, `Gemini 3.1 Pro`, `Gemini 3.5 & Flash`, `Anthropic Claude`, etc.) with dedicated colored badges and headers, making accounts with differing access immediately recognizable.
+- **Generation Color Signatures**: Progress bars across full, compact, and dual-compact views use dedicated color signatures (Royal Purple for Gemini 4.0, Electric Blue for Gemini 3.8, Emerald for Gemini 3.7, Cyan for Gemini 3.6, Amber for Gemini 3.1 Pro, Coral/Orange for Claude).
+- **Remaining Quota Depth Tiers**: Color intensity reflects remaining quota volume:
+  - **High ($\ge 80\%$)**: Deep, vivid gradient with glow effect.
+  - **Medium ($50\% - 79\%$)**: Balanced, medium tone.
+  - **Low ($20\% - 49\%$)**: Softer, lighter shade.
+  - **Critical ($< 20\%$)**: Red/rose alert gradient (`from-rose-500 to-red-600`) for high visibility when quota is near exhaustion.
 - **Grouped quota support**: Track shared quota buckets returned by `retrieveUserQuotaSummary`, including Claude/GPT third-party quota groups.
-- **Visual indicators**: Use progress bars and color states (green/yellow/red) to show remaining quota percentage.
 - **Auto/manual refresh**: Support manual quota refresh; the system also checks quota automatically before switching.
 
 ### 1.4 Intelligent Auto-Switching

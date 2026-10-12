@@ -83,6 +83,82 @@ export interface OpenAIResponsesSessionStoreOptions {
 
 export const DEFAULT_OPENAI_RESPONSES_MAX_SESSIONS = 500;
 export const DEFAULT_OPENAI_RESPONSES_SESSION_TTL_MS = 60 * 60 * 1000;
+export const MAX_RESPONSES_CHAIN_DEPTH = 100;
+export const MAX_RESPONSES_HISTORY_ITEMS = 500;
+export const MAX_RESPONSES_HISTORY_BYTES = 4 * 1024 * 1024;
+const COMPACTION_THRESHOLD_DEPTH = 20;
+
+function estimateItemBytes(item: unknown): number {
+  if (typeof item === 'string') {
+    return item.length;
+  }
+  try {
+    return JSON.stringify(item).length;
+  } catch {
+    return 1024;
+  }
+}
+
+function estimateNodeChain(node: OpenAIResponsesSessionNode | null): {
+  depth: number;
+  items: number;
+  bytes: number;
+} {
+  let depth = 0;
+  let items = 0;
+  let bytes = 0;
+  for (let current = node; current; current = current.parent) {
+    depth += 1;
+    items += current.inputDelta.length + current.responseOutput.length;
+    for (const item of current.inputDelta) {
+      bytes += estimateItemBytes(item);
+    }
+    for (const item of current.responseOutput) {
+      bytes += estimateItemBytes(item);
+    }
+  }
+  return { depth, items, bytes };
+}
+
+function compactAncestorChain(node: OpenAIResponsesSessionNode): OpenAIResponsesSessionNode {
+  if (!node.parent) {
+    return node;
+  }
+  const chain: OpenAIResponsesSessionNode[] = [];
+  for (let current: OpenAIResponsesSessionNode | null = node; current; current = current.parent) {
+    chain.push(current);
+  }
+  if (chain.length < COMPACTION_THRESHOLD_DEPTH) {
+    return node;
+  }
+  chain.reverse();
+  const ancestors = chain.slice(0, -1);
+  const allInputItems = ancestors.flatMap((n) => [...n.inputDelta, ...n.responseOutput]);
+  const allToolCallItems = collectResponsesToolCallItems([
+    ...ancestors.flatMap((n) => n.toolCallItems),
+    ...allInputItems,
+  ]);
+  const compactedRoot = createOpenAIResponsesSessionNode({
+    inputDelta: allInputItems,
+    instructions: chain[0].instructions,
+    model: chain[0].model,
+    parent: null,
+    responseOutput: [],
+    routingSessionId: chain[0].routingSessionId,
+    tools: chain[0].tools,
+    toolCallItems: allToolCallItems,
+  });
+  return createOpenAIResponsesSessionNode({
+    inputDelta: node.inputDelta,
+    instructions: node.instructions,
+    model: node.model,
+    parent: compactedRoot,
+    responseOutput: node.responseOutput,
+    routingSessionId: node.routingSessionId,
+    tools: node.tools,
+    toolCallItems: node.toolCallItems,
+  });
+}
 
 /**
  * Holds the state needed to support Responses API continuation.
@@ -125,6 +201,11 @@ export class OpenAIResponsesSessionStoreImpl implements OpenAIResponsesSessionSt
   public save(responseId: string, session: OpenAIResponsesSession): void {
     const boundedInputItems = boundResponsesInputItems(session.inputItems);
     const boundedToolCallItems = boundResponsesInputItems(session.toolCallItems ?? []);
+    if (boundedInputItems.length > MAX_RESPONSES_HISTORY_ITEMS) {
+      throw new Error(
+        `Responses session exceeds maximum history items limit (${MAX_RESPONSES_HISTORY_ITEMS})`,
+      );
+    }
     this.sessions.set(responseId, {
       node: createOpenAIResponsesSessionNode({
         inputDelta: boundedInputItems,
@@ -152,12 +233,43 @@ export class OpenAIResponsesSessionStoreImpl implements OpenAIResponsesSessionSt
     const inputDelta = boundResponsesInputItems(delta.inputDelta);
     const responseOutput = boundResponsesInputItems(delta.responseOutput);
     const toolCallItems = boundResponsesInputItems(delta.toolCallItems ?? []);
+
+    const deltaItems = inputDelta.length + responseOutput.length;
+    let deltaBytes = 0;
+    for (const item of inputDelta) {
+      deltaBytes += estimateItemBytes(item);
+    }
+    for (const item of responseOutput) {
+      deltaBytes += estimateItemBytes(item);
+    }
+
+    if (parentNode) {
+      const stats = estimateNodeChain(parentNode);
+      if (stats.depth + 1 > MAX_RESPONSES_CHAIN_DEPTH) {
+        throw new Error(
+          `Responses conversation chain depth exceeds maximum limit (${MAX_RESPONSES_CHAIN_DEPTH})`,
+        );
+      }
+      if (stats.items + deltaItems > MAX_RESPONSES_HISTORY_ITEMS) {
+        throw new Error(
+          `Responses conversation history exceeds maximum item limit (${MAX_RESPONSES_HISTORY_ITEMS})`,
+        );
+      }
+      if (stats.bytes + deltaBytes > MAX_RESPONSES_HISTORY_BYTES) {
+        throw new Error(
+          `Responses conversation history exceeds maximum byte limit (${MAX_RESPONSES_HISTORY_BYTES} bytes)`,
+        );
+      }
+    }
+
+    const effectiveParent = parentNode ? compactAncestorChain(parentNode) : null;
+
     this.sessions.set(responseId, {
       node: createOpenAIResponsesSessionNode({
         inputDelta,
         instructions: delta.instructions,
         model: delta.model,
-        parent: parentNode ?? null,
+        parent: effectiveParent,
         responseOutput,
         routingSessionId: normalizeRoutingSessionId(delta.routingSessionId) ?? responseId,
         tools: delta.tools,

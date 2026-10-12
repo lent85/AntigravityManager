@@ -47,6 +47,8 @@ function delay(ms: number): Promise<void> {
   });
 }
 
+const MAX_SESSION_BINDINGS = 2000;
+
 export class AccountLeaseSelectionPolicy {
   private currentIndex = 0;
   private sessionBindings: Map<string, { accountId: string; expiresAt: number }> = new Map();
@@ -156,6 +158,16 @@ export class AccountLeaseSelectionPolicy {
   bindSession(sessionKey: string | undefined, accountId: string, expiresAt: number): void {
     if (!sessionKey) {
       return;
+    }
+    if (this.sessionBindings.size >= MAX_SESSION_BINDINGS) {
+      this.clearExpiredSessionBindings(Date.now());
+      while (this.sessionBindings.size >= MAX_SESSION_BINDINGS) {
+        const oldestKey = this.sessionBindings.keys().next().value;
+        if (!oldestKey) {
+          break;
+        }
+        this.sessionBindings.delete(oldestKey);
+      }
     }
     this.sessionBindings.set(sessionKey, {
       accountId,

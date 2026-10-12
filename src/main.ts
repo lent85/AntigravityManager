@@ -1,5 +1,5 @@
 import '@/instrument'; // MUST be the first import to ensure Sentry initializes before app ready
-import { app, BrowserWindow, dialog, shell } from 'electron';
+import { app, BrowserWindow, dialog, shell, powerMonitor } from 'electron';
 import type { MessageBoxOptions } from 'electron';
 import path from 'path';
 import fs from 'fs';
@@ -416,7 +416,6 @@ process.on('exit', (code) => {
 
 process.on('before-exit', (code) => {
   logger.info(`Process before-exit event triggered with code: ${code}`);
-  logger.info(`Process before-exit event triggered with code: ${code}`);
 });
 
 // let tray: Tray | null = null; // Moved to tray/handler.ts
@@ -746,6 +745,23 @@ app
 
     logger.info('Step: Initialize Antigravity DB (WAL Mode)');
     initDatabase();
+
+    powerMonitor.on('resume', () => {
+      logger.info('PowerMonitor: system resumed from sleep');
+      void CloudMonitorService.handleAppResume();
+    });
+    powerMonitor.on('unlock-screen', () => {
+      logger.info('PowerMonitor: screen unlocked');
+      void CloudMonitorService.handleAppResume();
+    });
+    powerMonitor.on('suspend', () => {
+      logger.info('PowerMonitor: system suspending');
+      CloudMonitorService.handleAppSuspend();
+    });
+    powerMonitor.on('lock-screen', () => {
+      logger.info('PowerMonitor: screen locked');
+      CloudMonitorService.handleAppSuspend();
+    });
   })
   .then(() => {
     logger.info('Step: setupORPC');
@@ -754,6 +770,9 @@ app
   .then(async () => {
     logger.info('Step: createWindow');
     await createWindow({ startHidden: shouldStartHidden });
+    if (globalMainWindow) {
+      initTray(globalMainWindow, requestTrayShutdown);
+    }
   })
   .then(() => {
     logger.info('Step: installExtensions (SKIPPED)');
@@ -795,17 +814,16 @@ app
         CloudMonitorService.start();
       } else {
         logger.info('Startup: Background monitoring disabled, running one-time cloud sync...');
-        await CloudMonitorService.poll();
+        void CloudMonitorService.poll().catch((e) => {
+          logger.error('Startup: Initial cloud sync failed', e);
+        });
       }
     } catch (e) {
       logger.error('Startup: Failed to initialize services', e);
     }
   })
-  .then(async () => {
+  .then(() => {
     logger.info('Step: Startup Complete');
-    if (globalMainWindow) {
-      initTray(globalMainWindow, requestTrayShutdown);
-    }
   })
   .catch((error) => {
     logger.error('Failed to start application:', error);

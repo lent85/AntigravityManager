@@ -31,12 +31,17 @@ function mediaPlaceholder(value: Record<string, unknown>): Record<string, string
   return null;
 }
 
+const MAX_HISTORICAL_TEXT_LENGTH = 128 * 1024;
+
 function boundHistoryValue(value: unknown): BoundedValue {
-  if (
-    typeof value === 'string' &&
-    (value.startsWith('data:image/') || value.startsWith('data:audio/'))
-  ) {
-    return OMIT_MEDIA_VALUE;
+  if (typeof value === 'string') {
+    if (value.startsWith('data:image/') || value.startsWith('data:audio/')) {
+      return OMIT_MEDIA_VALUE;
+    }
+    if (value.length > MAX_HISTORICAL_TEXT_LENGTH) {
+      return value.slice(0, MAX_HISTORICAL_TEXT_LENGTH) + '\n[historical text truncated]';
+    }
+    return value;
   }
   if (Array.isArray(value)) {
     return value.flatMap((entry) => {

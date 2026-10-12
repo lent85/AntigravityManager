@@ -6,6 +6,8 @@ import type { GeminiInternalRequest, GeminiRequest } from '../../../antigravity/
 const DEFAULT_TTL_MS = 60 * 60 * 1000;
 const FAILURE_COOLDOWN_MS = 5 * 60 * 1000;
 const MAX_ENTRIES = 500;
+const MAX_FAILED_UNTIL_ENTRIES = 500;
+const MAX_PENDING_TASKS = 64;
 const MIN_STATIC_PREFIX_CHARACTERS = 8_192;
 
 export interface ExplicitContextCacheSource {
@@ -114,6 +116,10 @@ export class ExplicitContextCacheManager {
       return pending;
     }
 
+    if (this.pending.size >= MAX_PENDING_TASKS) {
+      return null;
+    }
+
     const task = create()
       .then((resource) => {
         if (!resource) {
@@ -207,6 +213,13 @@ export class ExplicitContextCacheManager {
       if (failedUntil <= now) {
         this.failedUntil.delete(key);
       }
+    }
+    while (this.failedUntil.size > MAX_FAILED_UNTIL_ENTRIES) {
+      const oldestKey = this.failedUntil.keys().next().value;
+      if (!oldestKey) {
+        break;
+      }
+      this.failedUntil.delete(oldestKey);
     }
   }
 

@@ -21,6 +21,11 @@ export interface DurableRecordStoreOptions<TValue> {
    * which is how a partially understood or hand-edited file is survived.
    */
   revive?: (value: unknown) => TValue | null;
+  /**
+   * Whether reading a record triggers a disk write to persist its sliding updatedAt timestamp.
+   * Default: false (LRU order is updated in memory; disk write occurs on set, delete, clear, or eviction).
+   */
+  persistOnRead?: boolean;
 }
 
 interface DurableRecordFile<TValue> {
@@ -68,7 +73,9 @@ export class DurableRecordStore<TValue> {
     record.updatedAt = now;
     this.records.delete(key);
     this.records.set(key, record);
-    this.schedulePersist();
+    if (this.options.persistOnRead) {
+      this.schedulePersist();
+    }
     return record.value;
   }
 

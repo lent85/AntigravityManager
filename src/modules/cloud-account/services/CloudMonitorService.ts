@@ -215,6 +215,8 @@ export class CloudMonitorService {
   private static syncingAccountId: string | null = null;
   private static syncStatusBroadcaster: ((accountId: string | null) => void) | null = null;
   private static sleepCancelResolver: (() => void) | null = null;
+  private static readonly lastPolledAtByAccountId = new Map<string, number>();
+  private static readonly ACCOUNT_FRESHNESS_WINDOW_MS = 60_000;
 
   static getPollIntervalMinutes(): number {
     return CloudAccountSettingsStore.getSetting<number>(
@@ -412,6 +414,29 @@ export class CloudMonitorService {
     this.resetInterval();
   }
 
+  /**
+   * Called when the system resumes from sleep or the screen is unlocked.
+   */
+  static async handleAppResume() {
+    logger.info('Monitor: System resume / screen unlock event received');
+    if (this.sleepCancelResolver) {
+      this.sleepCancelResolver();
+      this.sleepCancelResolver = null;
+    }
+    await this.handleAppFocus();
+  }
+
+  /**
+   * Called when the system enters sleep or screen is locked.
+   */
+  static handleAppSuspend() {
+    logger.info('Monitor: System suspend / screen lock event received; pausing scheduled poll timer');
+    if (this.nextPollTimeout) {
+      clearTimeout(this.nextPollTimeout);
+      this.nextPollTimeout = null;
+    }
+  }
+
   private static scheduleNextPoll(delayMs: number): void {
     if (this.nextPollTimeout) {
       clearTimeout(this.nextPollTimeout);
@@ -489,6 +514,19 @@ export class CloudMonitorService {
         continue;
       }
 
+      const lastPolledAt = this.lastPolledAtByAccountId.get(account.id);
+      if (
+        lastPolledAt &&
+        Date.now() - lastPolledAt < this.ACCOUNT_FRESHNESS_WINDOW_MS &&
+        account.quota
+      ) {
+        logger.info(
+          `Monitor: Skipping quota fetch for ${account.email}, refreshed recently within freshness window`,
+        );
+        refreshedAccounts.push(account);
+        continue;
+      }
+
       this.setSyncingAccountId(account.id);
       try {
         if (account.status === 'paused') {
@@ -535,7 +573,10 @@ export class CloudMonitorService {
           }
         }
 
-        await new Promise((r) => setTimeout(r, 1000));
+        await this.abortableSleep(1000, epoch);
+        if (this.stopped || epoch !== this.stopEpoch) {
+          break;
+        }
 
         let quota: QuotaData;
         const previousAICredits = account.quota?.ai_credits;
@@ -631,9 +672,14 @@ export class CloudMonitorService {
           }
         }
 
+        if (this.stopped || epoch !== this.stopEpoch) {
+          break;
+        }
+
         // 3. Update DB & clear failures
         await CloudAccountRepo.updateQuota(account.id, quota);
         account.quota = quota;
+        this.lastPolledAtByAccountId.set(account.id, Date.now());
 
         if (quota.is_forbidden || quota.isForbidden) {
           logger.warn(
@@ -794,13 +840,14 @@ export class CloudMonitorService {
       logger.info(`CloudMonitor: Poll round completed in ${Math.round(roundDuration / 1000)}s`);
 
       if (!this.stopped && epoch === this.stopEpoch && this.isContinuousPollingEnabled()) {
+        const MIN_ROUND_COOLDOWN_MS = 30_000;
         if (roundDuration >= intervalMs) {
           logger.info(
-            `CloudMonitor: Round duration (${Math.round(roundDuration / 1000)}s) >= metrics sync interval (${Math.round(intervalMs / 1000)}s); starting next round immediately.`,
+            `CloudMonitor: Round duration (${Math.round(roundDuration / 1000)}s) >= metrics sync interval (${Math.round(intervalMs / 1000)}s); applying minimum cooldown (${MIN_ROUND_COOLDOWN_MS / 1000}s).`,
           );
-          this.scheduleNextPoll(0);
+          this.scheduleNextPoll(MIN_ROUND_COOLDOWN_MS);
         } else {
-          const remainingWaitMs = intervalMs - roundDuration;
+          const remainingWaitMs = Math.max(MIN_ROUND_COOLDOWN_MS, intervalMs - roundDuration);
           logger.info(
             `CloudMonitor: Scheduling next round in ${Math.round(remainingWaitMs / 1000)}s (remaining interval).`,
           );

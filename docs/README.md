@@ -31,10 +31,11 @@ This directory contains authoritative technical documentation for contributors a
 | Document | Description |
 | --- | --- |
 | [cloud_features.md](cloud_features.md) | Cloud account pools, quota monitoring, family groups, auto-switching, emulation, and weekly warmup |
-| [memory-leak-performance-audit.md](memory-leak-performance-audit.md) | Memory leak audit findings, renderer/main process resource profiles, and leak prevention patterns |
+| [memory-leak-performance-audit.md](memory-leak-performance-audit.md) | Memory safety boundaries, lifecycle shutdown invariants, resource protection limits, and leak prevention patterns |
 | [proxy-compatibility.md](proxy-compatibility.md) | Protocol compatibility edge-cases, Responses history normalization, tool configs, and context caching |
 | [proxyman-debugging.md](proxyman-debugging.md) | Troubleshooting proxy traffic with Proxyman on Windows and macOS |
 | [proxyman-install.md](proxyman-install.md) | Installation and certificate setup for local Proxyman interception |
+| [debugging/electron-performance-recorder.md](debugging/electron-performance-recorder.md) | Opt-in performance recorder and UI stall diagnostics |
 
 ## Quick Navigation: "What Are You Doing?"
 

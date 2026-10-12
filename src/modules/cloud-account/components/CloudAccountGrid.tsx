@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Cloud } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { ipc } from '@/ipc/manager';
 import { Button } from '@/components/ui/button';
 import {
   CloudAccountCard,
@@ -72,6 +74,11 @@ export function CloudAccountGrid({
   const { data: familyGroups = [] } = useFamilyGroups();
 
   const isFamilyGrouped = config?.group_family_accounts_enabled !== false;
+  const { data: modelAvailability = [] } = useQuery({
+    queryKey: ['gateway', 'modelAvailability'],
+    queryFn: () => ipc.client.gateway.modelAvailability(),
+    refetchInterval: 15_000,
+  });
 
   // Group items if family grouping is enabled
   const displayItems = useMemo<GridDisplayItem[]>(() => {
@@ -193,6 +200,7 @@ export function CloudAccountGrid({
             key={account.id}
             account={account}
             quotaWindow={quotaWindow}
+            modelAvailability={modelAvailability}
             onRefresh={onRefresh}
             onDelete={onDelete}
             onSwitch={onSwitch}

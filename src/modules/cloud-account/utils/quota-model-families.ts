@@ -1,8 +1,15 @@
 import type { CloudQuotaModelInfo } from '@/modules/cloud-account/types';
 
 const FAMILY_DISPLAY_NAMES: Record<string, string> = {
-  'gemini-3.1-pro': 'Gemini 3.1 Pro',
+  'gemini-4.0-pro': 'Gemini 4.0 Pro',
+  'gemini-4.0-flash': 'Gemini 4.0 Flash',
+  'gemini-4.0': 'Gemini 4.0',
+  'gemini-3.8-pro': 'Gemini 3.8 Pro',
+  'gemini-3.8-flash': 'Gemini 3.8 Flash',
+  'gemini-3.8': 'Gemini 3.8',
   'gemini-3.7-flash': 'Gemini 3.7 Flash',
+  'gemini-3.6-flash': 'Gemini 3.6 Flash',
+  'gemini-3.1-pro': 'Gemini 3.1 Pro',
   'gemini-3.5-flash': 'Gemini 3.5 Flash',
   'gemini-flash-lite': 'Gemini Flash Lite',
   'gemini-pro-image': 'Gemini Pro Image',
@@ -14,8 +21,15 @@ const FAMILY_DISPLAY_NAMES: Record<string, string> = {
 };
 
 const EXACT_PRESENTATION_FAMILIES = new Set([
-  'gemini-3.1-pro',
+  'gemini-4.0-pro',
+  'gemini-4.0-flash',
+  'gemini-4.0',
+  'gemini-3.8-pro',
+  'gemini-3.8-flash',
+  'gemini-3.8',
   'gemini-3.7-flash',
+  'gemini-3.6-flash',
+  'gemini-3.1-pro',
   'gemini-3.5-flash',
 ]);
 
@@ -45,6 +59,30 @@ export function getQuotaModelFamilyId(modelId: string): string {
     normalized === 'gemini-2.5-flash-thinking'
   ) {
     return 'gemini-flash-lite';
+  }
+
+  if (
+    normalized.startsWith('gemini-4.0') ||
+    normalized.startsWith('gemini-4-') ||
+    normalized === 'gemini-4'
+  ) {
+    if (normalized.includes('flash')) {
+      return 'gemini-4.0-flash';
+    }
+    if (normalized.includes('pro')) {
+      return 'gemini-4.0-pro';
+    }
+    return 'gemini-4.0';
+  }
+
+  if (normalized.startsWith('gemini-3.8')) {
+    if (normalized.includes('flash')) {
+      return 'gemini-3.8-flash';
+    }
+    if (normalized.includes('pro')) {
+      return 'gemini-3.8-pro';
+    }
+    return 'gemini-3.8';
   }
 
   if (

@@ -54,6 +54,11 @@ export function attachOpenAIResponsesWebSocketServer(
   };
 }
 
+const MAX_QUEUED_MESSAGES = 64;
+const MAX_QUEUED_BYTES = 4 * 1024 * 1024;
+const MAX_BUFFERED_AMOUNT = 2 * 1024 * 1024;
+const HEARTBEAT_INTERVAL_MS = 30_000;
+
 function handleConnection(
   socket: WebSocket,
   dependencies: OpenAIResponsesWebSocketServerDependencies,
@@ -63,8 +68,62 @@ function handleConnection(
   const laneQueues = new Map<string, Promise<void>>();
   const namedStreams = new Set<string>();
   const runWithConcurrencyLimit = createConcurrencyGate(16);
+  const abortController = new AbortController();
+  let isClosed = false;
+  let queuedMessages = 0;
+  let queuedBytes = 0;
+
+  let isAlive = true;
+  socket.on('pong', () => {
+    isAlive = true;
+  });
+  const heartbeatTimer = setInterval(() => {
+    if (isClosed || socket.readyState !== WebSocket.OPEN) {
+      clearInterval(heartbeatTimer);
+      return;
+    }
+    if (!isAlive) {
+      socket.terminate();
+      return;
+    }
+    isAlive = false;
+    socket.ping();
+  }, HEARTBEAT_INTERVAL_MS);
+
+  const cleanupConnection = (): void => {
+    if (isClosed) {
+      return;
+    }
+    isClosed = true;
+    clearInterval(heartbeatTimer);
+    abortController.abort();
+    for (const subscription of activeSubscriptions) {
+      subscription.unsubscribe();
+    }
+    activeSubscriptions.clear();
+    laneQueues.clear();
+  };
+
+  socket.once('close', cleanupConnection);
+  socket.once('error', cleanupConnection);
 
   socket.on('message', (rawData) => {
+    if (isClosed || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    const payloadBytes = rawDataToByteLength(rawData);
+    if (
+      queuedMessages >= MAX_QUEUED_MESSAGES ||
+      queuedBytes + payloadBytes > MAX_QUEUED_BYTES
+    ) {
+      sendWebSocketError(
+        socket,
+        new Error('WebSocket message queue limit exceeded: connection overloaded.'),
+      );
+      return;
+    }
+
     let action: OpenAIResponsesWebSocketAction;
     try {
       const payload = parseClientPayload(rawData);
@@ -87,10 +146,17 @@ function handleConnection(
       }
     }
 
+    queuedMessages += 1;
+    queuedBytes += payloadBytes;
+
     const laneKey = action.streamId ?? '__default__';
     const previous = laneQueues.get(laneKey) ?? Promise.resolve();
     const processing = previous
       .then(async () => {
+        if (isClosed || abortController.signal.aborted) {
+          return;
+        }
+
         if (action.kind === 'local') {
           for (const event of action.events) {
             sendEvent(socket, event);
@@ -99,14 +165,34 @@ function handleConnection(
         }
 
         await runWithConcurrencyLimit(async () => {
+          if (isClosed || abortController.signal.aborted) {
+            return;
+          }
           const stream = await dependencies.streamRequest(action.request);
+          if (isClosed || abortController.signal.aborted) {
+            return;
+          }
           if (!isObservable(stream)) {
             throw new Error('Responses WebSocket upstream did not return a stream');
           }
           const parseUpstreamChunk = createUpstreamEventParser();
           await new Promise<void>((resolve, reject) => {
-            const subscription = stream.subscribe({
+            let subscription: Subscription | undefined;
+            const onAbort = () => {
+              subscription?.unsubscribe();
+              reject(new Error('WebSocket connection closed'));
+            };
+            if (abortController.signal.aborted) {
+              onAbort();
+              return;
+            }
+            abortController.signal.addEventListener('abort', onAbort, { once: true });
+            subscription = stream.subscribe({
               next: (chunk) => {
+                if (isClosed || abortController.signal.aborted) {
+                  subscription?.unsubscribe();
+                  return;
+                }
                 for (const upstreamEvent of parseUpstreamChunk(chunk)) {
                   const event = addStreamId(upstreamEvent, action.streamId);
                   sendEvent(socket, event);
@@ -115,47 +201,83 @@ function handleConnection(
                   }
                 }
               },
-              error: reject,
-              complete: resolve,
+              error: (err) => {
+                abortController.signal.removeEventListener('abort', onAbort);
+                reject(err);
+              },
+              complete: () => {
+                abortController.signal.removeEventListener('abort', onAbort);
+                resolve();
+              },
             });
             activeSubscriptions.add(subscription);
-            subscription.add(() => activeSubscriptions.delete(subscription));
+            subscription.add(() => {
+              activeSubscriptions.delete(subscription);
+              abortController.signal.removeEventListener('abort', onAbort);
+            });
           });
-        });
+        }, abortController.signal);
       })
       .catch((error: unknown) => {
-        sendWebSocketError(socket, error, action.streamId);
+        if (!isClosed) {
+          sendWebSocketError(socket, error, action.streamId);
+        }
+      })
+      .finally(() => {
+        queuedMessages = Math.max(0, queuedMessages - 1);
+        queuedBytes = Math.max(0, queuedBytes - payloadBytes);
+        if (laneQueues.get(laneKey) === processing) {
+          laneQueues.delete(laneKey);
+        }
       });
-    laneQueues.set(laneKey, processing);
-    void processing.finally(() => {
-      if (laneQueues.get(laneKey) === processing) {
-        laneQueues.delete(laneKey);
-      }
-    });
-  });
 
-  socket.once('close', () => {
-    for (const subscription of activeSubscriptions) {
-      subscription.unsubscribe();
-    }
-    activeSubscriptions.clear();
+    laneQueues.set(laneKey, processing);
   });
 }
 
-function createConcurrencyGate(limit: number): <T>(operation: () => Promise<T>) => Promise<T> {
+function createConcurrencyGate(
+  limit: number,
+): <T>(operation: () => Promise<T>, signal?: AbortSignal) => Promise<T> {
   let active = 0;
-  const waiting: Array<() => void> = [];
+  const waiting: Array<{ resolve: () => void; reject: (err: unknown) => void }> = [];
 
-  return async <T>(operation: () => Promise<T>): Promise<T> => {
+  return async <T>(operation: () => Promise<T>, signal?: AbortSignal): Promise<T> => {
+    if (signal?.aborted) {
+      throw new Error('Operation aborted');
+    }
     if (active >= limit) {
-      await new Promise<void>((resolve) => waiting.push(resolve));
+      await new Promise<void>((resolve, reject) => {
+        const waiter = { resolve, reject };
+        const onAbort = () => {
+          const idx = waiting.indexOf(waiter);
+          if (idx !== -1) {
+            waiting.splice(idx, 1);
+          }
+          reject(new Error('Operation aborted'));
+        };
+        signal?.addEventListener('abort', onAbort, { once: true });
+        waiting.push({
+          resolve: () => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve();
+          },
+          reject: (err) => {
+            signal?.removeEventListener('abort', onAbort);
+            reject(err);
+          },
+        });
+      });
+    }
+    if (signal?.aborted) {
+      waiting.shift()?.resolve();
+      throw new Error('Operation aborted');
     }
     active += 1;
     try {
       return await operation();
     } finally {
       active -= 1;
-      waiting.shift()?.();
+      waiting.shift()?.resolve();
     }
   };
 }
@@ -216,6 +338,10 @@ function parseUpstreamEventBlock(block: string): OpenAIResponsesWebSocketEvent |
 
 function sendEvent(socket: WebSocket, event: OpenAIResponsesWebSocketEvent): void {
   if (socket.readyState === WebSocket.OPEN) {
+    if (socket.bufferedAmount > MAX_BUFFERED_AMOUNT) {
+      socket.close(1008, 'Buffer overflow: client not draining');
+      return;
+    }
     socket.send(JSON.stringify(event));
   }
 }
@@ -242,6 +368,19 @@ function sendWebSocketError(socket: WebSocket, error: unknown, streamId?: string
       streamId,
     ),
   );
+}
+
+function rawDataToByteLength(rawData: RawData): number {
+  if (typeof rawData === 'string') {
+    return Buffer.byteLength(rawData, 'utf8');
+  }
+  if (Array.isArray(rawData)) {
+    return rawData.reduce((acc, buf) => acc + buf.byteLength, 0);
+  }
+  if (rawData instanceof ArrayBuffer) {
+    return rawData.byteLength;
+  }
+  return rawData.length;
 }
 
 function rawDataToString(rawData: RawData): string {

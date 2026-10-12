@@ -146,7 +146,7 @@ export class BoundedSqliteWorker {
     return true;
   }
 
-  public request<TResult>(command: SqliteWorkerCommand): Promise<TResult> {
+  public request<TResult>(command: SqliteWorkerCommand, timeoutMs = 10_000): Promise<TResult> {
     const bytes = estimateCommandBytes(command);
     if (
       this.pending.size >= this.options.maxPendingCommands ||
@@ -155,7 +155,21 @@ export class BoundedSqliteWorker {
     ) {
       return Promise.reject(new Error(`${this.options.name} control queue is full`));
     }
-    return this.send(command, bytes, 'control') as Promise<TResult>;
+    const sendPromise = this.send(command, bytes, 'control') as Promise<TResult>;
+    if (timeoutMs <= 0) {
+      return sendPromise;
+    }
+    let timer: NodeJS.Timeout | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(`${this.options.name} request timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+    });
+    return Promise.race([sendPromise, timeoutPromise]).finally(() => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    });
   }
 
   public async close(timeoutMs = 2_000): Promise<void> {
@@ -164,21 +178,36 @@ export class BoundedSqliteWorker {
       return;
     }
 
+    let timeoutHandle: NodeJS.Timeout | undefined;
+    const deadlinePromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        reject(new Error('SQLite worker shutdown timed out'));
+      }, timeoutMs);
+    });
+
     try {
       await Promise.race([
-        this.waitForIdle(),
-        new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('SQLite worker shutdown timed out')), timeoutMs);
-        }),
+        (async () => {
+          await this.waitForIdle();
+          await this.request({ operation: 'shutdown', payload: null }, timeoutMs);
+        })(),
+        deadlinePromise,
       ]);
-      await this.request({ operation: 'shutdown', payload: null });
     } catch {
       // Termination below is the bounded fallback.
+    } finally {
+      if (timeoutHandle !== undefined) {
+        clearTimeout(timeoutHandle);
+      }
     }
 
     this.worker = null;
     this.alive = false;
-    await worker.terminate();
+    try {
+      await worker.terminate();
+    } catch {
+      // Best-effort termination
+    }
     this.rejectPending(new Error(`${this.options.name} closed`));
   }
 

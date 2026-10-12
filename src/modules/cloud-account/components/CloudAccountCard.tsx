@@ -61,7 +61,7 @@ import {
   formatResetTimeTitle,
   getQuotaStatus,
 } from '@/modules/cloud-account/utils/quota-display';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ipc } from '@/ipc/manager';
 import {
@@ -82,7 +82,16 @@ import { AccountQuotaWindowSections } from '@/modules/cloud-account/components/A
 import { CompactModelQuotaDisplay } from '@/modules/cloud-account/components/CompactModelQuotaDisplay';
 import { ManualRecommendationBadge } from '@/modules/cloud-account/components/ManualRecommendationBadge';
 import type { ManualRecommendationContext } from '@/modules/cloud-account/utils/manual-account-recommendation';
-import { QUOTA_TEXT_COLOR_CLASS_BY_STATUS, QUOTA_BAR_COLOR_CLASS_BY_STATUS } from './quota-colors';
+import {
+  QUOTA_TEXT_COLOR_CLASS_BY_STATUS,
+  QUOTA_BAR_COLOR_CLASS_BY_STATUS,
+  getModelQuotaBarColorClass,
+  getModelQuotaTextColorClass,
+  getQuotaBarColorClassByPercentage,
+  getQuotaTextColorClassByPercentage,
+  groupModelsByGeneration,
+  type ModelQuotaGroup,
+} from './quota-colors';
 import { isWeeklyQuotaBucket } from '@/modules/cloud-account/utils/quota-groups';
 import {
   maskEmail,
@@ -102,6 +111,16 @@ const GEMINI_PRO_COMBINED_MODEL_ID = 'gemini-3.1-pro-low/high';
 
 const MODEL_DISPLAY_REPLACEMENTS: Array<[string, string]> = [
   [GEMINI_PRO_COMBINED_MODEL_ID, 'Gemini 3.1 Pro (Low/High)'],
+  ['gemini-4.0-flash', 'Gemini 4.0 Flash'],
+  ['gemini-4.0-pro', 'Gemini 4.0 Pro'],
+  ['gemini-4.0', 'Gemini 4.0'],
+  ['gemini-3.8-flash', 'Gemini 3.8 Flash'],
+  ['gemini-3.8-pro', 'Gemini 3.8 Pro'],
+  ['gemini-3.8', 'Gemini 3.8'],
+  ['gemini-3.7-flash', 'Gemini 3.7 Flash'],
+  ['gemini-3.7-pro', 'Gemini 3.7 Pro'],
+  ['gemini-3.6-flash', 'Gemini 3.6 Flash'],
+  ['gemini-3.6-pro', 'Gemini 3.6 Pro'],
   ['gemini-3.1-pro-preview', 'Gemini 3.1 Pro Preview'],
   ['gemini-3-pro-image', 'Gemini 3 Pro Image'],
   ['gemini-3.1-pro', 'Gemini 3.1 Pro'],
@@ -192,6 +211,25 @@ function getAvailabilityModelCandidates(modelName: string): Set<string> {
     candidates.add('gemini-3.6-flash-tiered');
   }
 
+  if (normalized === 'gemini-3.6-flash') {
+    candidates.add('gemini-3.6-flash-low');
+    candidates.add('gemini-3.6-flash-medium');
+    candidates.add('gemini-3.6-flash-high');
+    candidates.add('gemini-3.6-flash-tiered');
+  }
+
+  if (normalized.startsWith('gemini-3.8-flash')) {
+    candidates.add('gemini-3.8-flash-low');
+    candidates.add('gemini-3.8-flash-medium');
+    candidates.add('gemini-3.8-flash-high');
+  }
+
+  if (normalized.startsWith('gemini-4.0-flash')) {
+    candidates.add('gemini-4.0-flash-low');
+    candidates.add('gemini-4.0-flash-medium');
+    candidates.add('gemini-4.0-flash-high');
+  }
+
   if (normalized === 'gemini-3.1-flash-image' || normalized === 'gemini-3-flash-image') {
     candidates.add('gemini-3.1-flash-image');
     candidates.add('gemini-3-flash-image');
@@ -223,6 +261,7 @@ function findModelAvailability(
 interface CloudAccountCardProps {
   account: CloudAccount;
   quotaWindow?: QuotaWindow;
+  modelAvailability?: LiveModelAvailability[];
   onRefresh: (id: string) => void;
   onDelete: (id: string) => void;
   onSwitch: (id: string, appTarget?: AntigravityAppTarget) => void;
@@ -240,6 +279,7 @@ interface CloudAccountCardProps {
 export function CloudAccountCard({
   account,
   quotaWindow = 'both',
+  modelAvailability: modelAvailabilityProp,
   onRefresh,
   onDelete,
   onSwitch,
@@ -282,25 +322,31 @@ export function CloudAccountCard({
   const [proxyUrl, setProxyUrl] = useState(account.proxy_url || '');
   const [proxySaved, setProxySaved] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const { data: modelAvailability = [] } = useQuery({
+  const { data: fallbackModelAvailability = [] } = useQuery({
     queryKey: ['gateway', 'modelAvailability'],
     queryFn: () => ipc.client.gateway.modelAvailability(),
     refetchInterval: 15_000,
+    enabled: modelAvailabilityProp === undefined,
   });
+  const modelAvailability = modelAvailabilityProp ?? fallbackModelAvailability;
   const isActiveAnywhere = !!(
     account.is_active_classic ||
     account.is_active_ide ||
     account.is_active_agy
   );
 
-  const getQuotaTextColorClass = (percentage: number) => {
-    const quotaStatus = getQuotaStatus(percentage);
-    return QUOTA_TEXT_COLOR_CLASS_BY_STATUS[quotaStatus];
+  const getQuotaTextColorClass = (percentage: number, modelId?: string) => {
+    if (modelId) {
+      return getModelQuotaTextColorClass(modelId, percentage);
+    }
+    return getQuotaTextColorClassByPercentage(percentage);
   };
 
-  const getQuotaBarColorClass = (percentage: number) => {
-    const quotaStatus = getQuotaStatus(percentage);
-    return QUOTA_BAR_COLOR_CLASS_BY_STATUS[quotaStatus];
+  const getQuotaBarColorClass = (percentage: number, modelId?: string) => {
+    if (modelId) {
+      return getModelQuotaBarColorClass(modelId, percentage);
+    }
+    return getQuotaBarColorClassByPercentage(percentage);
   };
 
   const formatQuotaLabel = (percentage: number) => {
@@ -328,22 +374,23 @@ export function CloudAccountCard({
     config?.model_visibility || {},
   );
 
-  const geminiModels = Object.entries(mergedModelQuotas)
-    .filter(([name]) => name.includes('gemini') && !GEMINI_LEGACY_MODEL_PATTERN.test(name))
-    .sort((a, b) => b[1].percentage - a[1].percentage);
+  const groupedModelQuotas = useMemo(
+    () =>
+      groupModelsByGeneration(mergedModelQuotas, {
+        claude: t('cloud.card.groupAnthropicClaude', 'Anthropic Claude'),
+      }),
+    [mergedModelQuotas, t],
+  );
 
-  const claudeModels = Object.entries(mergedModelQuotas)
-    .filter(([name]) => name.includes('claude'))
-    .sort((a, b) => b[1].percentage - a[1].percentage);
-
-  const hasVisibleQuotaModels = geminiModels.length > 0 || claudeModels.length > 0;
+  const hasVisibleQuotaModels = groupedModelQuotas.length > 0;
   const weeklyQuotaItems = selectWeeklyQuotaItems(account.quota?.quota_groups);
   const detailedGroups = account.quota?.quota_groups ?? [];
   const hasDetailedQuota = detailedGroups.some((group) =>
     group.buckets.some((bucket) => !isWeeklyQuotaBucket(bucket)),
   );
 
-  const renderQuotaModelGroup = (title: string, models: ModelQuotaEntry[]) => {
+  const renderQuotaModelGroup = (group: ModelQuotaGroup) => {
+    const { key, label, badgeClass, models } = group;
     if (models.length === 0) return null;
 
     const gridStyle =
@@ -357,10 +404,15 @@ export function CloudAccountCard({
         : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';
 
     return (
-      <div key={title} className="space-y-1">
-        <div className="flex items-center gap-1.5 px-2 py-1">
-          <span className="text-muted-foreground/70 text-[10px] font-bold tracking-wider uppercase">
-            {title}
+      <div key={key} className="space-y-1">
+        <div className="flex items-center gap-2 px-2 py-1">
+          <span
+            className={cn(
+              'rounded border px-1.5 py-0.5 text-[10px] font-bold tracking-wider uppercase',
+              badgeClass,
+            )}
+          >
+            {label}
           </span>
           <div className="bg-border/50 h-px flex-1" />
         </div>
@@ -468,7 +520,7 @@ export function CloudAccountCard({
                         ? isLiveLimitActive
                           ? 'text-rose-700 dark:text-rose-300'
                           : 'text-amber-700 dark:text-amber-300'
-                        : getQuotaTextColorClass(info.percentage),
+                        : getQuotaTextColorClass(info.percentage, modelName),
                     )}
                   >
                     {info.percentage}%
@@ -482,7 +534,7 @@ export function CloudAccountCard({
                   <div
                     className={cn(
                       'h-full rounded-full transition-all duration-300',
-                      getQuotaBarColorClass(info.percentage),
+                      getQuotaBarColorClass(info.percentage, modelName),
                     )}
                     style={{ width: `${clampQuotaPercentage(info.percentage)}%` }}
                   />
@@ -965,9 +1017,7 @@ export function CloudAccountCard({
                   </>
                 ) : hasVisibleQuotaModels ? (
                   <div className="space-y-3">
-                    {renderQuotaModelGroup(t('cloud.card.groupGoogleGemini'), geminiModels)}
-                    <div className="pt-1" />
-                    {renderQuotaModelGroup(t('cloud.card.groupAnthropicClaude'), claudeModels)}
+                    {groupedModelQuotas.map((group) => renderQuotaModelGroup(group))}
                   </div>
                 ) : hasDetailedQuota ? null : (
                   emptyQuotaState

@@ -532,11 +532,14 @@ export class RateLimitTrackerService {
   }
 
   clear(accountId: string): boolean {
+    this.failureCounts.delete(accountId);
     return this.lockoutByKey.delete(accountId);
   }
 
   clearModel(accountId: string, model: string): boolean {
-    return this.lockoutByKey.delete(this.buildLockoutKey(accountId, model));
+    const key = this.buildLockoutKey(accountId, model);
+    this.failureCounts.delete(key);
+    return this.lockoutByKey.delete(key);
   }
 
   /**
@@ -560,6 +563,7 @@ export class RateLimitTrackerService {
         !(info.preservesLongImageQuota && info.resetTimeMs > Date.now())
       ) {
         this.lockoutByKey.delete(key);
+        this.failureCounts.delete(key);
         deleted += 1;
       }
     }
@@ -568,8 +572,9 @@ export class RateLimitTrackerService {
   }
 
   clearAll(): number {
-    const size = this.lockoutByKey.size;
+    const size = this.lockoutByKey.size + this.failureCounts.size;
     this.lockoutByKey.clear();
+    this.failureCounts.clear();
     return size;
   }
 
@@ -581,6 +586,20 @@ export class RateLimitTrackerService {
         this.lockoutByKey.delete(key);
         deleted++;
       }
+    }
+    for (const [key, entry] of this.failureCounts.entries()) {
+      if (now - entry.lastFailureMs > FAILURE_COUNT_EXPIRY_MS) {
+        this.failureCounts.delete(key);
+        deleted++;
+      }
+    }
+    while (this.failureCounts.size > 1000) {
+      const oldestKey = this.failureCounts.keys().next().value;
+      if (!oldestKey) {
+        break;
+      }
+      this.failureCounts.delete(oldestKey);
+      deleted++;
     }
     return deleted;
   }
