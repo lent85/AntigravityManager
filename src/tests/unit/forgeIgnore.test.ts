@@ -46,6 +46,9 @@ describe('Forge package ignore policy', () => {
     );
     expect(shouldIgnorePackagePath('/node_modules/@nestjs/core/index.js')).toBe(false);
     expect(shouldIgnorePackagePath('/node_modules/zod/index.cjs')).toBe(false);
+    expect(
+      shouldIgnorePackagePath('/node_modules/@apm-js-collab/code-transformer/index.js'),
+    ).toBe(false);
   });
 
   it('blocks workspace-only folders from entering app.asar', () => {

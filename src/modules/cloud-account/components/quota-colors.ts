@@ -192,6 +192,7 @@ export function detectModelGeneration(modelId: string, secondaryText?: string): 
     normalized.includes('flash-lite') ||
     normalized.includes('flash_lite') ||
     normalized.includes('flashlite') ||
+    normalized.includes('flash lite') ||
     normalized === 'gemini-flash-lite'
   ) {
     return 'gemini-flash-lite';

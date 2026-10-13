@@ -228,11 +228,13 @@ function CloudAccountListContent() {
     selectionStore.getState().clear();
   };
 
-  const selectedAccountIdsList = useAccountSelection(
-    (state) => getSelectedVisibleAccountIds(state.selectedIds, visibleAccountIds),
-  );
-  const hasFamilyAccountSelected = selectedAccountIdsList.some((id) =>
-    familyGroups.some((g) => g.accountIds.includes(id)),
+  const selectedIds = useAccountSelection((state) => state.selectedIds);
+  const hasFamilyAccountSelected = useMemo(
+    () =>
+      visibleAccountIds.some(
+        (id) => selectedIds.has(id) && familyGroups.some((g) => g.accountIds.includes(id)),
+      ),
+    [familyGroups, selectedIds, visibleAccountIds],
   );
 
   const { data: backgroundSyncingAccountId } = useQuery({

@@ -16,7 +16,6 @@ const allowedRootPattern = PACKAGE_ALLOWED_ROOT_ENTRIES.map((entry) => escapeReg
 );
 
 export const PACKAGE_PRUNE_NODE_MODULES = [
-  '@apm-js-collab/code-transformer',
   '@esbuild/win32-x64',
   '@icons-pack/react-simple-icons',
   '@radix-ui/react-avatar',
