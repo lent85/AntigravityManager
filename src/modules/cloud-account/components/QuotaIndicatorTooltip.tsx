@@ -51,10 +51,10 @@ export function QuotaIndicatorTooltip({
   const { t } = useTranslation();
   const clamped = clampQuotaPercentage(percentage);
   const title = displayName || formatModelDisplayName(name);
-  const genKey = detectModelGeneration(name);
+  const genKey = detectModelGeneration(name, displayName);
   const genMeta = MODEL_GENERATION_METAS[genKey];
-  const barColorClass = getModelQuotaBarColorClass(name, percentage);
-  const textColorClass = getModelQuotaTextColorClass(name, percentage);
+  const barColorClass = getModelQuotaBarColorClass(name, percentage, displayName);
+  const textColorClass = getModelQuotaTextColorClass(name, percentage, displayName);
 
   const defaultPeriodLabel =
     effectivePeriodLabel ||

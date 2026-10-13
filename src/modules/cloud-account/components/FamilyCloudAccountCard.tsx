@@ -29,6 +29,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { AccountTierBadge } from '@/modules/cloud-account/components/AccountTierBadge';
 import { QuotaIndicatorTooltip } from '@/modules/cloud-account/components/QuotaIndicatorTooltip';
+import {
+  detectModelGeneration,
+  MODEL_GENERATION_METAS,
+} from '@/modules/cloud-account/components/quota-colors';
 import type { CloudAccountView } from '@/modules/cloud-account/services/cloud-account-view';
 import type { AccountFamilyGroup } from '@/modules/cloud-account/persistence/family-group-store';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
@@ -119,9 +123,16 @@ export function FamilyCloudAccountCard({
     config?.model_visibility || {},
   );
 
-  const compactModels = Object.entries(mergedModelQuotas).sort(
-    (a, b) => b[1].percentage - a[1].percentage,
-  );
+  const compactModels = Object.entries(mergedModelQuotas).sort((a, b) => {
+    if (b[1].percentage !== a[1].percentage) {
+      return b[1].percentage - a[1].percentage;
+    }
+    const orderA =
+      MODEL_GENERATION_METAS[detectModelGeneration(a[0], a[1].display_name)]?.sortOrder ?? 99;
+    const orderB =
+      MODEL_GENERATION_METAS[detectModelGeneration(b[0], b[1].display_name)]?.sortOrder ?? 99;
+    return orderA - orderB;
+  });
   const weeklyQuotaItems = selectWeeklyQuotaItems(quotaAccount.quota?.quota_groups);
 
   const earliest5hResetTime = (() => {
@@ -461,6 +472,7 @@ export function FamilyCloudAccountCard({
                       <QuotaIndicatorTooltip
                         key={modelName}
                         name={modelName}
+                        displayName={info.display_name}
                         percentage={info.percentage}
                         periodType="5h"
                         resetTime={info.resetTime}
@@ -482,6 +494,7 @@ export function FamilyCloudAccountCard({
                       <QuotaIndicatorTooltip
                         key={modelName}
                         name={modelName}
+                        displayName={info.display_name}
                         percentage={info.percentage}
                         periodType="5h"
                         resetTime={info.resetTime}
@@ -829,6 +842,7 @@ export function FamilyCloudAccountCard({
               <QuotaIndicatorTooltip
                 key={name}
                 name={name}
+                displayName={quota.display_name}
                 percentage={quota.percentage}
                 periodType={quotaWindow === 'weekly' ? 'weekly' : '5h'}
                 resetTime={quota.resetTime}

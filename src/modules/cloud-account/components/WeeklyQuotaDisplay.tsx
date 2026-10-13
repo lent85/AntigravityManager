@@ -16,6 +16,8 @@ import {
 } from '@/modules/cloud-account/utils/quota-display';
 
 import {
+  getModelQuotaBarColorClass,
+  getModelQuotaTextColorClass,
   getQuotaBarColorClassByPercentage,
   getQuotaTextColorClassByPercentage,
 } from '@/modules/cloud-account/components/quota-colors';
@@ -81,7 +83,7 @@ export function WeeklyQuotaDisplay({
                       <div
                         className={cn(
                           'h-full rounded-full transition-all duration-300',
-                          getQuotaBarColorClassByPercentage(item.percentage),
+                          getModelQuotaBarColorClass(item.groupName || item.bucketLabel, item.percentage),
                         )}
                         style={{ width: `${clampQuotaPercentage(item.percentage)}%` }}
                       />
@@ -137,7 +139,7 @@ export function WeeklyQuotaDisplay({
                 <span
                   className={cn(
                     'font-mono text-xs font-bold',
-                    getQuotaTextColorClassByPercentage(item.percentage),
+                    getModelQuotaTextColorClass(item.groupName || item.bucketLabel, item.percentage),
                   )}
                 >
                   {item.percentage}%
@@ -147,7 +149,7 @@ export function WeeklyQuotaDisplay({
                 <div
                   className={cn(
                     'h-full rounded-full transition-all duration-300',
-                    getQuotaBarColorClassByPercentage(item.percentage),
+                    getModelQuotaBarColorClass(item.groupName || item.bucketLabel, item.percentage),
                   )}
                   style={{ width: `${clampQuotaPercentage(item.percentage)}%` }}
                 />

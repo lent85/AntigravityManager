@@ -9,6 +9,8 @@ import {
   getQuotaStatus,
 } from '@/modules/cloud-account/utils/quota-display';
 import {
+  getModelQuotaBarColorClass,
+  getModelQuotaTextColorClass,
   getQuotaBarColorClassByPercentage,
   getQuotaTextColorClassByPercentage,
 } from './quota-colors';
@@ -77,7 +79,7 @@ export function DetailedQuotaDisplay({
                       <div className="mb-1 flex justify-between gap-2 text-xs">
                         <span className="font-medium">{label}</span>
                         <span
-                          className={getQuotaTextColorClassByPercentage(percentage)}
+                          className={getModelQuotaTextColorClass(group.display_name || label, percentage)}
                         >
                           {percentage}%
                         </span>
@@ -91,7 +93,7 @@ export function DetailedQuotaDisplay({
                         className="bg-muted h-1.5 overflow-hidden rounded-full"
                       >
                         <div
-                          className={`h-full rounded-full transition-all duration-300 ${getQuotaBarColorClassByPercentage(percentage)}`}
+                          className={`h-full rounded-full transition-all duration-300 ${getModelQuotaBarColorClass(group.display_name || label, percentage)}`}
                           style={{ width: `${clampQuotaPercentage(percentage)}%` }}
                         />
                       </div>
