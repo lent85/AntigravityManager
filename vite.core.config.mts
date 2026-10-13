@@ -16,6 +16,7 @@ export default defineConfig({
     },
   ],
   resolve: {
+    preserveSymlinks: true,
     alias: {
       '@': path.resolve(root, 'src'),
       kafkajs: path.resolve(root, 'src/mocks/empty.ts'),

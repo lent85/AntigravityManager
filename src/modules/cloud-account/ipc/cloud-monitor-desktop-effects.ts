@@ -3,7 +3,9 @@ import { getDesktopPreferencesLanguage } from '@/modules/config/ipc/desktop-pref
 import type { AccountOwnerEventDraft } from '../services/account-owner-events.schema';
 import type { CloudAccountView } from '../services/cloud-account-view';
 import { updateTrayMenu } from '@/modules/app-shell/ipc/tray/handler';
-import { Notification } from 'electron';
+import { BrowserWindow, Notification } from 'electron';
+import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
+import { IPC_CHANNELS } from '@/shared/constants';
 import type { CloudAccount } from '../types';
 import { CloudMonitorService } from '../services/CloudMonitorService';
 import { AutoSwitchService } from '../services/AutoSwitchService';
@@ -110,17 +112,46 @@ function showQuotaAlerts(accounts: CloudAccount[]): void {
   }
 }
 
-function showAutoSwitch(email: string): void {
-  new Notification({
-    title: 'Antigravity Manager: Auto-Switch',
-    body: `Switched account to ${email} due to quota limit. Reopen IDE and type "continue" if needed!`,
-  }).show();
+function showAutoSwitch(
+  email: string,
+  target?: AntigravityAppTarget,
+  isNoRestart?: boolean,
+): void {
+  const targetLabel =
+    target === 'agy' ? 'CLI' : target === 'ide' ? 'IDE' : 'App (Classic)';
+  if (isNoRestart) {
+    new Notification({
+      title: `Antigravity Manager: Auto-Switch (${targetLabel})`,
+      body: `Switched to ${email} (Live sync, no restart). Token updated in credential store.`,
+    }).show();
+  } else {
+    new Notification({
+      title: 'Antigravity Manager: Auto-Switch',
+      body: `Switched account to ${email} due to quota limit. Reopen IDE and type "continue" if needed!`,
+    }).show();
+  }
 }
 
 export function configureDesktopCloudMonitorEffects(): void {
   CloudMonitorService.configureEffects({ onQuotaUpdated: showQuotaAlerts });
+  CloudMonitorService.setSyncStatusBroadcaster((accountId) => {
+    try {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send(IPC_CHANNELS.ACCOUNT_SYNC_STATUS, { accountId });
+        }
+      }
+    } catch {
+      // Best-effort window broadcast
+    }
+  });
   AutoSwitchService.configureEffects({
     switchAccount: switchCloudAccountForDesktop,
-    onSwitched: (_accountId, email) => showAutoSwitch(email),
+    markActiveAccount: async (accountId, target) => {
+      const { markActiveAccount } = await import('@/modules/cloud-account/ipc/handler');
+      await markActiveAccount(accountId, target);
+    },
+    onSwitched: (_accountId, email, target, isNoRestart) =>
+      showAutoSwitch(email, target, isNoRestart),
   });
 }

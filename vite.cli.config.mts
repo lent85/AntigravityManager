@@ -13,7 +13,10 @@ export default defineConfig({
       },
     },
   ],
-  resolve: { alias: { '@': path.resolve(process.cwd(), 'src') } },
+  resolve: {
+    preserveSymlinks: true,
+    alias: { '@': path.resolve(process.cwd(), 'src') },
+  },
   build: {
     target: 'node22',
     ssr: 'src/cli/main.ts',

@@ -1,4 +1,3 @@
-import { Notification } from 'electron';
 import { z } from 'zod';
 import { CloudAccountRepo } from '@/modules/cloud-account/persistence/cloudHandler';
 import { CloudAccountSettingsStore } from '@/modules/cloud-account/persistence/cloud-account-settings-store';
@@ -34,13 +33,29 @@ export class AutoSwitchService {
   private static effects = {
     switchAccount: (accountId: string, target?: AntigravityAppTarget) =>
       switchCloudAccountCore(accountId, target, { presentationReason: 'auto' }),
-    onSwitched: (_accountId: string, _email: string, _target?: AntigravityAppTarget): void => {},
+    markActiveAccount: (_accountId: string, _target?: AntigravityAppTarget): Promise<void> =>
+      Promise.resolve(),
+    onSwitched: (
+      _accountId: string,
+      _email: string,
+      _target?: AntigravityAppTarget,
+      _isNoRestart?: boolean,
+    ): void => {},
   };
   static configureEffects(effects: {
     switchAccount(accountId: string, target?: AntigravityAppTarget): Promise<void>;
-    onSwitched(accountId: string, email: string, target?: AntigravityAppTarget): void;
+    markActiveAccount?(accountId: string, target?: AntigravityAppTarget): Promise<void>;
+    onSwitched(
+      accountId: string,
+      email: string,
+      target?: AntigravityAppTarget,
+      isNoRestart?: boolean,
+    ): void;
   }): void {
-    this.effects = effects;
+    this.effects = {
+      ...this.effects,
+      ...effects,
+    };
   }
   /**
    * Checks if auto switch is enabled for a specific target or globally.
@@ -321,14 +336,9 @@ export class AutoSwitchService {
 
         if (isNoRestart && appTarget !== 'agy') {
           // Perform live sync without restarting GUI process
-          const { markActiveAccount } = await import('@/modules/cloud-account/ipc/handler');
-          await markActiveAccount(nextAccount.id, appTarget);
-
+          await this.effects.markActiveAccount(nextAccount.id, appTarget);
           try {
-            new Notification({
-              title: `Antigravity Manager: Auto-Switch (${targetLabel})`,
-              body: `Switched to ${nextAccount.email} (Live sync, no restart). Token updated in credential store.`,
-            }).show();
+            this.effects.onSwitched(nextAccount.id, nextAccount.email, appTarget, true);
           } catch (err) {
             logger.error('Failed to show auto-switch desktop notification', err);
           }
@@ -338,7 +348,7 @@ export class AutoSwitchService {
 
           // Show Desktop Notification to alert the user of the switch
           try {
-            this.effects.onSwitched(nextAccount.id, nextAccount.email, appTarget);
+            this.effects.onSwitched(nextAccount.id, nextAccount.email, appTarget, false);
           } catch (err) {
             logger.error('Failed to show auto-switch desktop notification', err);
           }

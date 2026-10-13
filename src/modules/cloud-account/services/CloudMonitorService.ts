@@ -1,5 +1,4 @@
 import fs from 'fs';
-import { BrowserWindow, Notification } from 'electron';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { CloudAccountRepo } from '@/modules/cloud-account/persistence/cloudHandler';
@@ -226,17 +225,6 @@ export class CloudMonitorService {
       } catch (err) {
         logger.warn('Failed to broadcast sync status', err);
       }
-      return;
-    }
-
-    try {
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) {
-          win.webContents.send(IPC_CHANNELS.ACCOUNT_SYNC_STATUS, { accountId });
-        }
-      }
-    } catch (err) {
-      logger.warn('Failed to broadcast account sync status', err);
     }
   }
 
