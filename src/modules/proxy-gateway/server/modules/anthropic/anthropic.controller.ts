@@ -9,10 +9,10 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { FastifyReply, FastifyRequest } from 'fastify';
+import { FastifyReply, type FastifyRequest } from 'fastify';
 import {
   AnthropicChatRequest,
-  AnthropicChatResponse,
+  type AnthropicChatResponse,
 } from '@/modules/proxy-gateway/server/common/interfaces/request-interfaces';
 import { BaseProxyController } from '@/modules/proxy-gateway/server/common/base-proxy.controller';
 import { ProxyGuard } from '@/modules/proxy-gateway/server/guards/proxy.guard';
@@ -57,7 +57,10 @@ export class AnthropicController extends BaseProxyController {
   ) {
     try {
       const request = await this.expandFileHandles(body);
-      const result = await this.proxyService.handleAnthropicMessages(request);
+      const result = await this.proxyService.handleAnthropicMessages(
+        request,
+        req ? { headers: req.headers, url: req.url } : undefined,
+      );
 
       if (body.stream && this.isObservableLike(result)) {
         this.writeSseResponse(res, result, req, body.model);

@@ -6,6 +6,7 @@ import { AnthropicController } from '@/modules/proxy-gateway/server/modules/anth
 import { proxyModelAvailabilityStore } from '@/modules/proxy-gateway/server/shared/services/model-availability.service';
 import { UpstreamRequestError } from '@/modules/proxy-gateway/server/common/exceptions/upstream-request.exception';
 import { SignatureStore } from '@/modules/proxy-gateway/antigravity/SignatureStore';
+import { resolveAnthropicSessionScope } from '@/modules/proxy-gateway/server/common/signature-session-scope';
 import {
   collect,
   createAccount,
@@ -187,6 +188,113 @@ describe('real request path, Anthropic messages surface', () => {
     });
   });
 
+  it('replaces an unfinished thinking-only unary response with the streamed tool turn', async () => {
+    const upstream = createUpstream({
+      generate: {
+        candidates: [
+          { content: { role: 'model', parts: [{ thought: true, text: 'unfinished reasoning' }] } },
+        ],
+      },
+      streamFrames: [
+        geminiStreamFrame({
+          candidates: [
+            {
+              content: {
+                role: 'model',
+                parts: [
+                  {
+                    functionCall: {
+                      id: 'controlled-tool-1',
+                      name: 'probe_read',
+                      args: { file_path: 'C:/controlled/read.txt' },
+                    },
+                  },
+                ],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        }),
+      ],
+    });
+    const { anthropicService } = createGateway(upstream, createLease([createAccount('acc-1')]));
+    const response = await anthropicService.handleAnthropicMessages({
+      model: 'gemini-3.1-pro-high',
+      max_tokens: 128,
+      stream: false,
+      messages: [{ role: 'user', content: 'Read the controlled file.' }],
+      tools: [
+        {
+          name: 'probe_read',
+          input_schema: {
+            type: 'object',
+            properties: { file_path: { type: 'string' } },
+            required: ['file_path'],
+          },
+        },
+      ],
+      tool_choice: { type: 'tool', name: 'probe_read' },
+    });
+    expect(response).toMatchObject({
+      content: [
+        {
+          type: 'tool_use',
+          id: 'controlled-tool-1',
+          name: 'probe_read',
+          input: { file_path: 'C:/controlled/read.txt' },
+        },
+      ],
+      stop_reason: 'tool_use',
+    });
+    expect(upstream.calls.map((call) => call.kind)).toEqual(['generate', 'stream']);
+  });
+
+  it('fails when both unary and streamed responses remain unfinished thinking', async () => {
+    const unfinished = {
+      candidates: [
+        { content: { role: 'model', parts: [{ thought: true, text: 'unfinished reasoning' }] } },
+      ],
+    };
+    const upstream = createUpstream({
+      generate: unfinished,
+      streamFrames: [geminiStreamFrame(unfinished)],
+    });
+    const { anthropicService } = createGateway(upstream, createLease([createAccount('acc-1')]));
+    await expect(
+      anthropicService.handleAnthropicMessages({
+        model: 'gemini-3.1-pro-high',
+        max_tokens: 128,
+        stream: false,
+        messages: [{ role: 'user', content: 'Reply.' }],
+      }),
+    ).rejects.toThrow('Upstream returned incomplete thinking-only response');
+  });
+
+  it('preserves a thinking-only response with an explicit token-limit finish', async () => {
+    const upstream = createUpstream({
+      generate: {
+        candidates: [
+          {
+            content: { role: 'model', parts: [{ thought: true, text: 'limited reasoning' }] },
+            finishReason: 'MAX_TOKENS',
+          },
+        ],
+      },
+    });
+    const { anthropicService } = createGateway(upstream, createLease([createAccount('acc-1')]));
+    const response = await anthropicService.handleAnthropicMessages({
+      model: 'gemini-3.1-pro-high',
+      max_tokens: 128,
+      stream: false,
+      messages: [{ role: 'user', content: 'Reply.' }],
+    });
+    expect(response).toMatchObject({
+      content: [{ type: 'thinking', thinking: 'limited reasoning' }],
+      stop_reason: 'max_tokens',
+    });
+    expect(upstream.calls.map((call) => call.kind)).toEqual(['generate']);
+  });
+
   it('returns a minimal non-empty response when both direct and streamed upstream responses are empty', async () => {
     const upstream = createUpstream({ generate: {}, streamFrames: [] });
     const lease = createLease([createAccount('acc-1')]);
@@ -319,82 +427,116 @@ describe('real request path, Anthropic messages surface', () => {
     });
   });
 
-  it('repairs an invalid thought signature once on the same account and physical model', async () => {
-    let attempt = 0;
-    const upstream = createUpstream({
-      generate: () => {
-        attempt += 1;
-        if (attempt === 1) {
-          throw new UpstreamRequestError({
-            message: 'Invalid thought signature.',
-            status: 400,
-          });
-        }
-        return geminiTextResponse('recovered answer');
-      },
-    });
-    const lease = createLease([createAccount('acc-1'), createAccount('acc-2')]);
-    const { anthropicService } = createGateway(upstream, lease);
-
-    const response = await anthropicService.handleAnthropicMessages({
-      max_tokens: 128,
-      messages: [
-        {
-          role: 'assistant',
-          content: [
-            {
-              type: 'thinking',
-              thinking: 'preserved reasoning',
-              signature: 'corrupted signature',
-            },
-            {
-              type: 'tool_use',
-              id: 'call_1',
-              name: 'lookup',
-              input: {},
-            },
-          ],
+  it.each([
+    { message: 'Invalid thought signature.', body: undefined },
+    {
+      message: 'Bad request',
+      body: JSON.stringify({
+        error: {
+          code: 400,
+          status: 'INVALID_ARGUMENT',
+          message: JSON.stringify({
+            error: { message: 'messages.1.content.0: Invalid `signature` in `thinking` block' },
+          }),
         },
-        {
-          role: 'user',
-          content: 'continue',
+      }),
+    },
+  ])(
+    'repairs a signature failure once on the same account and physical model: $message',
+    async (error) => {
+      let attempt = 0;
+      const upstream = createUpstream({
+        generate: () => {
+          attempt += 1;
+          if (attempt === 1) {
+            throw new UpstreamRequestError({
+              ...error,
+              status: 400,
+            });
+          }
+          return geminiTextResponse('recovered answer');
         },
-      ],
-      model: 'claude-sonnet-4-5',
-      stream: false,
-    } as never);
+      });
+      const lease = createLease([createAccount('acc-1'), createAccount('acc-2')]);
+      const { anthropicService } = createGateway(upstream, lease);
 
-    expect(response).toMatchObject({
-      content: [{ text: 'recovered answer', type: 'text' }],
-    });
-    expect(upstream.calls).toHaveLength(2);
-    expect(upstream.calls.map((call) => call.accessToken)).toEqual([
-      'access-acc-1',
-      'access-acc-1',
-    ]);
-    expect(upstream.calls.map((call) => call.body.model)).toEqual([
-      'claude-sonnet-4-6-thinking',
-      'claude-sonnet-4-6-thinking',
-    ]);
-    expect(lease.penalties).toEqual([]);
-    expect(upstream.calls[0]?.body.request.contents[0]?.parts[0]).toMatchObject({
-      thought: true,
-      thoughtSignature: 'corrupted signature',
-    });
-    expect(upstream.calls[1]?.body.request.contents[0]?.parts[0]).toEqual({
-      text: 'preserved reasoning',
-    });
-    expect(upstream.calls[1]?.body.request.contents[1]?.parts[0]?.text).toContain(
-      '[Tool call was interrupted by user.]',
-    );
-    expect(upstream.calls[1]?.body.request.contents[2]?.parts[0]?.text).toContain(
-      '[System Recovery]',
-    );
-  });
+      const response = await anthropicService.handleAnthropicMessages({
+        max_tokens: 128,
+        messages: [
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'thinking',
+                thinking: 'preserved reasoning',
+                signature: 'corrupted signature',
+              },
+              {
+                type: 'tool_use',
+                id: 'call_1',
+                name: 'lookup',
+                input: {},
+              },
+            ],
+          },
+          {
+            role: 'user',
+            content: 'continue',
+          },
+        ],
+        model: 'claude-sonnet-4-5',
+        stream: false,
+      } as never);
+
+      expect(response).toMatchObject({
+        content: [{ text: 'recovered answer', type: 'text' }],
+      });
+      expect(upstream.calls).toHaveLength(2);
+      expect(upstream.calls.map((call) => call.accessToken)).toEqual([
+        'access-acc-1',
+        'access-acc-1',
+      ]);
+      expect(upstream.calls.map((call) => call.body.model)).toEqual([
+        'claude-sonnet-4-6-thinking',
+        'claude-sonnet-4-6-thinking',
+      ]);
+      expect(upstream.generateInternal.mock.calls.map((call) => call[5])).toEqual([
+        { thoughtReplay: 'restore' },
+        { thoughtReplay: 'skip' },
+      ]);
+      expect(lease.penalties).toEqual([]);
+      expect(upstream.calls[0]?.body.request.contents[0]?.parts[0]).toMatchObject({
+        thought: true,
+        thoughtSignature: 'corrupted signature',
+      });
+      expect(upstream.calls[1]?.body.request.contents[0]?.parts[0]).toEqual({
+        text: 'preserved reasoning',
+      });
+      expect(upstream.calls[1]?.body.request.contents[1]?.parts[0]?.text).toContain(
+        '[Tool call was interrupted by user.]',
+      );
+      expect(upstream.calls[1]?.body.request.contents[2]?.parts[0]?.text).toContain(
+        '[System Recovery]',
+      );
+    },
+  );
 
   it('binds signature provenance to the physical model after a web-search remap', async () => {
     const sessionId = 'anthropic-real-path-remap';
-    const sessionKey = `anthropic:${sessionId}`;
+    const request = {
+      max_tokens: 128,
+      metadata: { user_id: sessionId },
+      messages: [
+        {
+          role: 'assistant',
+          content: [{ type: 'tool_use' as const, id: 'call_old', name: 'lookup', input: {} }],
+        },
+      ],
+      model: 'gpt-oss-120b-medium',
+      stream: false,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+    };
+    const sessionKey = resolveAnthropicSessionScope(request).cacheKey;
     const staleSignature = 'gpt-oss-signature'.repeat(4);
     const returnedSignature = 'gemini-signature'.repeat(4);
     SignatureStore.store({
@@ -426,19 +568,7 @@ describe('real request path, Anthropic messages surface', () => {
     const lease = createLease([createAccount('acc-1')]);
     const { anthropicService } = createGateway(upstream, lease);
 
-    await anthropicService.handleAnthropicMessages({
-      max_tokens: 128,
-      metadata: { user_id: sessionId },
-      messages: [
-        {
-          role: 'assistant',
-          content: [{ type: 'tool_use', id: 'call_old', name: 'lookup', input: {} }],
-        },
-      ],
-      model: 'gpt-oss-120b-medium',
-      stream: false,
-      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-    } as never);
+    await anthropicService.handleAnthropicMessages(request);
 
     const body = upstream.calls[0]?.body;
     const historicalToolCall = body?.request.contents[0]?.parts.find((part) => part.functionCall);
@@ -475,6 +605,10 @@ describe('real request path, Anthropic messages surface', () => {
     ).rejects.toBe(signatureError);
 
     expect(upstream.calls).toHaveLength(2);
+    expect(upstream.generateInternal.mock.calls.map((call) => call[5])).toEqual([
+      { thoughtReplay: 'restore' },
+      { thoughtReplay: 'skip' },
+    ]);
     expect(upstream.calls.every((call) => call.accessToken === 'access-acc-1')).toBe(true);
     expect(lease.penalties).toEqual([]);
   });

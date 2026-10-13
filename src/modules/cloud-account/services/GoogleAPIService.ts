@@ -1,14 +1,17 @@
 import { z } from 'zod';
+import { setTimeout as delay } from 'node:timers/promises';
 import axios, { type AxiosProxyConfig, type AxiosRequestConfig } from 'axios';
 import { ConfigManager } from '@/modules/config/ipc/manager';
-import { AuthServer } from '@/modules/cloud-account/ipc/authServer';
+import {
+  assertValidUpstreamProxyConfig,
+  UpstreamProxyConfigurationError,
+} from '@/modules/config/upstream-proxy.schema';
 import {
   buildUserAgent,
   FALLBACK_VERSION,
   resolveLocalInstalledVersion,
 } from '@/modules/proxy-gateway/server/common/utils/request-user-agent';
 import { isEmpty, isNumber, isString } from 'lodash-es';
-import { v4 } from 'uuid';
 import { logger } from '@/shared/logging/logger';
 import {
   type OAuthClientDescriptor,
@@ -233,22 +236,18 @@ async function requestGoogleApi(
   };
 }
 
-function waitForAbortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+async function waitForAbortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) {
-    return Promise.reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+    throw signal.reason ?? new DOMException('Aborted', 'AbortError');
   }
-
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      signal?.removeEventListener('abort', handleAbort);
-      resolve();
-    }, ms);
-    const handleAbort = () => {
-      clearTimeout(timeout);
-      reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
-    };
-    signal?.addEventListener('abort', handleAbort, { once: true });
-  });
+  try {
+    await delay(ms, undefined, { signal });
+  } catch (error) {
+    if (signal?.aborted) {
+      throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+    }
+    throw error;
+  }
 }
 
 // --- Types ---
@@ -449,12 +448,6 @@ function parseQuotaSummaryResponse(payload: unknown): QuotaSummaryResponse {
   return parsed.data;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
 function buildInternalApiHeaders(accessToken: string): Record<string, string> {
   const discoveryVersion = resolveLocalInstalledVersion() ?? FALLBACK_VERSION;
   return {
@@ -630,9 +623,7 @@ export class GoogleAPIService {
     try {
       const config = ConfigManager.loadConfig();
       if (config.proxy?.upstream_proxy?.enabled) {
-        if (!config.proxy.upstream_proxy.url) {
-          throw new Error('Upstream proxy is enabled but URL is not configured');
-        }
+        assertValidUpstreamProxyConfig(config.proxy.upstream_proxy);
         if (proxyTraceEnabled) {
           logger.info('[GoogleAPIService] Proxy source: config.proxy.upstream_proxy.url');
         }
@@ -641,6 +632,9 @@ export class GoogleAPIService {
         };
       }
     } catch (e) {
+      if (e instanceof UpstreamProxyConfigurationError) {
+        throw e;
+      }
       logger.error('[GoogleAPIService] Proxy configuration error', e);
       throw e;
     }
@@ -680,9 +674,12 @@ export class GoogleAPIService {
   /**
    * Generates the OAuth2 authorization URL.
    */
-  static getAuthUrl(oauthClientKey?: string): string {
+  static getAuthUrl(
+    oauthClientKey: string | undefined,
+    session: { redirectUri: string; state: string },
+  ): string {
+    assertValidUpstreamProxyConfig(ConfigManager.loadConfig().proxy.upstream_proxy);
     const oauthClient = OAuthClientRegistryService.selectAuthClient(oauthClientKey);
-    const redirectUri = AuthServer.getRedirectUri();
 
     const params = new URLSearchParams({
       access_type: 'offline',
@@ -690,9 +687,9 @@ export class GoogleAPIService {
       prompt: 'consent',
       response_type: 'code',
       client_id: oauthClient.client_id,
-      redirect_uri: redirectUri,
+      redirect_uri: session.redirectUri,
       include_granted_scopes: 'true',
-      state: v4(),
+      state: session.state,
     });
 
     return `${URLS.AUTH}?${params.toString()}`;
@@ -703,10 +700,10 @@ export class GoogleAPIService {
    */
   static async exchangeCode(
     code: string,
-    proxyUrl?: string,
-    preferredClientKey?: string,
+    proxyUrl: string | undefined,
+    preferredClientKey: string | undefined,
+    sessionRedirectUri: string,
   ): Promise<TokenResponse> {
-    const redirectUri = AuthServer.getRedirectUri();
     const candidates = OAuthClientRegistryService.getCandidateClients(preferredClientKey);
     if (candidates.length === 0) {
       throw new Error('No OAuth clients configured');
@@ -719,7 +716,7 @@ export class GoogleAPIService {
         client_id: client.client_id,
         client_secret: client.client_secret,
         code,
-        redirect_uri: redirectUri,
+        redirect_uri: sessionRedirectUri,
         grant_type: 'authorization_code',
       });
 
@@ -742,13 +739,13 @@ export class GoogleAPIService {
           ...axiosOptions,
         });
       } catch (error) {
-        logger.error(`[GoogleAPIService] Axios error for client=${client.key}:`, error);
+        logger.error(`[GoogleAPIService] Token exchange transport failed for client=${client.key}`);
         if (isTimedOutHttpRequest(error, requestSignal.timeoutSignal)) {
           throw new Error(
             'Token exchange timed out. Please check your network connection and try again.',
           );
         }
-        throw error;
+        throw new Error('Token exchange transport failed');
       }
 
       logger.info(
@@ -760,7 +757,9 @@ export class GoogleAPIService {
       }
 
       const text = responseDataToText(response.data);
-      attemptErrors.push(`${client.key} => ${text}`);
+      attemptErrors.push(
+        `${client.key} => ${extractOAuthErrorCode(text) ?? `HTTP ${response.status}`}`,
+      );
       if (isClientMismatchError(text)) {
         logger.warn(
           `[GoogleAPIService] Token exchange failed for OAuth client '${client.key}', trying next client`,
@@ -768,7 +767,9 @@ export class GoogleAPIService {
         continue;
       }
 
-      throw new Error(`Token exchange failed for client [${client.key}]: ${text}`);
+      throw new Error(
+        `Token exchange failed for client [${client.key}]: ${extractOAuthErrorCode(text) ?? `HTTP ${response.status}`}`,
+      );
     }
 
     throw new Error(`Token exchange failed for all OAuth clients: ${attemptErrors.join(' | ')}`);
@@ -1107,7 +1108,7 @@ export class GoogleAPIService {
               );
               lastError = new Error(errorMsg);
 
-              await sleep(1000);
+              await delay(1000);
               break;
             }
 
@@ -1145,7 +1146,7 @@ export class GoogleAPIService {
             logger.warn(
               `[GoogleAPIService] Quota API request failed at ${endpoint}: ${errorMsg}. Falling back to next endpoint`,
             );
-            await sleep(1000);
+            await delay(1000);
             break;
           }
 

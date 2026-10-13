@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
-import type { ProxyConfig } from '@/modules/config/types';
+import type { ServiceConfigSnapshot } from '@/modules/config/service-config.schema';
+type ProxyConfig = ServiceConfigSnapshot['proxy'];
 import { Globe, ExternalLink, Copy, CheckCircle2, Shield, Network, Terminal } from 'lucide-react';
 
 interface ProxyWebPortalTabProps {

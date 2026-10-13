@@ -37,7 +37,7 @@ export function ClientToolsPage() {
 
   const exampleModels = useMemo(() => buildProxyExampleModels(cloudAccounts), [cloudAccounts]);
   const defaultPort = appConfig?.proxy?.port || 8045;
-  const defaultApiKey = appConfig?.proxy?.api_key || '';
+  const defaultApiKey = appConfig?.proxy?.api_keys?.[0]?.key || '';
   const configuredApiKeys = useMemo(() => appConfig?.proxy?.api_keys || [], [appConfig]);
 
   // Query actual gateway running status

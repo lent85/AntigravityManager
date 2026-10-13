@@ -1,36 +1,34 @@
 import {
+  AccountSelectionProvider,
+  useAccountSelectionStore,
+  useAccountSelection,
+} from '../stores/AccountSelectionProvider';
+import { useCloudAccountBatchActions } from '../hooks/useCloudAccountBatchActions';
+import {
   useCloudAccounts,
   useWeeklyWarmupConfig,
-  useCloudAccountSecurityStatus,
   useRefreshQuota,
   useDeleteCloudAccount,
-  useAddGoogleAccount,
   useSwitchCloudAccount,
+  useMarkActiveAccount,
+  useBatchSetCloudAccountsPaused,
   useAutoSwitchEnabled,
   useSetAutoSwitchEnabled,
   useForcePollCloudMonitor,
-  useSyncLocalAccount,
-  useMarkActiveAccount,
-  useDetectActiveAccounts,
-  useOAuthClients,
-  useSetActiveOAuthClient,
-  startAuthFlow,
-  useExportCloudAccounts,
-  useImportCloudAccounts,
-  useEmulationState,
-  useSyncingAccountId,
-  useBatchSetCloudAccountsPaused,
 } from '@/modules/cloud-account/hooks/useCloudAccounts';
 import {
   useFamilyGroups,
   useUnlinkAccountFromFamily,
 } from '@/modules/cloud-account/hooks/useFamilyGroups';
 import { IdentityProfileDialog } from '@/modules/identity-profile/components/IdentityProfileDialog';
-import { CloudAccount } from '@/modules/cloud-account/types';
+import { FamilyGroupDialog } from '@/modules/cloud-account/components/FamilyGroupDialog';
+import type { CloudAccountView } from '@/modules/cloud-account/services/cloud-account-view';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
 import { useToast } from '@/components/ui/use-toast';
-import { useState, useEffect, useRef, useMemo, useCallback, type ChangeEvent } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
+import { ipc } from '@/ipc/manager';
 import { getLocalizedErrorMessage } from '@/shared/utils/errorMessages';
 import { useAppConfig } from '@/modules/config/hooks/useAppConfig';
 import { isNumber } from 'lodash-es';
@@ -39,7 +37,7 @@ import {
   type AccountSortKey,
 } from '@/modules/cloud-account/utils/quota-display';
 import { ACCOUNT_TIER_UNKNOWN_KEY } from '@/modules/cloud-account/utils/account-tier-filter';
-import { shouldAutoSubmitGoogleAuthCode } from '@/modules/cloud-account/utils/googleAuthSubmission';
+import { readCloudAccountSwitchErrorCode } from '@/modules/cloud-account/services/cloud-account-switch.schema';
 import { useCloudAccountListView } from '@/modules/cloud-account/hooks/useCloudAccountListView';
 import type { GridLayout } from '@/modules/cloud-account/components/CloudAccountList.constants';
 import { CloudAccountBatchActionBar } from '@/modules/cloud-account/components/CloudAccountBatchActionBar';
@@ -52,18 +50,27 @@ import { CloudAccountListSummary } from '@/modules/cloud-account/components/Clou
 import { CloudAccountToolbar } from '@/modules/cloud-account/components/CloudAccountToolbar';
 import type { QuotaWindow } from '@/modules/cloud-account/utils/quota-groups';
 import {
+  readQuotaGroupVisibility,
+  saveQuotaGroupVisibility,
+} from '@/modules/cloud-account/utils/quota-group-visibility';
+import {
   readQuotaWindowPreference,
   saveQuotaWindowPreference,
 } from '@/modules/cloud-account/utils/quota-window-preference';
-import { EmulationManagementDialog } from '@/modules/cloud-account/components/EmulationManagementDialog';
-import { FamilyGroupDialog } from '@/modules/cloud-account/components/FamilyGroupDialog';
+import { getSelectedVisibleAccountIds } from '../stores/account-selection';
 
 export function CloudAccountList() {
+  return (
+    <AccountSelectionProvider>
+      <CloudAccountListContent />
+    </AccountSelectionProvider>
+  );
+}
+
+function CloudAccountListContent() {
   const { t } = useTranslation();
   const { data: warmupConfig } = useWeeklyWarmupConfig();
-  const { data: emulationState } = useEmulationState(3000);
-  const backgroundSyncingAccountId = useSyncingAccountId();
-  // Read local snapshots after background warmups; when emulation is enabled, poll faster (3s) to show live quota drain
+  // Read local snapshots after background warmups; this does not request provider quota.
   const {
     data: accounts,
     isLoading,
@@ -71,31 +78,22 @@ export function CloudAccountList() {
     error,
     errorUpdatedAt,
     refetch,
-  } = useCloudAccounts(
-    emulationState?.enabled ? 3000 : warmupConfig?.enabled ? 60_000 : false,
-  );
-  const { data: securityStatus } = useCloudAccountSecurityStatus();
+  } = useCloudAccounts(warmupConfig?.enabled ? 60_000 : false);
   const { config, saveConfig } = useAppConfig();
   const refreshMutation = useRefreshQuota();
   const deleteMutation = useDeleteCloudAccount();
-  const batchSetPausedMutation = useBatchSetCloudAccountsPaused();
-  const addMutation = useAddGoogleAccount();
   const switchMutation = useSwitchCloudAccount();
   const markActiveMutation = useMarkActiveAccount();
-  const detectMutation = useDetectActiveAccounts();
-  const syncMutation = useSyncLocalAccount();
+  const batchSetPausedMutation = useBatchSetCloudAccountsPaused();
+  const { data: familyGroups = [] } = useFamilyGroups();
+  const unlinkMutation = useUnlinkAccountFromFamily();
 
   const { data: autoSwitchEnabled, isLoading: isSettingsLoading } = useAutoSwitchEnabled();
   const setAutoSwitchMutation = useSetAutoSwitchEnabled();
   const forcePollMutation = useForcePollCloudMonitor();
-  const { data: oauthClients = [], isLoading: isOAuthClientsLoading } = useOAuthClients();
-  const setActiveOAuthClientMutation = useSetActiveOAuthClient();
-  const { data: familyGroups = [] } = useFamilyGroups();
-  const unlinkFamilyMutation = useUnlinkAccountFromFamily();
 
   const { toast } = useToast();
   const lastLoadErrorToastAtRef = useRef<number>(0);
-  const lastSubmittedAuthCodeRef = useRef<string | null>(null);
 
   const gridLayout: GridLayout = (config?.grid_layout as GridLayout) || 'auto';
   const [quotaWindow, setQuotaWindow] = useState<QuotaWindow>(() =>
@@ -106,6 +104,13 @@ export function CloudAccountList() {
     saveQuotaWindowPreference(() => window.localStorage, quotaWindow);
   }, [quotaWindow]);
 
+  const [quotaGroupVisibility, setQuotaGroupVisibility] = useState(() =>
+    readQuotaGroupVisibility(() => window.localStorage),
+  );
+  useEffect(() => {
+    saveQuotaGroupVisibility(() => window.localStorage, quotaGroupVisibility);
+  }, [quotaGroupVisibility]);
+
   const updateGridLayout = async (layout: GridLayout) => {
     if (config) {
       await saveConfig({ ...config, grid_layout: layout });
@@ -113,7 +118,6 @@ export function CloudAccountList() {
   };
 
   const currentSort: AccountSortKey = (config?.account_sort as AccountSortKey) || 'recently-used';
-  const [originFilter, setOriginFilter] = useState<'all' | 'real' | 'emulated'>('all');
 
   const {
     sortedAccounts,
@@ -132,15 +136,110 @@ export function CloudAccountList() {
     claudeQuota,
   } = useCloudAccountListView(accounts, config, currentSort);
 
-  const displayedAccounts = useMemo(() => {
-    if (originFilter === 'real') {
-      return sortedAccounts.filter((account) => !account.is_emulated);
+  const [originFilter, setOriginFilter] = useState<'all' | 'real' | 'emulated'>('all');
+  const filteredByOriginAccounts = useMemo(() => {
+    if (originFilter === 'all') return sortedAccounts;
+    if (originFilter === 'emulated') return sortedAccounts.filter((a) => a.is_emulated);
+    return sortedAccounts.filter((a) => !a.is_emulated);
+  }, [sortedAccounts, originFilter]);
+
+  const selectionStore = useAccountSelectionStore();
+  const { refreshSelectedAccounts, deleteSelectedAccounts } = useCloudAccountBatchActions({
+    visibleAccountIds,
+    refreshMutation,
+    deleteMutation,
+  });
+
+  const [isFamilyDialogOpen, setIsFamilyDialogOpen] = useState(false);
+  const [familyDialogTargetGroupId, setFamilyDialogTargetGroupId] = useState<string | undefined>();
+  const [familyDialogInitialAccountIds, setFamilyDialogInitialAccountIds] = useState<string[]>([]);
+
+  const handleOpenFamilyDialog = (groupIdOrAccountId?: string) => {
+    if (groupIdOrAccountId) {
+      const isGroup = familyGroups.some((g) => g.id === groupIdOrAccountId);
+      if (isGroup) {
+        setFamilyDialogTargetGroupId(groupIdOrAccountId);
+        setFamilyDialogInitialAccountIds([]);
+      } else {
+        setFamilyDialogTargetGroupId(undefined);
+        setFamilyDialogInitialAccountIds([groupIdOrAccountId]);
+      }
+    } else {
+      const ids = getSelectedVisibleAccountIds(
+        selectionStore.getState().selectedIds,
+        visibleAccountIds,
+      );
+      setFamilyDialogTargetGroupId(undefined);
+      setFamilyDialogInitialAccountIds(ids);
     }
-    if (originFilter === 'emulated') {
-      return sortedAccounts.filter((account) => account.is_emulated);
+    setIsFamilyDialogOpen(true);
+  };
+
+  const pauseSelectedAccounts = async () => {
+    const ids = getSelectedVisibleAccountIds(
+      selectionStore.getState().selectedIds,
+      visibleAccountIds,
+    );
+    if (ids.length === 0) return;
+    try {
+      await batchSetPausedMutation.mutateAsync({ accountIds: ids, paused: true });
+      toast({
+        title: t('cloud.toast.batchPauseSuccess', { count: ids.length }),
+      });
+      selectionStore.getState().clear();
+    } catch (error) {
+      toast({
+        title: t('cloud.error.loadFailed'),
+        description: getLocalizedErrorMessage(error, t),
+        variant: 'destructive',
+      });
     }
-    return sortedAccounts;
-  }, [originFilter, sortedAccounts]);
+  };
+
+  const resumeSelectedAccounts = async () => {
+    const ids = getSelectedVisibleAccountIds(
+      selectionStore.getState().selectedIds,
+      visibleAccountIds,
+    );
+    if (ids.length === 0) return;
+    try {
+      await batchSetPausedMutation.mutateAsync({ accountIds: ids, paused: false });
+      toast({
+        title: t('cloud.toast.batchResumeSuccess', { count: ids.length }),
+      });
+      selectionStore.getState().clear();
+    } catch (error) {
+      toast({
+        title: t('cloud.error.loadFailed'),
+        description: getLocalizedErrorMessage(error, t),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleUnlinkSelectedAccounts = async () => {
+    const ids = getSelectedVisibleAccountIds(
+      selectionStore.getState().selectedIds,
+      visibleAccountIds,
+    );
+    for (const id of ids) {
+      await unlinkMutation.mutateAsync(id);
+    }
+    selectionStore.getState().clear();
+  };
+
+  const selectedAccountIdsList = useAccountSelection(
+    (state) => getSelectedVisibleAccountIds(state.selectedIds, visibleAccountIds),
+  );
+  const hasFamilyAccountSelected = selectedAccountIdsList.some((id) =>
+    familyGroups.some((g) => g.accountIds.includes(id)),
+  );
+
+  const { data: backgroundSyncingAccountId } = useQuery({
+    queryKey: ['cloud-account', 'background-sync'],
+    queryFn: () => ipc.client.cloud.getSyncingAccountId(),
+    refetchInterval: 3000,
+  });
 
   const getTierOptionLabel = useCallback(
     (key: string, label: string) => {
@@ -170,112 +269,7 @@ export function CloudAccountList() {
     return t('cloud.tierFilter.selectedCount', { count: effectiveSelectedTierKeys.length });
   }, [effectiveSelectedTierKeys, getTierOptionLabel, hasActiveTierFilter, t, tierOptions]);
 
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [authCode, setAuthCode] = useState('');
-  const [overrideOAuthClientKey, setSelectedOAuthClientKey] = useState<string | null>(null);
-  const selectedOAuthClientKey =
-    overrideOAuthClientKey ?? oauthClients.find((client) => client.is_active)?.key ?? '';
-  const [identityAccount, setIdentityAccount] = useState<CloudAccount | null>(null);
-  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
-  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
-  const [importStrategy, setImportStrategy] = useState<'merge' | 'overwrite' | 'skip-existing'>(
-    'merge',
-  );
-  const [importFileContent, setImportFileContent] = useState<string | null>(null);
-  const [importFileName, setImportFileName] = useState<string>('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const exportMutation = useExportCloudAccounts();
-  const importMutation = useImportCloudAccounts();
-
-  const submitAuthCode = useCallback(
-    (incomingAuthCode?: string) => {
-      const codeToUse = incomingAuthCode || authCode;
-      if (!codeToUse) {
-        return;
-      }
-      lastSubmittedAuthCodeRef.current = codeToUse;
-      addMutation.mutate(
-        {
-          authCode: codeToUse,
-          oauthClientKey:
-            selectedOAuthClientKey || oauthClients.find((client) => client.is_active)?.key,
-        },
-        {
-          onSuccess: () => {
-            setIsAddDialogOpen(false);
-            setAuthCode('');
-            lastSubmittedAuthCodeRef.current = null;
-            toast({ title: t('cloud.toast.addSuccess') });
-          },
-          onError: (err) => {
-            toast({
-              title: t('cloud.toast.addFailed.title'),
-              description: getLocalizedErrorMessage(err, t),
-              variant: 'destructive',
-            });
-          },
-        },
-      );
-    },
-    [addMutation, authCode, oauthClients, selectedOAuthClientKey, t, toast],
-  );
-
-  // Listen for Google Auth Code
-  useEffect(() => {
-    if (window.electron?.onGoogleAuthCode) {
-      console.log('[OAuth] Registering Google auth code IPC listener');
-      const cleanup = window.electron.onGoogleAuthCode((code) => {
-        console.log('[OAuth] Received Google auth code via IPC:', code?.substring(0, 10) + '...');
-        lastSubmittedAuthCodeRef.current = null;
-        setAuthCode(code);
-      });
-      return cleanup;
-    }
-  }, []);
-
-  // Auto-submit when authCode is set and dialog is open
-  useEffect(() => {
-    if (
-      shouldAutoSubmitGoogleAuthCode({
-        authCode,
-        isAddDialogOpen,
-        isPending: addMutation.isPending,
-        lastSubmittedAuthCode: lastSubmittedAuthCodeRef.current,
-      })
-    ) {
-      console.log('[OAuth] Auto-submitting Google auth code');
-      submitAuthCode(authCode);
-    }
-  }, [addMutation.isPending, authCode, isAddDialogOpen, submitAuthCode]);
-
-  // Batch Operations State
-  const [rawSelectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [isEmulationDialogOpen, setIsEmulationDialogOpen] = useState(false);
-  const [isFamilyDialogOpen, setIsFamilyDialogOpen] = useState(false);
-  const [familyDialogTargetGroupId, setFamilyDialogTargetGroupId] = useState<string | undefined>();
-  const [familyDialogInitialAccountIds, setFamilyDialogInitialAccountIds] = useState<string[]>([]);
-
-  const handleToggleFamilyGrouped = async () => {
-    if (config) {
-      const current = config.group_family_accounts_enabled !== false;
-      await saveConfig({
-        ...config,
-        group_family_accounts_enabled: !current,
-      });
-    }
-  };
-
-  // Stealth shortcut: Ctrl+Shift+E toggles the emulation management dialog
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'E' || e.key === 'e')) {
-        e.preventDefault();
-        setIsEmulationDialogOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  const [identityAccount, setIdentityAccount] = useState<CloudAccountView | null>(null);
 
   useEffect(() => {
     if (!isError || !errorUpdatedAt || errorUpdatedAt === lastLoadErrorToastAtRef.current) {
@@ -283,6 +277,7 @@ export function CloudAccountList() {
     }
 
     toast({
+      error,
       title: t('cloud.error.loadFailed'),
       description: getLocalizedErrorMessage(error, t),
       variant: 'destructive',
@@ -300,6 +295,7 @@ export function CloudAccountList() {
           if (isNumber(credits)) {
             toast({
               title: t('cloud.toast.quotaRefreshed'),
+              variant: 'success',
               description: t('cloud.toast.refreshCreditsAvailable', {
                 amount: formatAiCreditsAmount(credits),
               }),
@@ -309,11 +305,13 @@ export function CloudAccountList() {
 
           toast({
             title: t('cloud.toast.quotaRefreshed'),
+            variant: 'success',
             description: t('cloud.toast.refreshCreditsUnavailable'),
           });
         },
         onError: (err) =>
           toast({
+            error: err,
             title: t('cloud.toast.refreshFailed'),
             description: getLocalizedErrorMessage(err, t),
             variant: 'destructive',
@@ -329,14 +327,18 @@ export function CloudAccountList() {
         onSuccess: () =>
           toast({
             title: t('cloud.toast.switched.title'),
+            variant: 'success',
             description: t('cloud.toast.switched.description'),
           }),
-        onError: (err) =>
+        onError: (err) => {
+          const switchCode = readCloudAccountSwitchErrorCode(err) ?? 'switch-failed';
           toast({
+            error: err,
             title: t('cloud.toast.switchFailed'),
-            description: getLocalizedErrorMessage(err, t),
+            description: t(`cloud.toast.switchFailureCodes.${switchCode}`),
             variant: 'destructive',
-          }),
+          });
+        },
       },
     );
   };
@@ -345,53 +347,24 @@ export function CloudAccountList() {
     markActiveMutation.mutate(
       { accountId: id, appTarget },
       {
-        onSuccess: (acc: CloudAccount) => {
-          const targetName =
-            appTarget === 'ide'
-              ? 'Antigravity IDE'
-              : appTarget === 'agy'
-                ? 'Antigravity CLI'
-                : 'Antigravity';
+        onSuccess: () =>
           toast({
-            title: t('cloud.markActive.success', { target: targetName }),
-            description: acc.email,
-          });
-        },
-        onError: (err) =>
+            title: t('cloud.toast.markedActive.title', 'Active Account Updated'),
+            variant: 'success',
+            description: t(
+              'cloud.toast.markedActive.description',
+              'Marked account as active in environment',
+            ),
+          }),
+        onError: (err: unknown) =>
           toast({
-            title: t('cloud.markActive.failed'),
+            error: err,
+            title: t('cloud.toast.markActiveFailed', 'Failed to update active state'),
             description: getLocalizedErrorMessage(err, t),
             variant: 'destructive',
           }),
       },
     );
-  };
-
-  const handleDetectActive = () => {
-    detectMutation.mutate(undefined, {
-      onSuccess: (data) => {
-        const detectedTargets: string[] = [];
-        if (data.classic) detectedTargets.push(`Antigravity: ${data.classic.email}`);
-        if (data.ide) detectedTargets.push(`IDE: ${data.ide.email}`);
-        if (data.agy) detectedTargets.push(`CLI: ${data.agy.email}`);
-
-        if (detectedTargets.length > 0) {
-          toast({
-            title: t('cloud.autoDetectSuccess', { details: detectedTargets.join(', ') }),
-          });
-        } else {
-          toast({
-            title: t('cloud.autoDetectNone'),
-          });
-        }
-      },
-      onError: (err) =>
-        toast({
-          title: t('cloud.autoDetectFailed'),
-          description: getLocalizedErrorMessage(err, t),
-          variant: 'destructive',
-        }),
-    });
   };
 
   const handleDelete = (id: string) => {
@@ -400,15 +373,11 @@ export function CloudAccountList() {
         { accountId: id },
         {
           onSuccess: () => {
-            toast({ title: t('cloud.toast.deleted') });
-            // Clear from selection if deleted
-            setSelectedIds((prev) => {
-              const next = new Set(prev);
-              next.delete(id);
-              return next;
-            });
+            toast({ title: t('cloud.toast.deleted'), variant: 'success' });
+            selectionStore.getState().setSelected(id, false);
           },
-          onError: () => toast({ title: t('cloud.toast.deleteFailed'), variant: 'destructive' }),
+          onError: (error) =>
+            toast({ error, title: t('cloud.toast.deleteFailed'), variant: 'destructive' }),
         },
       );
     }
@@ -426,9 +395,10 @@ export function CloudAccountList() {
         onSuccess: () =>
           toast({
             title: checked ? t('cloud.toast.autoSwitchOn') : t('cloud.toast.autoSwitchOff'),
+            variant: 'success',
           }),
-        onError: () =>
-          toast({ title: t('cloud.toast.updateSettingsFailed'), variant: 'destructive' }),
+        onError: (error) =>
+          toast({ error, title: t('cloud.toast.updateSettingsFailed'), variant: 'destructive' }),
       },
     );
   };
@@ -439,236 +409,13 @@ export function CloudAccountList() {
       onSuccess: () => toast({ title: t('cloud.polling') }),
       onError: (err) =>
         toast({
+          error: err,
           title: t('cloud.toast.pollFailed'),
           description: getLocalizedErrorMessage(err, t),
           variant: 'destructive',
         }),
     });
   };
-
-  const handleSyncLocal = (appTarget: AntigravityAppTarget) => {
-    syncMutation.mutate(
-      { appTarget },
-      {
-        onSuccess: (acc: CloudAccount | null) => {
-          if (acc) {
-            toast({
-              title: t('cloud.toast.syncSuccess.title'),
-              description: t('cloud.toast.syncSuccess.description', { email: acc.email }),
-            });
-          } else {
-            toast({
-              title: t('cloud.toast.syncFailed.title'),
-              description: t('cloud.toast.syncFailed.description'),
-              variant: 'destructive',
-            });
-          }
-        },
-        onError: (err) => {
-          toast({
-            title: t('cloud.toast.syncFailed.title'),
-            description: getLocalizedErrorMessage(err, t),
-            variant: 'destructive',
-          });
-        },
-      },
-    );
-  };
-
-  const openGoogleAuthSignIn = async () => {
-    try {
-      lastSubmittedAuthCodeRef.current = null;
-      const effectiveClientKey =
-        selectedOAuthClientKey || oauthClients.find((client) => client.is_active)?.key;
-      await startAuthFlow(
-        effectiveClientKey
-          ? {
-              oauthClientKey: effectiveClientKey,
-            }
-          : undefined,
-      );
-    } catch (e) {
-      toast({
-        title: t('cloud.toast.startAuthFailed'),
-        description: String(e),
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleExport = async (stripTokens: boolean) => {
-    let url: string | null = null;
-    try {
-      const jsonContent: string = await exportMutation.mutateAsync({ stripTokens });
-      const blob = new Blob([jsonContent], { type: 'application/json' });
-      url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `cloud-accounts-export-${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setIsExportDialogOpen(false);
-      toast({ title: t('cloud.exportImport.exportSuccess') });
-    } catch (error) {
-      toast({
-        title: t('cloud.error.loadFailed'),
-        description: getLocalizedErrorMessage(error, t),
-        variant: 'destructive',
-      });
-    } finally {
-      if (url) {
-        URL.revokeObjectURL(url);
-      }
-    }
-  };
-
-  const handleImportFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: t('cloud.error.loadFailed'),
-        description: t('cloud.exportImport.fileTooLarge'),
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setImportFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const content = event.target?.result as string;
-        JSON.parse(content);
-        setImportFileContent(content);
-      } catch {
-        toast({
-          title: t('cloud.error.loadFailed'),
-          description: t('cloud.exportImport.invalidJson'),
-          variant: 'destructive',
-        });
-        setImportFileName('');
-        setImportFileContent(null);
-      }
-    };
-    reader.onerror = () => {
-      toast({
-        title: t('cloud.error.loadFailed'),
-        description: t('cloud.exportImport.readFileFailed'),
-        variant: 'destructive',
-      });
-    };
-    reader.readAsText(file);
-    if (e.target) {
-      e.target.value = '';
-    }
-  };
-
-  const handleImport = () => {
-    if (!importFileContent) return;
-    importMutation.mutate(
-      { jsonContent: importFileContent, strategy: importStrategy },
-      {
-        onSuccess: (result) => {
-          setIsImportDialogOpen(false);
-          setImportFileContent(null);
-          setImportFileName('');
-          setImportStrategy('merge');
-          toast({
-            title: t('cloud.exportImport.importSuccess', {
-              imported: result.imported,
-              updated: result.updated,
-              skipped: result.skipped,
-            }),
-          });
-          if (result.errors.length > 0) {
-            toast({
-              title: t('cloud.exportImport.importErrors', { count: result.errors.length }),
-              description: result.errors.slice(0, 3).join('\n'),
-              variant: 'destructive',
-            });
-          }
-        },
-        onError: (err) => {
-          toast({
-            title: t('cloud.error.loadFailed'),
-            description: getLocalizedErrorMessage(err, t),
-            variant: 'destructive',
-          });
-        },
-      },
-    );
-  };
-
-  // Batch Selection Handlers
-  const setSelectionState = (id: string, selected: boolean) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (selected) {
-        next.add(id);
-      } else {
-        next.delete(id);
-      }
-      return next;
-    });
-  };
-
-  const selectedIds = useMemo(() => {
-    const visibleAccountIdSet = new Set(visibleAccountIds);
-    return new Set(Array.from(rawSelectedIds).filter((id) => visibleAccountIdSet.has(id)));
-  }, [rawSelectedIds, visibleAccountIds]);
-
-  const toggleSelectAllAccounts = () => {
-    const allVisibleSelected =
-      visibleAccountIds.length > 0 && visibleAccountIds.every((id) => selectedIds.has(id));
-
-    if (allVisibleSelected) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(visibleAccountIds));
-    }
-  };
-
-  const handleOpenFamilyDialog = (groupIdOrAccountId?: string) => {
-    if (groupIdOrAccountId) {
-      setFamilyDialogTargetGroupId(groupIdOrAccountId);
-      setFamilyDialogInitialAccountIds([groupIdOrAccountId]);
-    } else {
-      setFamilyDialogTargetGroupId(undefined);
-      setFamilyDialogInitialAccountIds(Array.from(selectedIds));
-    }
-    setIsFamilyDialogOpen(true);
-  };
-
-  const hasFamilyAccountSelected = useMemo(() => {
-    return Array.from(selectedIds).some((id) =>
-      familyGroups.some((group) => group.accountIds.includes(id)),
-    );
-  }, [selectedIds, familyGroups]);
-
-  const handleUnlinkSelectedAccounts = async () => {
-    const unlinkIds = Array.from(selectedIds).filter((id) =>
-      familyGroups.some((group) => group.accountIds.includes(id)),
-    );
-    if (unlinkIds.length === 0) return;
-    try {
-      for (const accountId of unlinkIds) {
-        await unlinkFamilyMutation.mutateAsync(accountId);
-      }
-      toast({
-        title: t('cloud.family.unlinkSuccess', 'Đã gỡ tài khoản khỏi nhóm gia đình'),
-      });
-      setSelectedIds(new Set());
-    } catch {
-      toast({
-        title: t('cloud.family.unlinkFailed', 'Gỡ tài khoản thất bại'),
-        variant: 'destructive',
-      });
-    }
-  };
-
 
   const toggleTierFilter = async (tierKey: string, checked: boolean) => {
     if (!config) {
@@ -699,146 +446,6 @@ export function CloudAccountList() {
     });
   };
 
-  const refreshSelectedAccounts = async () => {
-    const ids = Array.from(selectedIds);
-    const results = await Promise.allSettled(
-      ids.map((id) => refreshMutation.mutateAsync({ accountId: id })),
-    );
-
-    const successful = results.filter((r) => r.status === 'fulfilled').length;
-    const failed = results.filter((r) => r.status === 'rejected').length;
-
-    if (failed === 0) {
-      toast({
-        title: t('cloud.toast.quotaRefreshed'),
-        description: t('cloud.toast.batchRefreshSuccess', { count: successful }),
-      });
-    } else {
-      const firstRejectedResult = results.find((result) => result.status === 'rejected');
-      const firstFailureMessage =
-        firstRejectedResult?.status === 'rejected'
-          ? getLocalizedErrorMessage(firstRejectedResult.reason, t)
-          : null;
-
-      toast({
-        title: t('cloud.toast.batchRefreshPartial.title'),
-        description: firstFailureMessage
-          ? `${t('cloud.toast.batchRefreshPartial.description', {
-              successful,
-              failed,
-            })} ${firstFailureMessage}`
-          : t('cloud.toast.batchRefreshPartial.description', {
-              successful,
-              failed,
-            }),
-        variant: 'destructive',
-      });
-    }
-
-    setSelectedIds(new Set());
-  };
-
-  const deleteSelectedAccounts = async () => {
-    if (confirm(t('cloud.batch.confirmDelete', { count: selectedIds.size }))) {
-      const ids = Array.from(selectedIds);
-      const results = await Promise.allSettled(
-        ids.map((id) => deleteMutation.mutateAsync({ accountId: id })),
-      );
-
-      const successful = results.filter((r) => r.status === 'fulfilled').length;
-      const failed = results.filter((r) => r.status === 'rejected').length;
-
-      if (failed === 0) {
-        toast({
-          title: t('cloud.toast.deleted'),
-          description: t('cloud.toast.batchDeleteSuccess', { count: successful }),
-        });
-      } else {
-        toast({
-          title: t('cloud.toast.batchDeletePartial.title'),
-          description: t('cloud.toast.batchDeletePartial.description', {
-            successful,
-            failed,
-          }),
-          variant: 'destructive',
-        });
-      }
-
-      setSelectedIds(new Set());
-    }
-  };
-
-  const pauseSelectedAccounts = async () => {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) return;
-    try {
-      await batchSetPausedMutation.mutateAsync({ accountIds: ids, paused: true });
-      toast({
-        title: t('cloud.toast.batchPauseSuccess', { count: ids.length }),
-      });
-      setSelectedIds(new Set());
-    } catch (error) {
-      toast({
-        title: t('cloud.error.loadFailed'),
-        description: getLocalizedErrorMessage(error, t),
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const resumeSelectedAccounts = async () => {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) return;
-    try {
-      await batchSetPausedMutation.mutateAsync({ accountIds: ids, paused: false });
-      toast({
-        title: t('cloud.toast.batchResumeSuccess', { count: ids.length }),
-      });
-      setSelectedIds(new Set());
-    } catch (error) {
-      toast({
-        title: t('cloud.error.loadFailed'),
-        description: getLocalizedErrorMessage(error, t),
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleImportDialogOpenChange = (open: boolean) => {
-    setIsImportDialogOpen(open);
-    if (!open) {
-      setImportFileContent(null);
-      setImportFileName('');
-      setImportStrategy('merge');
-    }
-  };
-
-  const handleAddDialogOpenChange = (open: boolean) => {
-    setIsAddDialogOpen(open);
-    if (!open) {
-      setAuthCode('');
-      lastSubmittedAuthCodeRef.current = null;
-    }
-  };
-
-  const handleOAuthClientChange = (value: string) => {
-    setSelectedOAuthClientKey(value);
-    setActiveOAuthClientMutation.mutate(
-      {
-        clientKey: value,
-      },
-      {
-        onError: (error) => {
-          toast({
-            title: t('cloud.toast.updateSettingsFailed'),
-            description: getLocalizedErrorMessage(error, t),
-            variant: 'destructive',
-          });
-        },
-      },
-    );
-  };
-
   const handleSortChange = async (option: AccountSortKey) => {
     if (config) {
       await saveConfig({ ...config, account_sort: option });
@@ -853,8 +460,6 @@ export function CloudAccountList() {
     return <CloudAccountLoadError error={error} onRetry={() => refetch()} />;
   }
 
-  const allVisibleSelected =
-    visibleAccountIds.length > 0 && visibleAccountIds.every((id) => selectedIds.has(id));
   const refreshingAccountId = refreshMutation.isPending
     ? refreshMutation.variables?.accountId
     : (backgroundSyncingAccountId || undefined);
@@ -870,14 +475,6 @@ export function CloudAccountList() {
 
   return (
     <div className="space-y-5 pb-20">
-      {securityStatus?.state === 'degraded' ? (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
-          <div className="text-sm font-medium">{t('cloud.security.compatibilityMode.title')}</div>
-          <p className="text-muted-foreground mt-1 text-sm">
-            {t('cloud.security.compatibilityMode.description')}
-          </p>
-        </div>
-      ) : null}
       <CloudAccountListSummary
         totalAccounts={totalAccounts}
         activeAccounts={activeAccounts}
@@ -889,28 +486,11 @@ export function CloudAccountList() {
       />
 
       <CloudAccountToolbar
+        visibleAccountIds={visibleAccountIds}
         autoSwitchEnabled={autoSwitchEnabled}
         isSettingsLoading={isSettingsLoading}
         isSetAutoSwitchPending={setAutoSwitchMutation.isPending}
         isForcePollPending={forcePollMutation.isPending}
-        isSyncPending={syncMutation.isPending}
-        allVisibleSelected={allVisibleSelected}
-        selectedCount={selectedIds.size}
-        isExportDialogOpen={isExportDialogOpen}
-        isImportDialogOpen={isImportDialogOpen}
-        isAddDialogOpen={isAddDialogOpen}
-        isExportPending={exportMutation.isPending}
-        isImportPending={importMutation.isPending}
-        isAddPending={addMutation.isPending}
-        isOAuthClientsLoading={isOAuthClientsLoading}
-        isSetActiveOAuthClientPending={setActiveOAuthClientMutation.isPending}
-        importStrategy={importStrategy}
-        importFileContent={importFileContent}
-        importFileName={importFileName}
-        authCode={authCode}
-        selectedOAuthClientKey={selectedOAuthClientKey}
-        oauthClients={oauthClients}
-        fileInputRef={fileInputRef}
         tierOptions={tierOptions}
         effectiveSelectedTierKeySet={effectiveSelectedTierKeySet}
         hasActiveTierFilter={hasActiveTierFilter}
@@ -918,43 +498,7 @@ export function CloudAccountList() {
         currentSort={currentSort}
         gridLayout={gridLayout}
         quotaWindow={quotaWindow}
-        getTierOptionLabel={getTierOptionLabel}
-        onToggleAutoSwitch={handleToggleAutoSwitch}
-        onToggleSelectAllAccounts={toggleSelectAllAccounts}
-        onForcePoll={handleForcePoll}
-        onSyncLocal={handleSyncLocal}
-        isDetectActivePending={detectMutation.isPending}
-        onDetectActiveAccounts={handleDetectActive}
-        onExportDialogOpenChange={setIsExportDialogOpen}
-        onImportDialogOpenChange={handleImportDialogOpenChange}
-        onAddDialogOpenChange={handleAddDialogOpenChange}
-        onExport={(stripTokens) => {
-          handleExport(stripTokens);
-        }}
-        onImportFileSelect={handleImportFileSelect}
-        onImportStrategyChange={setImportStrategy}
-        onImport={handleImport}
-        onOAuthClientChange={handleOAuthClientChange}
-        onOpenGoogleAuthSignIn={() => {
-          openGoogleAuthSignIn();
-        }}
-        onAuthCodeChange={setAuthCode}
-        onSubmitAuthCode={() => {
-          submitAuthCode();
-        }}
-        onResetTierFilter={() => {
-          resetTierFilter();
-        }}
-        onToggleTierFilter={(tierKey, checked) => {
-          toggleTierFilter(tierKey, checked);
-        }}
-        onSortChange={(option) => {
-          handleSortChange(option);
-        }}
-        onUpdateGridLayout={(layout) => {
-          updateGridLayout(layout);
-        }}
-        onQuotaWindowChange={setQuotaWindow}
+        quotaGroupVisibility={quotaGroupVisibility}
         maskAccountInfo={Boolean(config?.mask_account_info)}
         onToggleMaskAccountInfo={async () => {
           if (config) {
@@ -968,17 +512,41 @@ export function CloudAccountList() {
         onOriginFilterChange={setOriginFilter}
         showEmulationUi={Boolean(config?.show_emulation_ui)}
         isFamilyGrouped={config?.group_family_accounts_enabled !== false}
-        onToggleFamilyGrouped={handleToggleFamilyGrouped}
+        onToggleFamilyGrouped={async () => {
+          if (config) {
+            await saveConfig({
+              ...config,
+              group_family_accounts_enabled: config.group_family_accounts_enabled === false,
+            });
+          }
+        }}
         onOpenFamilyDialog={() => handleOpenFamilyDialog()}
+        getTierOptionLabel={getTierOptionLabel}
+        onToggleAutoSwitch={handleToggleAutoSwitch}
+        onForcePoll={handleForcePoll}
+        onResetTierFilter={() => {
+          resetTierFilter();
+        }}
+        onToggleTierFilter={(tierKey, checked) => {
+          toggleTierFilter(tierKey, checked);
+        }}
+        onSortChange={(option) => {
+          handleSortChange(option);
+        }}
+        onUpdateGridLayout={(layout) => {
+          updateGridLayout(layout);
+        }}
+        onQuotaWindowChange={setQuotaWindow}
+        onQuotaGroupVisibilityChange={setQuotaGroupVisibility}
       />
 
       <CloudAccountGrid
-        accounts={displayedAccounts}
+        accounts={filteredByOriginAccounts}
         sourceAccountCount={accounts?.length ?? 0}
         gridLayout={gridLayout}
         quotaWindow={quotaWindow}
+        quotaGroupVisibility={quotaGroupVisibility}
         manualRecommendation={manualRecommendation}
-        selectedIds={selectedIds}
         hasActiveTierFilter={hasActiveTierFilter}
         refreshingAccountId={refreshingAccountId}
         deletingAccountId={deletingAccountId}
@@ -989,25 +557,19 @@ export function CloudAccountList() {
         onSwitch={handleSwitch}
         onMarkActive={handleMarkActive}
         onManageIdentity={handleManageIdentity}
-        onToggleSelection={setSelectionState}
+        onManageFamily={(id) => handleOpenFamilyDialog(id)}
         onResetTierFilter={() => {
           resetTierFilter();
         }}
-        onManageFamily={handleOpenFamilyDialog}
       />
 
       <CloudAccountBatchActionBar
-        selectedCount={selectedIds.size}
-        onClearSelection={() => {
-          setSelectedIds(new Set());
-        }}
+        visibleAccountIds={visibleAccountIds}
         onRefreshSelected={refreshSelectedAccounts}
+        onDeleteSelected={deleteSelectedAccounts}
         onPauseSelected={pauseSelectedAccounts}
         onResumeSelected={resumeSelectedAccounts}
-        onDeleteSelected={deleteSelectedAccounts}
-        onLinkFamilySelected={() => {
-          handleOpenFamilyDialog();
-        }}
+        onLinkFamilySelected={() => handleOpenFamilyDialog()}
         hasFamilyAccountSelected={hasFamilyAccountSelected}
         onUnlinkFamilySelected={handleUnlinkSelectedAccounts}
       />
@@ -1028,11 +590,6 @@ export function CloudAccountList() {
             setIdentityAccount(null);
           }
         }}
-      />
-
-      <EmulationManagementDialog
-        open={isEmulationDialogOpen}
-        onOpenChange={setIsEmulationDialogOpen}
       />
     </div>
   );

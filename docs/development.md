@@ -11,7 +11,108 @@ This document covers contributor setup and routine commands. Command definitions
 
 Use npm only. The repository contains `package-lock.json`; do not introduce another package manager or lockfile.
 
+Linux AppImage packaging runs the maker's downloaded `appimagetool` with
+`--appimage-extract-and-run`, so the build step does not require FUSE libraries or mount
+access. Running the installed AppImage still requires a supported AppImage runtime
+environment. See [installer verification](testing.md) for build and native update checks.
+
 ## Common commands
+
+Schema replay uses `npm run test:schema:replay -- <audit-database-path>` with a Node runtime that
+provides `node:sqlite` (Node 22.17+ for this acceptance tool). It requires read access to the audit
+database and its SQLite sidecars, and writes only compiled replay code to a temporary directory.
+Results with no intact tool/output Schema samples do not satisfy the real-data gate. See the
+[Schema reference](proxy-schema-conversion.md) for selection and privacy requirements.
+
+Controlled Schema acceptance also offers `test:schema:client` with an installed Claude Code
+executable and `test:schema:sentry` after `prepare:standalone`. Both use loopback receivers and
+synthetic authentication; provider connectivity and remote Sentry delivery remain separate gates.
+
+### Live Schema acceptance
+
+Acceptance output under `artifacts/` is local workspace data and is ignored by Git. Generate it with the workflows below; referenced execution records are available only in the workspace where those checks ran.
+
+`node scripts/acceptance/schema/run-client-matrix.mjs [all|codex|opencode|claude]` runs the installed
+Windows clients through the default gateway and real Flash upstream. It requires the prepared
+standalone runtime, an unowned stopped profile and usable accounts. Each client uses isolated
+temporary settings and a new probe file; the loopback relay forwards original request bytes,
+replaces synthetic credentials privately and buffers bounded responses to reject unsafe tool
+instructions. Codex uses a temporary stdio MCP tool that reads only the fixed probe; its Windows
+Shell execution-policy failures remain separate failed evidence. OpenCode permits reads and
+searches, with the relay enforcing the fixed-file target; Claude Code declares default tools and
+the inspected credential-free local MCP servers. Successful provider responses are never
+simulated. The gate requires an actual tool-result continuation, a matching final answer and
+correlated successful upstream attempts for every request. Recovered failures remain visible
+in anonymous evidence. Cleanup must restore the stopped state, preserve saved settings and
+remove the owned temporary profiles. This workflow consumes quota and writes only aggregate
+evidence under `artifacts/schema-work-package/live-results`; it does not perform a separate
+remote Sentry receipt check or calibrate budgets from organic traffic. Run
+`node --test scripts/acceptance/schema/check-client-matrix.mjs` for its protocol, guard, continuation
+and audit evidence controls.
+
+After `npm run prepare:standalone`, use `npm run test:schema:live -- gemini-3.1-pro-high` to test
+ordinary and degraded tool parameters against the real gateway and Google upstream. The harness
+also exercises current native Gemini Flash/Pro routes and installed Claude Code's Read tool.
+Use `npm run test:schema:live -- gemini-3.7-flash-high` for ordinary/degraded Flash tool loops;
+this is also the default model. The explicit `gemini-3-flash` option retains the retired-route
+failure probe. A provider retirement notice does not count as a successful tool call. It requires an
+unowned stopped profile, existing usable accounts, enabled desktop reporting preferences and
+configured Sentry credentials. The bundled read-only Sentry helper requires `SENTRY_AUTH_TOKEN`,
+`SENTRY_ORG` and `SENTRY_PROJECT`; values are resolved in memory from the shell/build environment.
+
+This command consumes provider quota and sends controlled diagnostic events to the configured
+remote Sentry project. Newly created probe files are the only allowed tool targets. It starts
+the core temporarily and shuts it down afterward, without saving proxy auto-start or client
+settings. Loopback observation relays forward the real client requests and SDK envelopes to
+their configured destinations; only bounded anonymous evidence is written under
+`artifacts/schema-work-package/live-results`. A single failed cycle makes the command fail.
+Ordinary acceptance also fails when remote Sentry receipt cannot be confirmed; an outbound
+envelope or HTTP 200 alone is insufficient. The relay records anonymous transport status to
+distinguish delivery failures from event-query failures.
+
+Append `client-mcp` to use default Claude Code declarations and the three inspected credential-free
+local MCP servers. This verifies actual declaration acceptance and a controlled Read cycle;
+it does not execute MCP business tools. Append `history` to acquire two real parallel calls and
+compare combined, adjacent and reversed-result histories without rewriting production history.
+Append `history extended` to compare identical resubmissions and bidirectional Pro/Flash
+continuation, choosing the source model in the first argument. Append `history recovery` to
+mutate only signatures in a controlled history and require final result matches plus actual
+upstream 400/200 attempts for one gateway request. A provider accepting the mutation does not
+prove recovery and keeps this check failing. Audit evidence retains anonymous scenario labels
+and per-request attempt counts. `node scripts/acceptance/schema/check-history-evidence.mjs`
+checks missing-result sensitivity and private audit-context exclusion using isolated fixtures.
+`node scripts/acceptance/schema/run-core-startup.mjs 5` isolates the prepared core's readiness
+and shutdown without submitting gateway requests or intentional diagnostic events. It requires
+an unowned stopped profile and restores that state; forced cleanup fails the command. Append
+`trace` for fixed test-owned preload markers separating process entry and the first event-loop
+turn. Only anonymous counts and timings are retained. The acceptance readiness window matches
+the production CLI's 45 seconds and bounds stalled probes.
+`node --test scripts/acceptance/schema/check-startup-evidence.mjs` compares a controlled slow
+start with the production launcher and verifies timeout/exit failure sensitivity.
+Append `client` to rerun a diagnosed client failure independently; this does not replace the
+full cycle record. Append `2.5.5` or `1.23.2` for an isolated User-Agent build experiment, or
+`production` for a transient backup-endpoint-only experiment. These modes identify themselves
+in the result and do not alter production routing, version selection or saved configuration.
+
+`node scripts/acceptance/schema/run-live-retry.mjs <network|rotation|incomplete|all> [gemini-3.7-flash-high|gemini-3.1-pro-high]`
+starts the prepared core with a temporary loopback relay. Network mode resets the first
+controlled continuation connection; rotation mode returns 503 for both addresses on the
+first account. Successful generations use the real provider. Incomplete mode injects a
+disclosed thought-only unary fragment on the initial tool request, then requires a real
+streamed tool turn and all result continuations. It never supplies successful tool calls.
+The gate correlates audit attempts within one gateway request, compares preserved contents,
+excludes private identities and requires stopped-state restoration with unchanged saved
+settings. Natural rate limits or other extra attempts keep the strict scenario failing.
+Network/rotation modes provide supplementary fault coverage; default-primary tool/result
+acceptance does not require a successful backup-endpoint probe. See the
+local scope record (`artifacts/schema-work-package/retry-verification.md#acceptance-scope`).
+`node --test scripts/acceptance/schema/check-retry-evidence.mjs` checks injection, forwarding,
+audit discrimination and privacy sensitivity using isolated fixtures.
+
+`node scripts/acceptance/schema/verify-remote-event.mjs <event-id> <test-release>` reads the exact
+remote event and emits only closed diagnostic fields and privacy booleans. A nonempty stored
+user context keeps the strict privacy check failing even when receipt is confirmed. See the
+[security reference](security.md#schema-diagnostics-and-node-reporting).
 
 ```powershell
 npm install
@@ -31,11 +132,18 @@ npm run make
 ```
 
 - `npm start` starts Electron Forge with Vite in development mode.
+- The renderer development server binds to `127.0.0.1` so Electron can reach it even when IPv6 loopback is blocked. Forge supplies the actual port to the main process; its readiness probe bypasses proxy environment settings and times out each request after one second.
+  Run `npm run test:acceptance -- development connection` to verify the Vite listener and Forge URL with an isolated Electron window. This check does not open account storage or launch the gateway.
 - Native process queries use `@draculabo/sysinfo-process-enhanced`. npm installs the matching prebuilt platform package; keep optional dependencies enabled. No Rust build is needed in this repository. For a different packaging architecture, install dependencies on the target runner as the release workflow does.
 - `npm test` runs the Vitest unit and integration suite once.
 - `npm run test:e2e` runs Playwright against the Electron application.
 - `npm run package` creates an unpacked application bundle.
 - `npm run make` creates platform distributables and is slower and more environment-sensitive than packaging.
+- The release publisher installs the locked project dependencies in its own job with `npm ci --include=dev --ignore-scripts --no-audit --no-fund`. It requires the JavaScript acceptance dispatcher and YAML parser, but processes prebuilt artifacts without downloading Electron or rebuilding native modules. Update-feed checks run before release creation or asset upload.
+- `npm run audit:size:win32:x64` checks the default Forge output: Squirrel EXE/NuGet and WiX MSI installers have a 200 MiB budget including the standalone runtime; `app.asar` and the uncompressed standalone tree each have an independent 120 MiB budget. The audit selects packaged resources directly and does not scan acceptance profiles elsewhere in `out`. Vite dependency caches under `node_modules/.vite` are excluded from packaging; the production bundles under the root `.vite` remain required.
+- Packaging prepares standalone runtime dependencies in an isolated directory. Its `npm ci` preserves the package URLs in `package-lock.json` with `--replace-registry-host=never`, so a local npm mirror setting cannot redirect locked official-registry downloads to an unavailable mirror archive. Dependency versions, integrity checks and global npm configuration remain unchanged.
+- Runtime installation and dependency tracing use separate staging directories. Native-module and command checks run against the traced output before publication. On Windows, publication copies the validated tree after backing up any existing generated runtime, avoiding populated-directory rename failures. A failed copy restores the backup; failed recovery retains its staging directory and reports the recovery path. Forge consumes the output only after publication completes. Other platforms publish by directory rename.
+- `npm ci` applies the [Forge 7.11.1 development patch](../patches/@electron-forge+core+7.11.1.dev.patch) through `postinstall`. Forge's package-bin cleanup uses a relative glob with the package directory as `cwd`, so Windows path separators cannot make it scan unrelated workspace profiles. If dependencies were intentionally installed with `--ignore-scripts`, run `npm run postinstall` before packaging. The isolated production runtime does not run Forge or installation hooks. Remove the patch when the installed Forge version includes this scoped scan and Windows packaging passes with inaccessible directories elsewhere in the workspace.
 - `npm run change-scope` prints a versioned, read-only Git change report. Pass explicit `--base` and `--head` revisions when comparing commits; it never fetches or changes Git state.
 - `npm run analyze:imports` prints the Git-tracked TypeScript/JavaScript import graph. Runtime closure ignores type-only imports.
 - `npm run verify:boundaries` reports renderer, preload, shared and root-IPC boundary violations without failing the command. `npm run verify:root-ipc-boundary` enforces the clean root-router rule today; `npm run verify:boundaries:enforce` is reserved for a clean overall baseline and exits non-zero on any violation.
@@ -63,6 +171,50 @@ Use [testing.md](testing.md) to select checks according to the affected behavior
 3. Make the smallest complete change and preserve unrelated worktree changes.
 4. Run focused evidence first, then add broader checks only for affected surfaces.
 5. Report the commands actually run and any platform, credential or environment coverage that remains unverified.
+
+## Release notes
+
+The GitHub Release workflow runs semantic-release, selects the version using the existing
+Conventional Commits rules, and generates release notes automatically. No versioned JSON
+release document or manual review step is required. The generated Markdown is supplied to
+both GitHub Releases and `CHANGELOG.md`.
+
+The generator reads the exact Git range from the previous release tag to the release head.
+It groups changes by product area, uses verified merged PR titles when available, and retains
+commit descriptions for direct changes. A shared PR appears once while all of its source
+commits remain covered. Breaking changes, features, fixes and performance changes receive
+priority in the highlights. The overview names the affected areas; it does not invent product
+claims or upgrade instructions. Output quality depends on descriptive commit and PR titles.
+
+GitHub APIs supply PR links, authors and counts. Only merged PRs targeting the release branch
+in this repository qualify. Direct commits link to their SHA; unmapped authors retain their
+Git name, and bots receive separate maintenance credit. Commit text and email addresses never
+infer PR numbers or GitHub identities. Generated version/changelog commits are excluded from
+source statistics, so semantic-release regeneration keeps the same story after preparation.
+New source commits are included automatically.
+
+Local preview is optional and does not publish, create tags or change package versions:
+
+```powershell
+node scripts/release/prepare-release-notes.mjs preview --base v0.24.0 --version 0.25.0 --output artifacts/release-notes/v0.25.0.md --anonymous
+```
+
+Replace the base and expected version for the actual range. Omit `--base` for a first release;
+beta previews use their own previous tag and expected version. Add `--head <ref>` to select an
+exact source ref. The command refuses to overwrite existing output. `--local` permits unpushed
+commits only in a preview and marks their attribution as incomplete; publication requires
+verified GitHub metadata for every source commit.
+
+Metadata requests prefer `GH_TOKEN` over `GITHUB_TOKEN`, have a 15-second deadline and reject
+redirects. Public metadata can be read anonymously; private repositories require access.
+Network and invalid metadata errors stop note generation and remain credential-safe. The
+Release workflow uses its existing publishing token; no AI service or additional key is needed.
+
+Run `npm run test:acceptance -- release notes` for local acceptance. It exercises the actual
+semantic-release loader, changelog writer and GitHub publisher with isolated Git repositories
+and controlled publication transports, including a repository with no version JSON. The Release
+workflow runs this check before publication. Live credentials and a real release remain separate
+environment-dependent checks.
 
 ## Generated and derived files
 

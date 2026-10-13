@@ -1,5 +1,8 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { GeminiClient } from '../modules/gemini/gemini-client.service';
+import {
+  GeminiClient,
+  type InternalGenerationOptions,
+} from '../modules/gemini/gemini-client.service';
 import { AccountLeaseService } from '../modules/account-lease/account-lease.service';
 import { v4 as uuidv4 } from 'uuid';
 import { getServerConfig } from '@/server/server-config';
@@ -32,6 +35,7 @@ import { GeminiResponse } from '@/modules/proxy-gateway/server/common/interfaces
 import { decodeInternalSseData } from '@/modules/proxy-gateway/antigravity/internal-sse';
 import { isProjectLicenseErrorMessage } from '@/modules/proxy-gateway/server/common/google-error-details';
 import { setCurrentAuditAccountId } from '@/modules/proxy-gateway/audit/traffic-audit-context';
+import { isIncompleteThinkingResponse } from './incomplete-thinking-response';
 
 interface StreamIdleTimer {
   reset: () => void;
@@ -178,7 +182,7 @@ export abstract class BaseProxyService {
     error: unknown,
     label: string,
   ): Promise<boolean> {
-    return this.retryPolicy.prepareGraceRetry(retryState, token, error, label, 'baseline');
+    return this.retryPolicy.prepareGraceRetry(retryState, token, error, label, 'anthropic');
   }
 
   protected async prepareCurrentGraceRetry(
@@ -187,7 +191,7 @@ export abstract class BaseProxyService {
     error: unknown,
     label: string,
   ): Promise<boolean> {
-    return this.retryPolicy.prepareGraceRetry(retryState, token, error, label, 'current');
+    return this.retryPolicy.prepareGraceRetry(retryState, token, error, label, 'hinted');
   }
 
   protected async prepareScheduledImageRetry(
@@ -426,6 +430,7 @@ export abstract class BaseProxyService {
     upstreamProxyUrl?: string,
     extraHeaders?: Record<string, string>,
     signal?: AbortSignal,
+    options?: InternalGenerationOptions,
   ): Promise<GeminiResponse> {
     const direct = await this.geminiClient.generateInternal(
       body,
@@ -433,20 +438,28 @@ export abstract class BaseProxyService {
       upstreamProxyUrl,
       extraHeaders,
       signal,
+      options,
     );
     if (this.hasUsableGeminiCandidate(direct)) {
       return direct;
     }
 
-    this.logger.warn('Empty non-stream response detected, falling back to stream aggregation.');
+    this.logger.warn(
+      'Incomplete non-stream response detected, falling back to stream aggregation.',
+    );
     const stream = await this.geminiClient.streamGenerateInternal(
       body,
       accessToken,
       upstreamProxyUrl,
       extraHeaders,
       signal,
+      options,
     );
-    return this.collectGeminiStreamAsResponse(stream);
+    const collected = await this.collectGeminiStreamAsResponse(stream);
+    if (isIncompleteThinkingResponse(collected)) {
+      throw new Error('Upstream returned incomplete thinking-only response');
+    }
+    return collected;
   }
 
   private hasUsableGeminiCandidate(response: GeminiResponse): boolean {
@@ -460,7 +473,7 @@ export abstract class BaseProxyService {
 
     const first = candidates[0];
     const parts = first?.content?.parts;
-    return Array.isArray(parts) && parts.length > 0;
+    return Array.isArray(parts) && parts.length > 0 && !isIncompleteThinkingResponse(response);
   }
 
   private collectGeminiStreamAsResponse(

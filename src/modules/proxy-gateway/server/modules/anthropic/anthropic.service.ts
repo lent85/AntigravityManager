@@ -1,7 +1,18 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { isEmpty, isString } from 'lodash-es';
+import {
+  resolveAnthropicSessionScope,
+  type SignatureScopeContext,
+} from '../../common/signature-session-scope';
+import { SchemaConversionBatch } from '@/modules/proxy-gateway/antigravity/schema/SchemaConversion';
+import {
+  prepareClaudeSchemas,
+  reportSchemaIssues,
+} from '@/modules/proxy-gateway/antigravity/schema/SchemaPreparation';
 import { AccountLeaseService } from '@/modules/proxy-gateway/server/modules/account-lease/account-lease.service';
-import { GeminiClient } from '@/modules/proxy-gateway/server/modules/gemini/gemini-client.service';
+import {
+  GeminiClient,
+  type InternalGenerationOptions,
+} from '@/modules/proxy-gateway/server/modules/gemini/gemini-client.service';
 import { Observable, type Subscriber, type Subscription } from 'rxjs';
 import { transformClaudeRequestIn } from '@/modules/proxy-gateway/antigravity/ClaudeRequestMapper';
 import { transformResponse } from '@/modules/proxy-gateway/antigravity/ClaudeResponseMapper';
@@ -81,6 +92,13 @@ export class AnthropicService extends BaseProxyService {
    * counting endpoint accepts only the contents and rejects the rest.
    */
   async handleAnthropicCountTokens(request: AnthropicChatRequest): Promise<number> {
+    const batch = new SchemaConversionBatch();
+    let prepared: ClaudeRequest;
+    try {
+      prepared = prepareClaudeSchemas(this.toClaudeRequest(request), batch);
+    } finally {
+      reportSchemaIssues(batch, 'anthropic-count-tokens');
+    }
     const routeResolution = this.modelRoutingPolicy.resolveModelRouteForRequest(request.model);
     const targetModel = routeResolution.resolvedModel;
     this.logger.log(
@@ -89,11 +107,12 @@ export class AnthropicService extends BaseProxyService {
 
     const requestUserAgent = await resolveRequestUserAgent();
     const geminiBody = transformClaudeRequestIn(
-      this.toClaudeRequest(request),
+      prepared,
       '',
       requestUserAgent,
       targetModel,
       'anthropic',
+      { schemasPrepared: true, cacheSchemas: !batch.degraded },
     );
 
     return this.countTokensWithLease(
@@ -105,10 +124,23 @@ export class AnthropicService extends BaseProxyService {
 
   async handleAnthropicMessages(
     request: AnthropicChatRequest,
+    requestContext?: SignatureScopeContext,
   ): Promise<AnthropicChatResponse | Observable<string>> {
+    const batch = new SchemaConversionBatch();
+    try {
+      const prepared = prepareClaudeSchemas(this.toClaudeRequest(request), batch);
+      request = { ...request, tools: prepared.tools };
+    } finally {
+      reportSchemaIssues(batch, 'anthropic');
+    }
     const appliedVariantRequest = applyAnthropicModelVariant(request);
     const routedRequest = appliedVariantRequest.request;
-    const sessionKey = this.extractAnthropicSessionKey(request);
+    const scope = resolveAnthropicSessionScope(
+      request,
+      requestContext?.headers,
+      requestContext?.url,
+    );
+    const sessionKey = scope.cacheKey;
     const signatureMessageCount = request.messages.filter(
       (message) => message.role !== 'system',
     ).length;
@@ -130,7 +162,7 @@ export class AnthropicService extends BaseProxyService {
     for (let i = 0; i < maxRetries; i++) {
       await this.waitBeforeRetry(i, maxRetries, 'Anthropic', retryState.graceRetryToken !== null);
 
-      const token = await this.selectRetryToken(retryState, targetModel, sessionKey);
+      const token = await this.selectRetryToken(retryState, targetModel, scope.affinityKey);
       if (!token) {
         if (lastError !== null) {
           throw this.resolveTerminalRetryError(retryState, lastError);
@@ -171,6 +203,7 @@ export class AnthropicService extends BaseProxyService {
           signatureSessionKey: sessionKey,
           stream: request.stream === true,
           recoveryState,
+          cacheSchemas: !batch.degraded,
           variant: effectiveVariantRequest.variant ?? undefined,
         });
         if (execution.stream) {
@@ -218,6 +251,7 @@ export class AnthropicService extends BaseProxyService {
               signatureSessionKey: sessionKey,
               stream: request.stream === true,
               recoveryState,
+              cacheSchemas: !batch.degraded,
               variant: effectiveVariantRequest.variant ?? undefined,
             });
             if (execution.stream) {
@@ -289,6 +323,7 @@ export class AnthropicService extends BaseProxyService {
               signatureSessionKey: sessionKey,
               stream: request.stream === true,
               recoveryState,
+              cacheSchemas: !batch.degraded,
               variant: downgradedVariant.variant ?? undefined,
             });
             if (execution.stream) {
@@ -356,6 +391,7 @@ export class AnthropicService extends BaseProxyService {
     signatureSessionKey?: string;
     stream: boolean;
     recoveryState: AnthropicRecoveryState;
+    cacheSchemas: boolean;
     variant?: ResolvedModelVariant;
   }): Promise<AnthropicUpstreamResult> {
     const execute = async (
@@ -371,6 +407,8 @@ export class AnthropicService extends BaseProxyService {
         'anthropic',
         {
           mode,
+          schemasPrepared: true,
+          cacheSchemas: params.cacheSchemas,
           signatureTargetFamily: params.signatureFamily,
           signatureTargetFamilyModel: params.targetModel,
         },
@@ -391,6 +429,8 @@ export class AnthropicService extends BaseProxyService {
             params.accessToken,
             params.upstreamProxyUrl,
             params.extraHeaders,
+            undefined,
+            { thoughtReplay: mode === 'normal' ? 'restore' : 'skip' },
           ),
         };
       }
@@ -402,6 +442,7 @@ export class AnthropicService extends BaseProxyService {
           params.accessToken,
           params.upstreamProxyUrl,
           params.extraHeaders,
+          { thoughtReplay: mode === 'normal' ? 'restore' : 'skip' },
         ),
       };
     };
@@ -446,6 +487,7 @@ export class AnthropicService extends BaseProxyService {
     accessToken: string,
     upstreamProxyUrl?: string,
     extraHeaders?: Record<string, string>,
+    options?: InternalGenerationOptions,
   ): Promise<GeminiResponse> {
     try {
       return await this.generateInternalWithStreamFallback(
@@ -453,6 +495,8 @@ export class AnthropicService extends BaseProxyService {
         accessToken,
         upstreamProxyUrl,
         extraHeaders,
+        undefined,
+        options,
       );
     } catch (error) {
       if (!(error instanceof Error) || error.message !== 'Empty response stream') {
@@ -784,6 +828,7 @@ export class AnthropicService extends BaseProxyService {
         input_schema: tool.input_schema,
         type: tool.type,
       })),
+      tool_choice: request.tool_choice,
       stream: request.stream,
       max_tokens: request.max_tokens,
       stop_sequences: request.stop_sequences,
@@ -815,15 +860,5 @@ export class AnthropicService extends BaseProxyService {
         cache_read_input_tokens: response.usage?.cache_read_input_tokens,
       },
     };
-  }
-
-  private extractAnthropicSessionKey(request: AnthropicChatRequest): string | undefined {
-    const metadata = request.metadata;
-    const sessionCandidate =
-      metadata?.session_id ?? metadata?.sessionId ?? metadata?.user_id ?? metadata?.userId;
-    if (!isString(sessionCandidate) || isEmpty(sessionCandidate.trim())) {
-      return undefined;
-    }
-    return `anthropic:${sessionCandidate.trim()}`;
   }
 }

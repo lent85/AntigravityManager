@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { readWindowsFileVersion } from './windowsFileVersion';
 import { compare, coerce, parse } from 'semver';
 import { z } from 'zod';
+import { extractFile, uncache } from '@electron/asar';
 import { getAntigravityExecutablePath } from '@/shared/platform/paths';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
 import { resolveAntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
@@ -30,9 +31,10 @@ function cacheAndReturn(cacheKey: string, version: AntigravityVersion): Antigrav
 
 function readPackageJsonVersion(execPath: string): AntigravityVersion | null {
   const parentDir = path.dirname(execPath);
+  const resources = path.join(parentDir, 'resources');
   const candidates = [
-    path.join(parentDir, 'resources', 'app', 'package.json'),
-    path.join(parentDir, 'resources', 'app.asar', 'package.json'),
+    path.join(resources, 'app', 'package.json'),
+    path.join(resources, 'app.asar'),
   ];
 
   for (const packageJson of candidates) {
@@ -40,7 +42,14 @@ function readPackageJsonVersion(execPath: string): AntigravityVersion | null {
       continue;
     }
     try {
-      const content = fs.readFileSync(packageJson, 'utf-8');
+      // Standalone Node has no Electron ASAR filesystem patch.
+      let content: string;
+      if (packageJson.endsWith('.asar')) {
+        uncache(packageJson);
+        content = extractFile(packageJson, 'package.json').toString('utf8');
+      } else {
+        content = fs.readFileSync(packageJson, 'utf-8');
+      }
       const rawManifest: unknown = JSON.parse(content);
       const manifest = PackageJsonVersionSchema.safeParse(rawManifest);
       if (!manifest.success) {
@@ -123,14 +132,18 @@ function getPlistPath(execPath: string): string {
 }
 
 function getVersionCacheKey(target: AntigravityAppTarget, execPath: string): string {
-  const parent = path.dirname(execPath);
-  const files = [
-    execPath,
-    path.join(parent, 'resources', 'app', 'package.json'),
-    path.join(parent, 'resources', 'app.asar', 'package.json'),
-  ];
-  if (process.platform === 'darwin') {
-    files.push(getPlistPath(execPath));
+  // Fingerprint only metadata used on this platform. Electron can retain an ASAR
+  // handle after stat(), preventing a Windows installer from replacing the archive.
+  const files = [execPath];
+  switch (process.platform) {
+    case 'darwin':
+      files.push(getPlistPath(execPath));
+      break;
+    case 'linux': {
+      const resources = path.join(path.dirname(execPath), 'resources');
+      files.push(path.join(resources, 'app', 'package.json'), path.join(resources, 'app.asar'));
+      break;
+    }
   }
   const identities = files.map((file) => {
     try {

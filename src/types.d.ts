@@ -27,7 +27,8 @@ declare global {
     releaseUrl: string;
     platform: 'darwin' | 'linux' | 'win32';
     source?: 'manual' | 'electron-updater';
-    state?: 'available' | 'downloaded';
+    state?: 'available' | 'downloading' | 'downloaded' | 'error';
+    downloadPercent?: number;
   }
 
   type ManualUpdateCheckResult =
@@ -65,7 +66,7 @@ declare global {
       saveTrafficAuditBody: (
         bodyId: string,
         suggestedName: string,
-      ) => Promise<{ path?: string; status: 'saved' | 'cancelled' }>;
+      ) => Promise<{ status: 'saved' | 'cancelled' }>;
       startPerformanceRecording?: (label: string) => Promise<PerformanceRecordingStartResult>;
       stopPerformanceRecording?: (
         snapshot: RendererPerformanceSnapshot,

@@ -9,7 +9,8 @@ import { ipc } from '@/ipc/manager';
 import { useEffect, useMemo, useState } from 'react';
 import { useAppConfig } from '@/modules/config/hooks/useAppConfig';
 import { useCloudAccounts } from '@/modules/cloud-account/hooks/useCloudAccounts';
-import { ProxyConfig } from '@/modules/config/types';
+import type { ServiceConfigSnapshot } from '@/modules/config/service-config.schema';
+type ProxyConfig = ServiceConfigSnapshot['proxy'];
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Activity, Loader2, Server, BookOpen, DollarSign, Globe, FileText } from 'lucide-react';
 import { buildProxyExampleModels } from '@/modules/proxy-gateway/components/proxy-example-models';
@@ -26,6 +27,8 @@ import { AuditAndThoughtStoreCard } from '@/modules/proxy-gateway/components/Aud
 import { OpenCodeSyncCard } from '@/modules/proxy-gateway/components/OpenCodeSyncCard';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Button } from '@/components/ui/button';
+import { FeedbackState } from '@/components/ui/feedback-state';
 
 export const Route = createFileRoute('/proxy')({
   component: ProxyPage,
@@ -33,7 +36,8 @@ export const Route = createFileRoute('/proxy')({
 
 function ProxyPage() {
   const { t } = useTranslation();
-  const { config, isLoading, saveConfig } = useAppConfig();
+  const { config, isLoading, saveConfig, serviceAvailable, serviceLoading, retryService } =
+    useAppConfig();
   const { data: cloudAccounts = [] } = useCloudAccounts();
 
   // Query all available local IPs
@@ -65,7 +69,7 @@ function ProxyPage() {
 
   // Sync config.proxy to local state when loaded, and check actual server status
   useEffect(() => {
-    if (config) {
+    if (config && serviceAvailable) {
       const syncServerStatus = async () => {
         try {
           const status = await ipc.client.gateway.status();
@@ -84,7 +88,7 @@ function ProxyPage() {
       };
       syncServerStatus();
     }
-  }, [config, saveConfig]);
+  }, [config, saveConfig, serviceAvailable]);
 
   // Helper to update proxyConfig and auto-save
   const updateProxyConfig = async (newProxyConfig: ProxyConfig) => {
@@ -94,8 +98,18 @@ function ProxyPage() {
     }
   };
 
+  const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (proxyConfig?.api_key_configured && !revealedKey) {
+      ipc.client.config.service
+        .revealSecret({ name: 'api-key' })
+        .then((res) => setRevealedKey(res.value))
+        .catch(() => {});
+    }
+  }, [proxyConfig?.api_key_configured, revealedKey]);
+
   const exampleModels = useMemo(() => buildProxyExampleModels(cloudAccounts), [cloudAccounts]);
-  const apiKey = proxyConfig?.api_key || '';
+  const apiKey = revealedKey || '';
   const port = proxyConfig?.port || 8045;
   const baseUrl = `http://${selectedIp || 'localhost'}:${port}`;
 
@@ -107,11 +121,26 @@ function ProxyPage() {
     setActiveTab('dashboard');
   };
 
-  if (isLoading || !proxyConfig) {
+  if (isLoading || serviceLoading) {
     return (
       <div className="flex h-full items-center justify-center p-12">
         <Loader2 className="size-8 animate-spin text-primary" />
       </div>
+    );
+  }
+
+  if (!serviceAvailable || !proxyConfig) {
+    return (
+      <FeedbackState
+        kind="error"
+        title={t('settings.service-unavailable', 'Background Service Unavailable')}
+        description={t(
+          'settings.service-unavailable-description',
+          'The core management service is not responding. Retry or restart the application.',
+        )}
+      >
+        <Button onClick={() => void retryService()}>{t('settings.service-retry', 'Retry')}</Button>
+      </FeedbackState>
     );
   }
 
@@ -287,7 +316,6 @@ function ProxyPage() {
           />
         </TabsContent>
       </Tabs>
-
     </div>
   );
 }

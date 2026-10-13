@@ -1,5 +1,6 @@
 import fs from 'fs';
 import { BrowserWindow, Notification } from 'electron';
+import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { CloudAccountRepo } from '@/modules/cloud-account/persistence/cloudHandler';
 import { CloudAccountSettingsStore } from '@/modules/cloud-account/persistence/cloud-account-settings-store';
@@ -26,59 +27,13 @@ import { ConfigManager } from '@/modules/config/ipc/manager';
 import { proxyModelAvailabilityStore } from '@/modules/proxy-gateway/server/shared/services/model-availability.service';
 import { WeeklyWarmupService } from './WeeklyWarmupService';
 import type { WeeklyWarmupExecutor } from './weekly-warmup-contract';
-
-type CloudMonitorLanguage = 'en' | 'zh-CN' | 'ru' | 'vi' | 'fr' | 'tr';
-
-const CLOUD_MONITOR_NOTIFICATION_TEXT: Record<
-  CloudMonitorLanguage,
-  {
-    lowQuotaTitle: string;
-    lowQuotaBody: (email: string, models: string) => string;
-    lowAICreditsTitle: string;
-    lowAICreditsBody: (email: string, credits: number) => string;
-  }
-> = {
-  en: {
-    lowQuotaTitle: 'Low Quota Alert',
-    lowQuotaBody: (email, models) => `${email}: ${models} are low on quota`,
-    lowAICreditsTitle: 'Low AI Credits Alert',
-    lowAICreditsBody: (email, credits) => `${email}: AI credits balance is low (${credits})`,
-  },
-  'zh-CN': {
-    lowQuotaTitle: '额度不足提醒',
-    lowQuotaBody: (email, models) => `${email}：${models} 的额度较低`,
-    lowAICreditsTitle: 'AI 积分不足提醒',
-    lowAICreditsBody: (email, credits) => `${email}：AI 积分余额不足（${credits}）`,
-  },
-  ru: {
-    lowQuotaTitle: 'Предупреждение о низкой квоте',
-    lowQuotaBody: (email, models) => `${email}: низкая квота у ${models}`,
-    lowAICreditsTitle: 'Предупреждение о низком балансе AI-кредитов',
-    lowAICreditsBody: (email, credits) => `${email}: низкий баланс AI-кредитов (${credits})`,
-  },
-  vi: {
-    lowQuotaTitle: 'Cảnh báo quota thấp',
-    lowQuotaBody: (email, models) => `${email}: ${models} đang có quota thấp`,
-    lowAICreditsTitle: 'Cảnh báo số dư tín dụng AI thấp',
-    lowAICreditsBody: (email, credits) => `${email}: số dư tín dụng AI thấp (${credits})`,
-  },
-  fr: {
-    lowQuotaTitle: 'Alerte de quota faible',
-    lowQuotaBody: (email, models) => `${email} : quota faible pour ${models}`,
-    lowAICreditsTitle: 'Alerte de crédits IA faibles',
-    lowAICreditsBody: (email, credits) => `${email} : solde de crédits IA faible (${credits})`,
-  },
-  tr: {
-    lowQuotaTitle: 'Düşük Kota Uyarısı',
-    lowQuotaBody: (email, models) => `${email}: ${models} için kota düşük`,
-    lowAICreditsTitle: 'Düşük AI Kredisi Uyarısı',
-    lowAICreditsBody: (email, credits) => `${email}: AI kredi bakiyesi düşük (${credits})`,
-  },
-};
+import { cloudAccountWeeklyWarmupRunner } from './cloud-account-weekly-warmup-runner';
 
 const AUTO_SWITCH_CANDIDATE_TARGETS: AntigravityAppTarget[] = [
   ...AntigravityAppTargetSchema.options,
 ];
+
+const NumberSettingSchema = z.number();
 
 /**
  * Whether the agy CLI is installed, so its credential-store switch can actually run. Unlike the
@@ -111,8 +66,6 @@ function resolveAutoSwitchTargets(): AntigravityAppTarget[] {
   );
 }
 const BooleanSettingSchema = z.boolean();
-const NumberSettingSchema = z.number();
-const StringSettingSchema = z.string();
 
 async function persistMonitorAccountStatusFromError(
   accountId: string,
@@ -138,26 +91,6 @@ async function persistMonitorAccountStatusFromError(
       await evictAccountFromActiveLeaseCache(accountId);
     }
   }
-}
-
-function getCloudMonitorLanguage(language: string | null | undefined): CloudMonitorLanguage {
-  const normalizedLanguage = language?.toLowerCase() ?? 'en';
-  if (normalizedLanguage.startsWith('zh')) {
-    return 'zh-CN';
-  }
-  if (normalizedLanguage.startsWith('ru')) {
-    return 'ru';
-  }
-  if (normalizedLanguage.startsWith('vi')) {
-    return 'vi';
-  }
-  if (normalizedLanguage.startsWith('fr')) {
-    return 'fr';
-  }
-  if (normalizedLanguage.startsWith('tr')) {
-    return 'tr';
-  }
-  return 'en';
 }
 
 function hasReusableCachedQuota(account: {
@@ -193,6 +126,27 @@ function mergeRefreshedToken(
 }
 
 export class CloudMonitorService {
+  private static acceptingPolls = true;
+  private static effects: { onQuotaUpdated(accounts: CloudAccount[]): void } = {
+    onQuotaUpdated: () => {},
+  };
+
+  static configureEffects(effects: { onQuotaUpdated(accounts: CloudAccount[]): void }): void {
+    this.effects = effects;
+  }
+
+  static openAdmission(): void {
+    this.acceptingPolls = true;
+  }
+  static closeAdmission(): void {
+    this.acceptingPolls = false;
+    this.stop();
+  }
+  static async drain(): Promise<void> {
+    await this.activePollPromise;
+    await cloudAccountWeeklyWarmupRunner.drain();
+  }
+
   private static nextPollTimeout: NodeJS.Timeout | null = null;
   private static get intervalId(): NodeJS.Timeout | null {
     return this.nextPollTimeout;
@@ -206,10 +160,10 @@ export class CloudMonitorService {
   static readonly DEFAULT_DELAY_MAX_SECONDS = 45;
   private static readonly DELAY_MIN_SETTING_KEY = 'metrics_delay_min_seconds';
   private static readonly DELAY_MAX_SETTING_KEY = 'metrics_delay_max_seconds';
+  private static POLL_INTERVAL = 1000 * 60 * 5; // 5 minutes
   private static DEBOUNCE_TIME = 10000; // 10 seconds
   private static lastFocusTime: number = 0;
   private static activePollPromise: Promise<void> | null = null;
-  private static weeklyWarmupExecutor: WeeklyWarmupExecutor | null = null;
   private static stopped = false;
   private static stopEpoch = 0;
   private static syncingAccountId: string | null = null;
@@ -299,7 +253,7 @@ export class CloudMonitorService {
   }
 
   static configureWeeklyWarmupExecutor(executor: WeeklyWarmupExecutor): void {
-    this.weeklyWarmupExecutor = executor;
+    cloudAccountWeeklyWarmupRunner.configure(executor);
   }
 
   static isContinuousPollingEnabled(): boolean {
@@ -321,21 +275,25 @@ export class CloudMonitorService {
     this.stop();
   }
 
-  // Helper for testing
   static resetStateForTesting() {
+    this.acceptingPolls = true;
     WeeklyWarmupService.resetStateForTesting();
     this.lastFocusTime = 0;
     this.activePollPromise = null;
-    this.weeklyWarmupExecutor = null;
     this.syncingAccountId = null;
     this.syncStatusBroadcaster = null;
+    cloudAccountWeeklyWarmupRunner.resetStateForTesting();
     this.stop();
   }
 
   static start() {
+    if (!this.acceptingPolls) {
+      return;
+    }
     if (this.nextPollTimeout || this.activePollPromise) return;
     this.stopped = false;
     logger.info('Starting CloudMonitorService...');
+    cloudAccountWeeklyWarmupRunner.start();
 
     // Set lastFocusTime to now to prevent "double-dip" on startup (focus event immediately after start)
     this.lastFocusTime = Date.now();
@@ -349,7 +307,7 @@ export class CloudMonitorService {
   static stop() {
     this.stopped = true;
     this.stopEpoch++;
-    WeeklyWarmupService.cancel();
+    cloudAccountWeeklyWarmupRunner.cancel();
     if (this.sleepCancelResolver) {
       this.sleepCancelResolver();
       this.sleepCancelResolver = null;
@@ -382,6 +340,10 @@ export class CloudMonitorService {
       this.sleepCancelResolver = onCancel;
       timer = setTimeout(cleanup, ms);
     });
+  }
+
+  static async drainWeeklyWarmups(): Promise<void> {
+    await cloudAccountWeeklyWarmupRunner.drain();
   }
 
   /**
@@ -465,7 +427,11 @@ export class CloudMonitorService {
   }
 
   static async poll(): Promise<void> {
+    if (!this.acceptingPolls) {
+      throw new Error('Cloud monitor is shutting down');
+    }
     this.stopped = false;
+    cloudAccountWeeklyWarmupRunner.start();
     if (this.nextPollTimeout) {
       clearTimeout(this.nextPollTimeout);
       this.nextPollTimeout = null;
@@ -758,66 +724,10 @@ export class CloudMonitorService {
       }
     }
 
-    // 4. Check for Quota Alerts
-    const alertEnabled = CloudAccountSettingsStore.getSetting(
-      'quota_alert_enabled',
-      false,
-      BooleanSettingSchema,
-    );
-    const alertThreshold = CloudAccountSettingsStore.getSetting(
-      'quota_alert_threshold',
-      20,
-      NumberSettingSchema,
-    );
-    const notificationLanguage = getCloudMonitorLanguage(
-      CloudAccountSettingsStore.getSetting('language', 'en', StringSettingSchema),
-    );
-    const notificationText = CLOUD_MONITOR_NOTIFICATION_TEXT[notificationLanguage];
-
-    if (alertEnabled) {
-      for (const account of accounts) {
-        if (!account.quota?.models) continue;
-        const lowQuotaModels = Object.entries(account.quota.models)
-          .filter(([_, info]) => info.percentage >= 0 && info.percentage <= alertThreshold)
-          .map(([name, info]) => {
-            return info.display_name || name.replace('models/', '').replace(/-/g, ' ');
-          });
-
-        if (lowQuotaModels.length > 0) {
-          new Notification({
-            title: notificationText.lowQuotaTitle,
-            body: notificationText.lowQuotaBody(account.email, lowQuotaModels.join(', ')),
-            silent: false,
-          }).show();
-        }
-      }
-    }
-
-    // Check for AI Credits Alerts
-    const aiCreditsAlertEnabled = CloudAccountSettingsStore.getSetting(
-      'ai_credits_alert_enabled',
-      false,
-      BooleanSettingSchema,
-    );
-    const aiCreditsAlertThreshold = CloudAccountSettingsStore.getSetting(
-      'ai_credits_alert_threshold',
-      5000,
-      NumberSettingSchema,
-    );
-
-    if (aiCreditsAlertEnabled) {
-      for (const account of accounts) {
-        const credits = account.quota?.ai_credits?.credits;
-        if (credits === undefined || credits > aiCreditsAlertThreshold) {
-          continue;
-        }
-
-        new Notification({
-          title: notificationText.lowAICreditsTitle,
-          body: notificationText.lowAICreditsBody(account.email, credits),
-          silent: false,
-        }).show();
-      }
+    try {
+      this.effects.onQuotaUpdated(accounts);
+    } catch {
+      logger.warn('Cloud monitor presentation effect failed');
     }
 
     // 5. Check for Auto-Switch
@@ -857,44 +767,10 @@ export class CloudMonitorService {
     }
   }
 
-  /** The caller supplies only accounts whose quota/token refresh just succeeded. */
-  static scheduleWeeklyWarmup(accounts: CloudAccount[]): void {
-    this.runWeeklyWarmups(accounts).catch(() => {
-      logger.warn('Weekly warmup refresh could not complete');
-    });
-  }
-
   private static async runWeeklyWarmups(accounts: CloudAccount[]): Promise<void> {
-    if (this.stopped || !WeeklyWarmupService.isEnabled()) {
+    if (this.stopped) {
       return;
     }
-    if (!this.weeklyWarmupExecutor) {
-      logger.warn('Weekly warmup is enabled, but no executor is configured');
-      return;
-    }
-
-    const warmedAccountIds = await WeeklyWarmupService.run(accounts, this.weeklyWarmupExecutor);
-    for (const accountId of warmedAccountIds) {
-      if (this.stopped) {
-        break;
-      }
-      const account = accounts.find((candidate) => candidate.id === accountId);
-      if (!account) {
-        continue;
-      }
-      try {
-        const refreshedQuota = await GoogleAPIService.fetchQuota(
-          account.token.access_token,
-          account.proxy_url,
-        );
-        account.quota = {
-          ...refreshedQuota,
-          ai_credits: refreshedQuota.ai_credits ?? account.quota?.ai_credits,
-        };
-        await CloudAccountRepo.updateQuota(account.id, account.quota);
-      } catch {
-        logger.warn(`Failed to refresh quota after weekly warmup for account=${account.id}`);
-      }
-    }
+    await cloudAccountWeeklyWarmupRunner.run(accounts);
   }
 }

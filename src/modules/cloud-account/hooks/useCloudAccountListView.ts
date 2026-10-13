@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { filter, flatMap, isEmpty, size, sumBy } from 'lodash-es';
-import type { CloudAccount } from '@/modules/cloud-account/types';
+import type { CloudAccountView } from '@/modules/cloud-account/services/cloud-account-view';
 import type { AppConfig } from '@/modules/config/types';
 import {
   buildAccountTierOptions,
@@ -24,12 +24,12 @@ import {
   type ManualAccountRecommendation,
 } from '@/modules/cloud-account/utils/manual-account-recommendation';
 
-const EMPTY_ACCOUNTS: CloudAccount[] = [];
+const EMPTY_ACCOUNTS: CloudAccountView[] = [];
 const EMPTY_SELECTED_TIER_KEYS: string[] = [];
 const EMPTY_MODEL_VISIBILITY: Record<string, boolean> = {};
 
 export interface CloudAccountListView {
-  sortedAccounts: CloudAccount[];
+  sortedAccounts: CloudAccountView[];
   manualRecommendation: ManualAccountRecommendation | null;
   tierOptions: AccountTierOption[];
   effectiveSelectedTierKeys: string[];
@@ -46,7 +46,7 @@ export interface CloudAccountListView {
 }
 
 function calculateOverallQuotaPercentage(
-  accounts: CloudAccount[],
+  accounts: CloudAccountView[],
   modelVisibility: Record<string, boolean>,
 ): number | null {
   if (accounts.length === 0) {
@@ -74,8 +74,8 @@ function calculateOverallQuotaPercentage(
 }
 
 export function useCloudAccountListView(
-  accounts: CloudAccount[] | undefined,
-  config: AppConfig | undefined,
+  accounts: CloudAccountView[] | undefined,
+  config: Pick<AppConfig, 'account_tier_filter' | 'model_visibility'> | undefined,
   currentSort: AccountSortKey,
 ): CloudAccountListView {
   const sourceAccounts = accounts ?? EMPTY_ACCOUNTS;

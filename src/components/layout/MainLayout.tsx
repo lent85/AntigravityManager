@@ -106,48 +106,23 @@ export const MainLayout: React.FC = () => {
         {/* Sidebar */}
         <aside
           className={cn(
-            'bg-card/75 group border-border/70 relative flex flex-col border-r backdrop-blur-lg transition-all duration-300 ease-in-out',
-            isCollapsed ? 'w-[70px]' : 'w-64',
+            'bg-sidebar text-sidebar-foreground border-sidebar-border flex shrink-0 flex-col border-r select-none',
+            isCollapsed ? 'w-16' : 'w-56',
           )}
         >
-          <Button
-            variant="ghost"
-            size="icon"
-            className="bg-background hover:bg-accent hover:text-accent-foreground absolute top-6 -right-3 z-10 h-6 w-6 rounded-full border opacity-0 shadow-md transition-opacity group-hover:opacity-100"
-            onClick={() => setIsCollapsed(!isCollapsed)}
-          >
-            {isCollapsed ? (
-              <ChevronRight className="h-3 w-3" />
-            ) : (
-              <ChevronLeft className="h-3 w-3" />
-            )}
-          </Button>
-
-          <div className={cn('flex flex-col', isCollapsed ? 'items-center p-4' : 'p-6')}>
+          <div className={cn('flex flex-col py-5', isCollapsed ? 'items-center px-3' : 'px-4')}>
             <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap">
-              <div className="bg-primary text-primary-foreground flex h-6 w-6 shrink-0 items-center justify-center rounded shadow-sm">
-                <Rocket className="h-4 w-4" />
+              <div className="bg-info-soft text-info border-info-border flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border">
+                <Rocket className="h-4 w-4" aria-hidden="true" />
               </div>
-              <div
-                className={cn(
-                  'overflow-hidden transition-all duration-300',
-                  isCollapsed ? 'w-0 opacity-0' : 'w-auto opacity-100',
-                )}
-              >
-                <h1 className="text-xl font-bold tracking-tight">Antigravity</h1>
+              <div className={cn('overflow-hidden', isCollapsed && 'hidden')}>
+                <div className="text-sm font-semibold tracking-tight">Antigravity</div>
+                <div className="text-muted-foreground text-xs">Manager</div>
               </div>
-            </div>
-            <div
-              className={cn(
-                'text-muted-foreground mt-1 overflow-hidden text-xs whitespace-nowrap transition-all duration-300',
-                isCollapsed ? 'h-0 opacity-0' : 'h-auto opacity-100',
-              )}
-            >
-              Manager
             </div>
           </div>
 
-          <nav className="flex-1 space-y-2 px-2">
+          <nav aria-label={t('nav.navigation')} className="flex-1 space-y-1 px-2">
             <TooltipProvider>
               {navItems.map((item) => {
                 const isActive = location.pathname === item.to;
@@ -158,14 +133,15 @@ export const MainLayout: React.FC = () => {
                       <TooltipTrigger asChild>
                         <Link
                           to={item.to}
+                          aria-current={isActive ? 'page' : undefined}
                           className={cn(
-                            'relative mx-auto flex h-10 w-10 items-center justify-center rounded-md transition-all duration-200',
+                            'relative focus-visible:ring-ring mx-auto flex h-10 w-10 cursor-default items-center justify-center rounded-md outline-none transition-all duration-200 focus-visible:ring-2',
                             isActive
-                              ? 'bg-primary/10 text-primary shadow-[0_2px_8px_rgba(37,99,235,0.08)]'
+                              ? 'bg-sidebar-accent text-sidebar-accent-foreground ring-sidebar-border ring-1 ring-inset'
                               : 'hover:bg-muted text-muted-foreground hover:text-foreground',
                           )}
                         >
-                          <item.icon className="h-5 w-5" />
+                          <item.icon className="h-4 w-4" aria-hidden="true" />
                           {item.badge !== undefined && (
                             <span className="absolute top-1.5 right-1.5 flex h-2 w-2 rounded-full bg-purple-500 ring-2 ring-background animate-pulse" />
                           )}
@@ -184,15 +160,16 @@ export const MainLayout: React.FC = () => {
                   <Link
                     key={item.to}
                     to={item.to}
+                    aria-current={isActive ? 'page' : undefined}
                     className={cn(
-                      'flex items-center justify-between rounded-md border-l-2 px-3 py-2.5 text-sm font-medium transition-all duration-200',
+                      'focus-visible:ring-ring flex h-10 cursor-default items-center justify-between rounded-md px-3 text-sm font-medium outline-none transition-all duration-200 focus-visible:ring-2',
                       isActive
-                        ? 'bg-primary/10 text-primary border-primary rounded-l-none pl-2 font-semibold'
-                        : 'hover:bg-muted text-muted-foreground hover:text-foreground border-transparent',
+                        ? 'bg-sidebar-accent text-sidebar-accent-foreground ring-sidebar-border font-semibold ring-1 ring-inset'
+                        : 'hover:bg-muted text-muted-foreground hover:text-foreground',
                     )}
                   >
                     <div className="flex items-center gap-3">
-                      <item.icon className="h-4 w-4" />
+                      <item.icon className="h-4 w-4" aria-hidden="true" />
                       <span>{item.label}</span>
                     </div>
                     {item.badge !== undefined && (
@@ -210,13 +187,31 @@ export const MainLayout: React.FC = () => {
             <SidebarIndicators isCollapsed={isCollapsed} />
           </div>
 
-          <div className="border-border/60 border-t p-2">
+          <div className="space-y-2 border-border/60 border-t p-2">
+            <Button
+              variant="ghost"
+              className={cn(
+                'text-muted-foreground h-9 w-full justify-start px-3 text-xs',
+                isCollapsed && 'justify-center px-0',
+              )}
+              aria-label={t(isCollapsed ? 'nav.expand-sidebar' : 'nav.collapse-sidebar')}
+              aria-expanded={!isCollapsed}
+              title={t(isCollapsed ? 'nav.expand-sidebar' : 'nav.collapse-sidebar')}
+              onClick={() => setIsCollapsed(!isCollapsed)}
+            >
+              {isCollapsed ? (
+                <ChevronRight aria-hidden="true" />
+              ) : (
+                <ChevronLeft aria-hidden="true" />
+              )}
+              {!isCollapsed && t('nav.collapse-sidebar')}
+            </Button>
             <StatusBar isCollapsed={isCollapsed} />
           </div>
         </aside>
 
         {/* Content Area */}
-        <main className="flex-1 overflow-auto transition-all duration-300">
+        <main className="min-w-0 flex-1 overflow-auto">
           <ErrorBoundary
             resetKeys={[location.pathname]}
             onReset={() => {
@@ -228,6 +223,7 @@ export const MainLayout: React.FC = () => {
               }
 
               toast({
+                error,
                 title: t('error.generic'),
                 description: getLocalizedErrorMessage(error, t),
                 variant: 'destructive',

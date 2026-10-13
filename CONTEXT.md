@@ -36,6 +36,10 @@ _Avoid_: API request, chat call
 The request shape sent from the proxy gateway toward the upstream model provider after protocol conversion, model mapping, and account lease resolution.
 _Avoid_: Gemini request, internal request
 
+**Tool Parameter Degradation**:
+A gateway compatibility outcome in which an unconvertible tool parameter definition is replaced with a simpler definition while the tool remains available. It is distinct from successful lossless conversion and from rejecting the gateway request.
+_Avoid_: schema repair, tool removal, successful conversion
+
 **Credential-Store Injection**:
 Writing cloud account token state into the Antigravity credential store format expected by a specific app target.
 _Avoid_: token restore, credential sync
@@ -47,6 +51,14 @@ _Avoid_: sync from IDE, account backup
 **Device Profile**:
 The local identity payload used to make an Antigravity app target present a stable machine identity.
 _Avoid_: machine info, fingerprint
+
+**Target Release**:
+The newer Antigravity Manager release offered to the user for an update. It identifies the version whose release notes apply to that update.
+_Avoid_: latest version when referring to an already selected update
+
+**Release Notes**:
+The complete published change description for one Antigravity Manager release, retained in its original language. Release notes cover that release alone rather than all changes since the user's installed version.
+_Avoid_: release history, upgrade summary, cumulative changelog
 
 ## Flagged Ambiguities
 

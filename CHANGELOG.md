@@ -2,6 +2,106 @@
 
 # Changelog
 
+# 🚀 Antigravity Manager Release v0.25.0
+
+**Release Date:** 2026-10-10
+**Since v0.24.0:** 8 commits · 1 merged PR · 1 verified contributor
+
+> This release includes updates in Desktop & User Experience, Security & Reliability, Tooling & Maintenance.
+
+---
+
+## ✨ Highlights
+
+- **Feature** — add Linux AppImage automatic updates ([b436dfd](https://github.com/Draculabo/AntigravityManager/commit/b436dfd9aafad26eb08b03e390d1dd58a2d093fc))
+- **Feature** — add error notification details and GitHub reports ([0217247](https://github.com/Draculabo/AntigravityManager/commit/0217247419057838d01ca05dd7e7c745b3fef5f3))
+- **Feature** — add sanitized diagnostic log attachments ([2d3f4c3](https://github.com/Draculabo/AntigravityManager/commit/2d3f4c3abcd9c661026745522cba933bba11b21b))
+- **Feature** — publish reviewed release notes with PR attribution ([20a29d9](https://github.com/Draculabo/AntigravityManager/commit/20a29d99ec0ab5011a40417e7371531de7ca9b16))
+- **Fix** — isolate thought signatures by conversation ownership ([43cc1c7](https://github.com/Draculabo/AntigravityManager/commit/43cc1c74f41f10a95f0054ad4b9c1b83f3aa7e9d))
+
+---
+
+## 🖥️ Desktop & User Experience
+
+- **Maintenance** — update package metadata to v0.24.0 ([#341](https://github.com/Draculabo/AntigravityManager/pull/341))
+- **Feature** — add Linux AppImage automatic updates ([b436dfd](https://github.com/Draculabo/AntigravityManager/commit/b436dfd9aafad26eb08b03e390d1dd58a2d093fc))
+- **Feature** — add error notification details and GitHub reports ([0217247](https://github.com/Draculabo/AntigravityManager/commit/0217247419057838d01ca05dd7e7c745b3fef5f3))
+- **Feature** — add sanitized diagnostic log attachments ([2d3f4c3](https://github.com/Draculabo/AntigravityManager/commit/2d3f4c3abcd9c661026745522cba933bba11b21b))
+
+---
+
+## 🔒 Security & Reliability
+
+- **Fix** — isolate thought signatures by conversation ownership ([43cc1c7](https://github.com/Draculabo/AntigravityManager/commit/43cc1c74f41f10a95f0054ad4b9c1b83f3aa7e9d))
+
+---
+
+## 🔧 Tooling & Maintenance
+
+- **Feature** — publish reviewed release notes with PR attribution ([20a29d9](https://github.com/Draculabo/AntigravityManager/commit/20a29d99ec0ab5011a40417e7371531de7ca9b16))
+- **Fix** — run AppImage tool without FUSE ([30cfaf0](https://github.com/Draculabo/AntigravityManager/commit/30cfaf0171daf09e532a68a4e74c4789fca082c1))
+- **Fix** — generate update notes automatically in CI ([bd30113](https://github.com/Draculabo/AntigravityManager/commit/bd30113133fdb5c5e4b75ac2017c19b2341f6955))
+
+---
+
+## 👥 Contributors
+
+Thanks to everyone who contributed to this release.
+
+@Draculabo
+
+<details>
+<summary>Merged pull requests and authors</summary>
+
+- chore(linux): update package metadata to v0.24.0 by @Draculabo ([#341](https://github.com/Draculabo/AntigravityManager/pull/341))
+
+</details>
+
+---
+
+**Full Changelog:** https://github.com/Draculabo/AntigravityManager/compare/v0.24.0...v0.25.0
+
+## [0.24.0](https://github.com/Draculabo/AntigravityManager/compare/v0.23.0...v0.24.0) (2026-10-09)
+
+### ✨ Features
+
+* **app-shell:** show release notes before updating ([0004c18](https://github.com/Draculabo/AntigravityManager/commit/0004c18ed657d873745a0d7af9d0ff09f74de492))
+* **proxy-gateway:** prepare bounded schemas and report conversion failures ([d65e499](https://github.com/Draculabo/AntigravityManager/commit/d65e499a9fe52484d4008360e1cbf8e91b91c414))
+
+### 🐛 Bug Fixes
+
+* **ci:** install locked dependencies before publishing update feeds ([24e921f](https://github.com/Draculabo/AntigravityManager/commit/24e921f957d7a76718e1612988184ed5bde43a25))
+* **config:** reject invalid upstream proxy settings ([c43e115](https://github.com/Draculabo/AntigravityManager/commit/c43e115708da49339cef739efd48409c42ffce03))
+* preserve safe cloud switch diagnostics in Sentry ([ce4845b](https://github.com/Draculabo/AntigravityManager/commit/ce4845bd89c409eddd1db9d8d29bf6d52259b2a9))
+* **runtime:** close hidden Windows clients and confirm startup within deadline ([bf44c09](https://github.com/Draculabo/AntigravityManager/commit/bf44c094150a3ead9029b4d06766ba45421d6d3f))
+
+### ♻️ Code Refactoring
+
+* **proxy-gateway:** extract entry validation, errors and audit decorators ([45f995a](https://github.com/Draculabo/AntigravityManager/commit/45f995a41de0381a94214b276cbc0784444425a8))
+
+## [0.23.0](https://github.com/Draculabo/AntigravityManager/compare/v0.22.0...v0.23.0) (2026-10-07)
+
+### ✨ Features
+
+* **accounts:** add quota display controls and proxy account continuity ([e87d109](https://github.com/Draculabo/AntigravityManager/commit/e87d10933f712c7920f003cc3f5330c719740d19))
+* **cloud-account:** copy diagnostics when reporting account load errors ([f50096d](https://github.com/Draculabo/AntigravityManager/commit/f50096d7945c8e2742d1db4ddbdfb01207cf17d2))
+* **headless:** add standalone core and CLI with desktop integration ([8e0044e](https://github.com/Draculabo/AntigravityManager/commit/8e0044e405b2e640e52a2211f586105df0ee17a5))
+* **renderer:** add scoped account selection and query subscriptions ([8b8259a](https://github.com/Draculabo/AntigravityManager/commit/8b8259a73595a36ae4c2c5b47a1d696b36b2e22a))
+* **ui:** refine desktop layouts, dialogs and feedback ([96341da](https://github.com/Draculabo/AntigravityManager/commit/96341da6580fad6371ae1202dc742080009cdf55))
+
+### 🐛 Bug Fixes
+
+* **build:** account for standalone runtime in Windows size audit ([498eca8](https://github.com/Draculabo/AntigravityManager/commit/498eca8107636348a1cf33f78049137bd29d13e8))
+* **build:** make Windows runtime preparation and Forge packaging reliable ([91cf8e0](https://github.com/Draculabo/AntigravityManager/commit/91cf8e0183031e6349bf1921b883b7d858db5137))
+* **proxy:** preserve explicit quota resets and resolve automatic Flash routes ([036bb43](https://github.com/Draculabo/AntigravityManager/commit/036bb4394c219edeaf8d8af607d3505da87b15f0))
+* **proxy:** scope 64 MiB Fastify JSON body limit to model payload routes ([#335](https://github.com/Draculabo/AntigravityManager/issues/335)) ([54f1ca7](https://github.com/Draculabo/AntigravityManager/commit/54f1ca7a82a78197fa97624b61a526bc61b55b9d)), closes [#333](https://github.com/Draculabo/AntigravityManager/issues/333)
+* **runtime:** prevent client update locks and confirm sustained startup ([1482b53](https://github.com/Draculabo/AntigravityManager/commit/1482b5354ad89c7691aecb3955d2aee1bf31967f))
+
+### ✅ Tests
+
+* **proxy:** cover scoped payload limits and observability endpoints ([b0e1928](https://github.com/Draculabo/AntigravityManager/commit/b0e19280c308e70407eba6b89db9a408790d115d))
+* **renderer:** add Electron interaction and render isolation coverage ([d4cae1d](https://github.com/Draculabo/AntigravityManager/commit/d4cae1daff4d90a9489b4b09b4c92129cad5d78d))
+
 ## [0.22.0](https://github.com/Draculabo/AntigravityManager/compare/v0.21.2...v0.22.0) (2026-10-03)
 
 ### ✨ Features

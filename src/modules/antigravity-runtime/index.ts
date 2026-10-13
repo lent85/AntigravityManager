@@ -4,8 +4,10 @@ export {
   prepareClientAccountWrite,
   resolveClientAccountStorage,
 } from './credentials/clientAccountWrite';
+export type { ClientAccountStorage } from './credentials/clientAccountWrite';
 export type { ClientAccountCredentials } from './credentials/clientAccount';
 export {
   readAntigravityCredentialStoreToken,
+  readClientAccountToken,
   CredentialStoreReadError,
 } from './credentials/antigravityCredentialStore';

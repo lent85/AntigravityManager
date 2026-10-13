@@ -15,7 +15,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import type { ProxyApiKey, ProxyConfig } from '@/modules/config/types';
+import { ipc } from '@/ipc/manager';
+import type { ProxyApiKey } from '@/modules/config/types';
+import type { ServiceConfigSnapshot } from '@/modules/config/service-config.schema';
+type ProxyConfig = ServiceConfigSnapshot['proxy'];
 import {
   Key,
   Plus,
@@ -60,20 +63,27 @@ export function ProxyApiKeysCard({
 
   // Auto-migrate legacy single api_key to api_keys array if empty
   useEffect(() => {
-    if ((!proxyConfig.api_keys || proxyConfig.api_keys.length === 0) && proxyConfig.api_key) {
-      const seededKey: ProxyApiKey = {
-        id: 'default',
-        name: 'Default Client',
-        key: proxyConfig.api_key,
-        created_at: Date.now(),
-        enabled: true,
-      };
-      updateProxyConfig({
-        ...proxyConfig,
-        api_keys: [seededKey],
-      });
+    if ((!proxyConfig.api_keys || proxyConfig.api_keys.length === 0) && proxyConfig.api_key_configured) {
+      ipc.client.config.service
+        .revealSecret({ name: 'api-key' })
+        .then((result) => {
+          if (result.value) {
+            const seededKey: ProxyApiKey = {
+              id: 'default',
+              name: 'Default Client',
+              key: result.value,
+              created_at: Date.now(),
+              enabled: true,
+            };
+            void updateProxyConfig({
+              ...proxyConfig,
+              api_keys: [seededKey],
+            });
+          }
+        })
+        .catch(() => {});
     }
-  }, [proxyConfig, updateProxyConfig]);
+  }, [proxyConfig.api_key_configured, proxyConfig.api_keys, proxyConfig, updateProxyConfig]);
 
   const keys = proxyConfig.api_keys || [];
 
@@ -109,10 +119,12 @@ export function ProxyApiKeysCard({
     };
 
     const nextKeys = [...keys, newApiKey];
+    if (!proxyConfig.api_key_configured) {
+      void ipc.client.config.service.writeSecret({ name: 'api-key', value: trimmedKey });
+    }
     await updateProxyConfig({
       ...proxyConfig,
       api_keys: nextKeys,
-      api_key: proxyConfig.api_key || trimmedKey,
     });
 
     setIsCreateOpen(false);
@@ -126,12 +138,14 @@ export function ProxyApiKeysCard({
     const nextKeys = keys.map((k) =>
       k.id === keyItem.id ? { ...k, enabled: !k.enabled } : k,
     );
-    // Keep primary key updated
+    // Keep primary secret updated
     const firstActive = nextKeys.find((k) => k.enabled !== false);
+    if (firstActive) {
+      void ipc.client.config.service.writeSecret({ name: 'api-key', value: firstActive.key });
+    }
     await updateProxyConfig({
       ...proxyConfig,
       api_keys: nextKeys,
-      api_key: firstActive ? firstActive.key : proxyConfig.api_key,
     });
     toast({
       title: keyItem.enabled
@@ -165,10 +179,13 @@ export function ProxyApiKeysCard({
     if (!deleteKey) return;
     const nextKeys = keys.filter((k) => k.id !== deleteKey.id);
     const firstActive = nextKeys.find((k) => k.enabled !== false);
+    void ipc.client.config.service.writeSecret({
+      name: 'api-key',
+      value: firstActive ? firstActive.key : null,
+    });
     await updateProxyConfig({
       ...proxyConfig,
       api_keys: nextKeys,
-      api_key: firstActive ? firstActive.key : '',
     });
     setDeleteKey(null);
     toast({

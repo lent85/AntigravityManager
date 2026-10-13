@@ -15,6 +15,7 @@ import { UpstreamRequestError } from '../../modules/proxy-gateway/server/common/
 import { setServerConfig } from '../../server/server-config';
 import { DEFAULT_APP_CONFIG, ProxyConfig } from '@/modules/config/types';
 import { SignatureStore } from '@/modules/proxy-gateway/antigravity/SignatureStore';
+import { resolveOpenAISessionScope } from '@/modules/proxy-gateway/server/common/signature-session-scope';
 import { GenerationConstraintsService } from '../../modules/proxy-gateway/server/shared/services/generation-constraints.service';
 import { ModelRoutingService } from '../../modules/proxy-gateway/server/shared/services/model-routing.service';
 import { ProxyRetryService } from '../../modules/proxy-gateway/server/shared/services/proxy-retry.service';
@@ -657,7 +658,22 @@ describe('ProxyService Empty Stream Retry Logic', () => {
 
   it('keeps OpenAI signature provenance on the physical model after web-search remapping', async () => {
     const service = new TestableOpenAIService();
-    const sessionKey = 'openai:openai-remap';
+    const request: OpenAIChatRequest = {
+      model: 'gpt-oss-120b-medium',
+      stream: false,
+      extra: { user_id: 'openai-remap' },
+      messages: [
+        {
+          role: 'assistant',
+          content: 'Historical reasoning',
+          tool_calls: [
+            { id: 'call_old', type: 'function', function: { name: 'lookup', arguments: '{}' } },
+          ],
+        },
+      ],
+      tools: [{ type: 'web_search_20250305' }],
+    };
+    const sessionKey = resolveOpenAISessionScope(request).cacheKey;
     const staleSignature = 'gpt-oss-signature'.repeat(4);
     const returnedSignature = 'gemini-signature'.repeat(4);
     SignatureStore.store({
@@ -687,25 +703,7 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     });
 
     try {
-      await service.handleChatCompletions({
-        model: 'gpt-oss-120b-medium',
-        stream: false,
-        extra: { user_id: 'openai-remap' },
-        messages: [
-          {
-            role: 'assistant',
-            content: null,
-            tool_calls: [
-              {
-                id: 'call_old',
-                type: 'function',
-                function: { name: 'lookup', arguments: '{}' },
-              },
-            ],
-          },
-        ],
-        tools: [{ type: 'web_search_20250305' }],
-      } as any);
+      await service.handleChatCompletions(request);
 
       const internalRequest = mockGeminiClient.generateInternal.mock.calls[0][0];
       const historicalToolCall = internalRequest.request.contents
@@ -735,6 +733,7 @@ describe('ProxyService Empty Stream Retry Logic', () => {
       model: 'gemini-3-flash',
       sessionKey: parentSessionKey,
       toolCallId: 'call_parent',
+      toolName: 'lookup',
     });
     mockAccountLeaseService.getNextToken.mockResolvedValue(createToken('acc-1'));
     mockGeminiClient.generateInternal.mockResolvedValue({
@@ -865,8 +864,15 @@ describe('ProxyService Empty Stream Retry Logic', () => {
       accountIdOrEmail: 'acc-1',
       status: 429,
       body: '429 quota exceeded',
-      model: 'gemini-3-flash',
+      model: 'gemini-3-flash-agent',
     });
+    expect(
+      mockAccountLeaseService.getNextToken.mock.calls.map(([options]) => options.model),
+    ).toEqual(['gemini-3-flash-agent', 'gemini-3-flash-agent']);
+    expect(mockGeminiClient.generateInternal.mock.calls.map(([body]) => body.model)).toEqual([
+      'gemini-3-flash-agent',
+      'gemini-3-flash-agent',
+    ]);
     expect((result as any).candidates?.[0]?.content?.parts?.[0]?.text).toBe('ok');
   });
 
@@ -886,7 +892,7 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     expect(internalPayload).not.toHaveProperty('sessionId');
   });
 
-  it('normalizes Gemini 3.1 preview alias to Gemini 3.1 Pro High for upstream', async () => {
+  it('resolves the Gemini 3.1 preview alias through the high variant for leasing and upstream', async () => {
     const service = new TestableGeminiService();
     mockAccountLeaseService.getNextToken.mockResolvedValue(createToken('acc-1'));
     mockGeminiClient.generateInternal.mockResolvedValue({
@@ -899,7 +905,13 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     } as any);
 
     const internalPayload = mockGeminiClient.generateInternal.mock.calls[0][0];
-    expect(internalPayload.model).toBe('gemini-3.1-pro-high');
+    expect(mockAccountLeaseService.getNextToken.mock.calls[0][0].model).toBe('gemini-pro-agent');
+    expect(internalPayload).toMatchObject({
+      model: 'gemini-pro-agent',
+      request: {
+        generationConfig: { thinkingConfig: { includeThoughts: true, thinkingBudget: 10001 } },
+      },
+    });
   });
 
   it('keeps client-compatible Gemini usage while capturing full upstream audit usage', async () => {
@@ -1011,8 +1023,13 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     expect(mockAccountLeaseService.getNextToken).toHaveBeenNthCalledWith(2, {
       sessionKey: undefined,
       excludeAccountIds: ['acc-1'],
-      model: 'gemini-3-flash',
+      model: 'gemini-3-flash-agent',
     });
+    expect(mockGeminiClient.generateInternal.mock.calls.map(([body]) => body.model)).toEqual([
+      'gemini-3-flash-agent',
+      'gemini-3-flash-agent',
+      'gemini-3-flash-agent',
+    ]);
     expect((result as any).candidates?.[0]?.content?.parts?.[0]?.text).toBe('ok');
   });
 

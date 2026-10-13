@@ -234,7 +234,13 @@ export class StreamingState {
     // Close last block
     chunks.push(...this.endBlock());
 
-    // Process trailing signature (PDF 776-778 logic)
+    // Signature-only fragments are already persisted by PartProcessor. Appending a
+    // carrier after visible text makes Claude Code select an empty final message.
+    if (this.hasEmittedTextDelta()) {
+      this.trailingSignature = null;
+    }
+
+    // Preserve a standalone signature when no visible answer preceded it.
     if (this.trailingSignature) {
       const sig = this.trailingSignature;
       this.trailingSignature = null;
@@ -395,7 +401,7 @@ export class StreamingState {
     this.signatures.store(signature);
   }
 
-  public persistSignature(signature: string, toolCallId?: string): void {
+  public persistSignature(signature: string, toolCallId?: string, toolName?: string): void {
     if (!this.signatureContext.model) {
       return;
     }
@@ -407,6 +413,7 @@ export class StreamingState {
       sessionKey: this.signatureContext.sessionKey,
       messageCount: this.signatureContext.messageCount,
       toolCallId,
+      toolName,
     });
   }
   public handleParseError(rawData: string): string[] {
@@ -529,13 +536,7 @@ export class PartProcessor {
       const trailingSig = this.state.trailingSignature;
       this.state.trailingSignature = null;
 
-      chunks.push(
-        this.state.emit('content_block_start', {
-          type: 'content_block_start',
-          index: this.state.blockIndex,
-          content_block: { type: 'thinking', thinking: '' },
-        }),
-      );
+      chunks.push(...this.state.startBlock('Thinking', { type: 'thinking', thinking: '' }));
       chunks.push(this.state.emitDelta({ type: 'thinking_delta', thinking: '' }));
       chunks.push(this.state.emitDelta({ type: 'signature_delta', signature: trailingSig }));
       chunks.push(...this.state.endBlock());
@@ -584,38 +585,26 @@ export class PartProcessor {
       const trailingSig = this.state.trailingSignature;
       this.state.trailingSignature = null;
 
-      chunks.push(
-        this.state.emit('content_block_start', {
-          type: 'content_block_start',
-          index: this.state.blockIndex,
-          content_block: { type: 'thinking', thinking: '' },
-        }),
-      );
+      chunks.push(...this.state.startBlock('Thinking', { type: 'thinking', thinking: '' }));
       chunks.push(this.state.emitDelta({ type: 'thinking_delta', thinking: '' }));
       chunks.push(this.state.emitDelta({ type: 'signature_delta', signature: trailingSig }));
       chunks.push(...this.state.endBlock());
       this.state.hasThinking = true;
     }
 
-    // Non-empty text with signature -> flush immediately
+    // Carry the signature before the answer, keeping the client's final message
+    // visible text. Use startBlock so every carrier also receives its stop event.
     if (signature) {
-      // Start text block
-      chunks.push(...this.state.startBlock('Text', { type: 'text', text: '' }));
-      chunks.push(this.state.emitDelta({ type: 'text_delta', text: text }));
-      chunks.push(...this.state.endBlock());
-
-      // Empty thinking block for signature
-      chunks.push(
-        this.state.emit('content_block_start', {
-          type: 'content_block_start',
-          index: this.state.blockIndex,
-          content_block: { type: 'thinking', thinking: '' },
-        }),
-      );
+      chunks.push(...this.state.startBlock('Thinking', { type: 'thinking', thinking: '' }));
       chunks.push(this.state.emitDelta({ type: 'thinking_delta', thinking: '' }));
       chunks.push(this.state.emitDelta({ type: 'signature_delta', signature: signature }));
       chunks.push(...this.state.endBlock());
       this.state.hasThinking = true;
+
+      chunks.push(...this.state.startBlock('Text', { type: 'text', text: '' }));
+      this.state.markTextDeltaEmitted();
+      chunks.push(this.state.emitDelta({ type: 'text_delta', text: text }));
+      chunks.push(...this.state.endBlock());
 
       return chunks;
     }
@@ -719,7 +708,7 @@ export class PartProcessor {
 
     if (signature) {
       toolUse.signature = signature;
-      this.state.persistSignature(signature, toolId);
+      this.state.persistSignature(signature, toolId, fc.name);
     }
 
     chunks.push(...this.state.startBlock('Function', toolUse));

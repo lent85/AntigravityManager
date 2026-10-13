@@ -17,7 +17,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import type { ProxyConfig } from '@/modules/config/types';
+import type { ServiceConfigSnapshot } from '@/modules/config/service-config.schema';
+type ProxyConfig = ServiceConfigSnapshot['proxy'];
 import type {
   ProxyUsageRecord,
   ProxyUsageStatsResult,

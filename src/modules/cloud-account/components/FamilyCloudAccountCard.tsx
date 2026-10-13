@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { AccountTierBadge } from '@/modules/cloud-account/components/AccountTierBadge';
 import { QuotaIndicatorTooltip } from '@/modules/cloud-account/components/QuotaIndicatorTooltip';
-import type { CloudAccount } from '@/modules/cloud-account/types';
+import type { CloudAccountView } from '@/modules/cloud-account/services/cloud-account-view';
 import type { AccountFamilyGroup } from '@/modules/cloud-account/persistence/family-group-store';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
 import type { GridLayout } from '@/modules/cloud-account/components/CloudAccountList.constants';
@@ -55,10 +55,10 @@ import {
 
 interface FamilyCloudAccountCardProps {
   familyGroup: AccountFamilyGroup;
-  accounts: CloudAccount[];
+  accounts: CloudAccountView[];
   gridLayout: GridLayout;
   quotaWindow: QuotaWindow;
-  selectedIds: Set<string>;
+  selectedIds: ReadonlySet<string>;
   refreshingAccountId?: string;
   deletingAccountId?: string;
   switchingAccountId?: string;
@@ -173,7 +173,7 @@ export function FamilyCloudAccountCard({
 
   // Render a member row inside the identity section
   const renderIdentityMemberRow = (
-    acc: CloudAccount,
+    acc: CloudAccountView,
     isCompactLayout = true,
     showTierBadge = true,
   ) => {

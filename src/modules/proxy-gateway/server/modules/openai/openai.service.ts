@@ -1,7 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { isEmpty, isString } from 'lodash-es';
-import { AccountLeaseService } from '../account-lease/account-lease.service';
-import { GeminiClient } from '../gemini/gemini-client.service';
+import {
+  resolveOpenAISessionScope,
+  type SignatureScopeContext,
+} from '../../common/signature-session-scope';
+import { preparedSchemaState } from '@/modules/proxy-gateway/antigravity/schema/SchemaPreparation';
+import {
+  prepareOpenAIRequestSchemas,
+  type PreparedOpenAISchemas,
+} from './chat/openai-schema-preparation';
+import { isString } from 'lodash-es';
+import { AccountLeaseService } from '@/modules/proxy-gateway/server/modules/account-lease/account-lease.service';
+import { GeminiClient } from '@/modules/proxy-gateway/server/modules/gemini/gemini-client.service';
 import { v4 as uuidv4 } from 'uuid';
 import { Observable } from 'rxjs';
 import { transformClaudeRequestIn } from '@/modules/proxy-gateway/antigravity/ClaudeRequestMapper';
@@ -23,7 +32,10 @@ import {
   toCustomToolArguments,
 } from '@/modules/proxy-gateway/antigravity/CustomToolCall';
 import { optimizeApplyPatch } from '@/modules/proxy-gateway/antigravity/ApplyPatchPreflight';
-import { splitNamespaceToolName } from '@/modules/proxy-gateway/antigravity/ToolNamespace';
+import {
+  qualifyNamespaceToolName,
+  splitNamespaceToolName,
+} from '@/modules/proxy-gateway/antigravity/ToolNamespace';
 import {
   adaptCommandArguments,
   selectClientCommandTool,
@@ -108,20 +120,29 @@ export class OpenAIService extends BaseProxyService {
     outputProtocol: OpenAIOutputProtocol = 'chat-completions',
     signal?: AbortSignal,
     responsesContext?: OpenAIResponsesExecutionContext,
+    schemaPreparation?: PreparedOpenAISchemas,
+    requestContext?: SignatureScopeContext,
   ): Promise<OpenAIChatResponse | Observable<string>> {
     validateOpenAIInputAudio(request);
     validateOpenAIResponseFormat(request);
     const appliedVariantRequest = applyOpenAIModelVariant(request);
     const routedRequest = appliedVariantRequest.request;
+    const { schemas: preparedSchemas, batch: schemaBatch } =
+      schemaPreparation ??
+      prepareOpenAIRequestSchemas(
+        routedRequest,
+        outputProtocol === 'responses' ? 'responses' : 'openai',
+      );
+    const scope = resolveOpenAISessionScope(request, requestContext?.headers, requestContext?.url);
     const routingSessionKey = responsesContext
       ? this.toOpenAISessionKey(responsesContext.routingSessionId)
-      : this.extractOpenAISessionKey(request);
+      : scope.affinityKey;
     const signatureReadSessionKey = responsesContext
       ? this.toOpenAISessionKey(responsesContext.requestSessionId)
-      : routingSessionKey;
+      : scope.cacheKey;
     const responseSessionKey = responsesContext
       ? this.toOpenAISessionKey(responsesContext.responseId)
-      : routingSessionKey;
+      : scope.cacheKey;
     const clientToolNames = extractOpenAIToolNames(routedRequest.tools);
 
     const routingModel = routedRequest.model.toLowerCase().includes('-image')
@@ -181,7 +202,11 @@ export class OpenAIService extends BaseProxyService {
 
       markProxyNormalizationStarted();
       try {
-        const claudeRequest = this.convertOpenAIToClaude(accountRequest, signatureReadSessionKey);
+        const claudeRequest = this.convertOpenAIToClaude(
+          accountRequest,
+          signatureReadSessionKey,
+          preparedSchemas,
+        );
         const projectId = token.token.project_id ?? '';
         const requestUserAgent = await resolveRequestUserAgent();
         const geminiBody = transformClaudeRequestIn(
@@ -191,6 +216,7 @@ export class OpenAIService extends BaseProxyService {
           accountTargetModel,
           'openai',
           {
+            ...preparedSchemaState(schemaBatch),
             imageRequest: {
               imageSize: accountRequest.image_size,
               quality: accountRequest.quality,
@@ -231,6 +257,7 @@ export class OpenAIService extends BaseProxyService {
               token.id,
               this.takeImagePermit(retryState),
               responsesContext?.responseId,
+              routedRequest.tools,
             );
           } catch (streamError) {
             this.logger.warn(
@@ -262,6 +289,7 @@ export class OpenAIService extends BaseProxyService {
               claudeResponse,
               request.model,
               clientToolNames,
+              routedRequest.tools,
             );
             return outputProtocol === 'responses'
               ? this.createSyntheticResponsesStream(
@@ -270,6 +298,7 @@ export class OpenAIService extends BaseProxyService {
                   clientToolNames,
                   claudeRequest.messages.length,
                   responsesContext?.responseId,
+                  routedRequest.tools,
                 )
               : this.createSyntheticOpenAIStream(openaiResponse);
           }
@@ -297,7 +326,12 @@ export class OpenAIService extends BaseProxyService {
           this.logger.log(
             `Transformed Claude response snippet: ${safeStringifyPacket(claudeResponse).substring(0, 500)}`,
           );
-          return this.convertClaudeToOpenAIResponse(claudeResponse, request.model, clientToolNames);
+          return this.convertClaudeToOpenAIResponse(
+            claudeResponse,
+            request.model,
+            clientToolNames,
+            routedRequest.tools,
+          );
         }
       } catch (err) {
         if (err instanceof Error && this.isProjectContextError(err.message)) {
@@ -309,6 +343,7 @@ export class OpenAIService extends BaseProxyService {
             const claudeRequest = this.convertOpenAIToClaude(
               accountRequest,
               signatureReadSessionKey,
+              preparedSchemas,
             );
             const requestUserAgent = await resolveRequestUserAgent();
             const fallbackBody = transformClaudeRequestIn(
@@ -318,6 +353,7 @@ export class OpenAIService extends BaseProxyService {
               accountTargetModel,
               'openai',
               {
+                ...preparedSchemaState(schemaBatch),
                 imageRequest: {
                   imageSize: accountRequest.image_size,
                   quality: accountRequest.quality,
@@ -355,6 +391,7 @@ export class OpenAIService extends BaseProxyService {
                 token.id,
                 this.takeImagePermit(retryState),
                 responsesContext?.responseId,
+                routedRequest.tools,
               );
             }
 
@@ -378,6 +415,7 @@ export class OpenAIService extends BaseProxyService {
               claudeResponse,
               request.model,
               clientToolNames,
+              routedRequest.tools,
             );
           } catch (fallbackErr) {
             lastError = fallbackErr;
@@ -443,6 +481,7 @@ export class OpenAIService extends BaseProxyService {
     successAccountId?: string,
     imagePermit?: ImageSchedulerPermit | null,
     responseId?: string,
+    clientTools?: OpenAIChatRequest['tools'],
   ): Observable<string> {
     if (successAccountId && signatureSourceModel && !isGeminiImageModel(signatureSourceModel)) {
       this.markUpstreamSuccess(successAccountId, signatureSourceModel);
@@ -460,6 +499,7 @@ export class OpenAIService extends BaseProxyService {
         successAccountId,
         imagePermit,
         responseId,
+        clientTools,
       );
     }
     return this.processStreamResponse(
@@ -473,6 +513,7 @@ export class OpenAIService extends BaseProxyService {
       signatureSourceFamilyModel,
       successAccountId,
       imagePermit,
+      clientTools,
     );
   }
 
@@ -488,6 +529,7 @@ export class OpenAIService extends BaseProxyService {
     successAccountId?: string,
     imagePermit?: ImageSchedulerPermit | null,
     responseId?: string,
+    clientTools?: OpenAIChatRequest['tools'],
   ): Observable<string> {
     return new Observable<string>((subscriber) => {
       const decoder = new TextDecoder();
@@ -500,6 +542,7 @@ export class OpenAIService extends BaseProxyService {
       let sawMappedOutput = false;
       const mapper = new OpenAIResponsesStreamingMapper({
         clientToolNames,
+        clientTools,
         model,
         responseId: responseId ?? `resp_${uuidv4()}`,
         signatureMessageCount,
@@ -685,6 +728,7 @@ export class OpenAIService extends BaseProxyService {
     signatureSourceFamilyModel?: string | null,
     successAccountId?: string,
     imagePermit?: ImageSchedulerPermit | null,
+    clientTools?: OpenAIChatRequest['tools'],
   ): Observable<string> {
     return new Observable<string>((subscriber) => {
       const decoder = new TextDecoder();
@@ -821,7 +865,7 @@ export class OpenAIService extends BaseProxyService {
                   }
                   emittedToolCalls.add(dedupeKey);
 
-                  const splitName = splitNamespaceToolName(functionCall.name);
+                  const splitName = splitNamespaceToolName(functionCall.name, clientTools);
                   const functionName = clientToolNames
                     ? selectClientCommandTool(splitName.name, clientToolNames)
                     : splitName.name;
@@ -838,6 +882,21 @@ export class OpenAIService extends BaseProxyService {
                         ).input,
                       )
                     : adaptedCommandArguments.arguments;
+                  const toolCallId = isString(functionCall.id)
+                    ? functionCall.id
+                    : `${functionName}-${uuidv4()}`;
+                  if (signature && signatureSourceModel) {
+                    SignatureStore.store({
+                      signature,
+                      model: signatureSourceModel,
+                      family: signatureSourceFamily,
+                      familyModel: signatureSourceFamilyModel,
+                      sessionKey: signatureSessionKey,
+                      messageCount: signatureMessageCount,
+                      toolCallId,
+                      toolName: functionCall.name,
+                    });
+                  }
                   const toolCallChunk = {
                     id: streamId,
                     object: 'chat.completion.chunk',
@@ -851,9 +910,7 @@ export class OpenAIService extends BaseProxyService {
                           tool_calls: [
                             {
                               index: toolCallIndex,
-                              id: isString(functionCall.id)
-                                ? functionCall.id
-                                : `${functionName}-${uuidv4()}`,
+                              id: toolCallId,
                               type: 'function',
                               function: {
                                 name: functionName,
@@ -1121,10 +1178,12 @@ export class OpenAIService extends BaseProxyService {
     clientToolNames?: ReadonlySet<string>,
     signatureMessageCount?: number,
     responseId?: string,
+    clientTools?: OpenAIChatRequest['tools'],
   ): Observable<string> {
     return new Observable<string>((subscriber) => {
       const mapper = new OpenAIResponsesStreamingMapper({
         clientToolNames,
+        clientTools,
         model: response.model,
         responseId: responseId ?? `resp_${uuidv4()}`,
         signatureMessageCount,
@@ -1162,7 +1221,7 @@ export class OpenAIService extends BaseProxyService {
               toolCall.operation ??
               parseOpenAIFunctionArguments(toolCall.function?.arguments ?? '{}'),
             id: toolCall.call_id || toolCall.id,
-            name: functionName,
+            name: qualifyNamespaceToolName(toolCall.namespace ?? '', functionName),
           },
         })) {
           subscriber.next(event);
@@ -1184,8 +1243,10 @@ export class OpenAIService extends BaseProxyService {
   private convertOpenAIToClaude(
     request: OpenAIChatRequest,
     signatureSessionKey?: string,
+    preparedSchemas?: Pick<ClaudeRequest, 'tools' | 'response_format'>,
   ): ClaudeRequest {
     return convertOpenAIToClaude(request, signatureSessionKey, {
+      preparedSchemas,
       allowLocalVideoPaths: Boolean(getServerConfig()?.experimental?.allow_local_video_paths),
     });
   }
@@ -1194,6 +1255,7 @@ export class OpenAIService extends BaseProxyService {
     claudeResponse: ClaudeResponse,
     model: string,
     clientToolNames?: ReadonlySet<string>,
+    clientTools?: OpenAIChatRequest['tools'],
   ): OpenAIChatResponse {
     for (const contentBlock of claudeResponse.content) {
       if (contentBlock.type !== 'tool_use') {
@@ -1203,23 +1265,13 @@ export class OpenAIService extends BaseProxyService {
         this.logger?.debug('[OpenAI] command tool fallback_applied=true');
       }
     }
-    return convertClaudeToOpenAIResponse(claudeResponse, model, clientToolNames);
+    return convertClaudeToOpenAIResponse(claudeResponse, model, clientToolNames, clientTools);
   }
 
   private convertOpenAIToolsToAnthropicTools(
     tools: OpenAIChatRequest['tools'],
   ): ReturnType<typeof convertOpenAIToolsToAnthropicTools> {
     return convertOpenAIToolsToAnthropicTools(tools);
-  }
-
-  private extractOpenAISessionKey(request: OpenAIChatRequest): string | undefined {
-    const extra = request.extra;
-    const sessionCandidate =
-      extra?.session_id ?? extra?.sessionId ?? extra?.user_id ?? extra?.userId;
-    if (!isString(sessionCandidate) || isEmpty(sessionCandidate.trim())) {
-      return undefined;
-    }
-    return this.toOpenAISessionKey(sessionCandidate);
   }
 
   private toOpenAISessionKey(sessionId: string): string {

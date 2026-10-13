@@ -6,8 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
-import type { CloudAccount } from '@/modules/cloud-account/types';
-import type { ProxyConfig } from '@/modules/config/types';
+import type { CloudAccountView } from '@/modules/cloud-account/services/cloud-account-view';
+import type { ServiceConfigSnapshot } from '@/modules/config/service-config.schema';
+type ProxyConfig = ServiceConfigSnapshot['proxy'];
 import {
   Shuffle,
   RotateCw,
@@ -25,7 +26,7 @@ import {
 interface ProxyAccountRoutingCardProps {
   proxyConfig: ProxyConfig;
   updateProxyConfig: (newConfig: ProxyConfig) => Promise<void>;
-  cloudAccounts: CloudAccount[];
+  cloudAccounts: CloudAccountView[];
 }
 
 export function ProxyAccountRoutingCard({

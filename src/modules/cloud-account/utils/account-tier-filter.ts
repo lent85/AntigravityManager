@@ -50,7 +50,7 @@ export function formatAccountTierLabel(value: string | undefined): string {
   return KNOWN_TIER_LABELS[cleaned.toLowerCase()] ?? cleaned;
 }
 
-export function getAccountTierKey(account: CloudAccount): string {
+export function getAccountTierKey(account: Pick<CloudAccount, 'quota'>): string {
   const cleaned = cleanTierValue(account.quota?.subscription_tier);
   if (!cleaned) {
     return ACCOUNT_TIER_UNKNOWN_KEY;
@@ -67,7 +67,9 @@ function getTierOptionSortRank(option: AccountTierOption): number {
   return KNOWN_TIER_ORDER[option.key] ?? 100;
 }
 
-export function buildAccountTierOptions(accounts: CloudAccount[]): AccountTierOption[] {
+export function buildAccountTierOptions(
+  accounts: Array<Pick<CloudAccount, 'quota'>>,
+): AccountTierOption[] {
   const optionByKey = new Map<string, AccountTierOption>();
 
   for (const account of accounts) {
@@ -107,11 +109,11 @@ export function getEffectiveSelectedTierKeys(
   return selectedTierKeys.filter((key) => availableKeys.has(key));
 }
 
-function sortCloudAccounts(
-  accounts: CloudAccount[],
+function sortCloudAccounts<T extends Pick<CloudAccount, 'quota' | 'last_used'>>(
+  accounts: T[],
   sortKey: AccountSortKey,
   modelVisibility: Record<string, boolean>,
-): CloudAccount[] {
+): T[] {
   if (sortKey === 'recently-used') {
     return [...accounts].sort((a, b) => (b.last_used ?? 0) - (a.last_used ?? 0));
   }
@@ -123,10 +125,9 @@ function sortCloudAccounts(
   );
 }
 
-export function filterAndSortCloudAccounts(
-  accounts: CloudAccount[],
-  options: FilterAndSortCloudAccountsOptions,
-): CloudAccount[] {
+export function filterAndSortCloudAccounts<
+  T extends Pick<CloudAccount, 'quota' | 'last_used' | 'is_active'>,
+>(accounts: T[], options: FilterAndSortCloudAccountsOptions): T[] {
   const tierOptions = options.tierOptions ?? buildAccountTierOptions(accounts);
   const effectiveSelectedTierKeys = getEffectiveSelectedTierKeys(
     options.selectedTierKeys,
@@ -138,7 +139,12 @@ export function filterAndSortCloudAccounts(
       ? accounts
       : accounts.filter((account) => selectedTierKeySet.has(getAccountTierKey(account)));
 
-  const isAccountActive = (account: CloudAccount) =>
+  const isAccountActive = (account: {
+    is_active?: boolean;
+    is_active_classic?: boolean;
+    is_active_ide?: boolean;
+    is_active_agy?: boolean;
+  }) =>
     Boolean(
       account.is_active ||
         account.is_active_classic ||

@@ -17,7 +17,7 @@ export interface RateLimitInfo {
   retryAfterSec: number;
   reason: RateLimitReason;
   model?: string;
-  preservesLongImageQuota: boolean;
+  preservesExplicitQuota: boolean;
 }
 
 export type RetryDelaySource = 'retry-after' | 'structured' | 'text';
@@ -315,7 +315,7 @@ function extractStructuredDelayRecursive(value: unknown, depth: number): number 
   return null;
 }
 
-function extractBaselineStructuredDelayRecursive(value: unknown, depth: number): number | null {
+function extractEmbeddedDurationRecursive(value: unknown, depth: number): number | null {
   if (depth > MAX_RETRY_DELAY_SEARCH_DEPTH) {
     return null;
   }
@@ -324,7 +324,7 @@ function extractBaselineStructuredDelayRecursive(value: unknown, depth: number):
   }
   if (Array.isArray(value)) {
     for (const item of value) {
-      const delay = extractBaselineStructuredDelayRecursive(item, depth + 1);
+      const delay = extractEmbeddedDurationRecursive(item, depth + 1);
       if (delay !== null) {
         return delay;
       }
@@ -339,7 +339,7 @@ function extractBaselineStructuredDelayRecursive(value: unknown, depth: number):
     return durationObjectDelay;
   }
   for (const childValue of Object.values(value)) {
-    const delay = extractBaselineStructuredDelayRecursive(childValue, depth + 1);
+    const delay = extractEmbeddedDurationRecursive(childValue, depth + 1);
     if (delay !== null) {
       return delay;
     }
@@ -401,7 +401,7 @@ export function parseRetryDelayMilliseconds(errorText: string | undefined): numb
   return parseRetryDelay(errorText)?.delayMs ?? null;
 }
 
-export function parseBaselineRetryDelayMilliseconds(errorText: string | undefined): number | null {
+export function parseAnthropicRetryDelayMilliseconds(errorText: string | undefined): number | null {
   if (!errorText) {
     return null;
   }
@@ -415,7 +415,7 @@ export function parseBaselineRetryDelayMilliseconds(errorText: string | undefine
     }
   }
   const parsedBody = tryParseGoogleErrorBody(errorText);
-  return parsedBody ? extractBaselineStructuredDelayRecursive(parsedBody, 0) : null;
+  return parsedBody ? extractEmbeddedDurationRecursive(parsedBody, 0) : null;
 }
 
 export function shouldGraceRetry(delayMs: number): boolean {
@@ -446,21 +446,11 @@ export class RateLimitTrackerService {
 
   getRemainingWaitSeconds(accountId: string, model?: string): number {
     const now = Date.now();
-
-    const globalLock = this.lockoutByKey.get(accountId);
-    if (globalLock && globalLock.resetTimeMs > now) {
-      return Math.max(0, Math.ceil((globalLock.resetTimeMs - now) / 1000));
-    }
-
-    if (model) {
-      const modelKey = this.buildLockoutKey(accountId, model);
-      const modelLock = this.lockoutByKey.get(modelKey);
-      if (modelLock && modelLock.resetTimeMs > now) {
-        return Math.max(0, Math.ceil((modelLock.resetTimeMs - now) / 1000));
-      }
-    }
-
-    return 0;
+    const globalReset = this.lockoutByKey.get(accountId)?.resetTimeMs ?? 0;
+    const modelReset = model
+      ? (this.lockoutByKey.get(this.buildLockoutKey(accountId, model))?.resetTimeMs ?? 0)
+      : 0;
+    return Math.max(0, Math.ceil((Math.max(globalReset, modelReset) - now) / 1000));
   }
 
   getRemainingWaitSec(accountId: string, model?: string): number {
@@ -481,7 +471,15 @@ export class RateLimitTrackerService {
     if (!Number.isFinite(timestamp)) {
       return false;
     }
-    this.setLockoutUntil(accountId, timestamp, reason, model);
+    this.setLockoutUntil(
+      accountId,
+      timestamp,
+      reason,
+      model,
+      reason === RateLimitReason.QuotaExhausted &&
+        Boolean(model?.trim()) &&
+        timestamp - Date.now() > MAX_LOCKOUT_SECONDS * 1000,
+    );
     return true;
   }
 
@@ -490,29 +488,29 @@ export class RateLimitTrackerService {
     resetTimeMs: number,
     reason: RateLimitReason,
     model?: string,
-    preservesLongImageQuota = false,
+    preservesExplicitQuota = false,
   ): void {
     const now = Date.now();
     const rawRetryAfterSec = Math.max(2, Math.ceil((resetTimeMs - now) / 1000));
-    const retryAfterSec = preservesLongImageQuota
+    const retryAfterSec = preservesExplicitQuota
       ? rawRetryAfterSec
       : Math.min(MAX_LOCKOUT_SECONDS, rawRetryAfterSec);
     const key = !isEmpty(model?.trim() ?? '') ? this.buildLockoutKey(accountId, model) : accountId;
-    this.lockoutByKey.set(key, {
+    this.storeLockout(key, {
       resetTimeMs: now + retryAfterSec * 1000,
       retryAfterSec,
       reason,
       model,
-      preservesLongImageQuota,
+      preservesExplicitQuota,
     });
   }
 
-  restorePersistedLongImageLimit(entry: PersistedModelRateLimit): boolean {
+  restorePersistedQuotaLimit(entry: PersistedModelRateLimit): boolean {
     const now = Date.now();
     if (
       entry.status !== 429 ||
       entry.reason !== 'quota_exhausted' ||
-      !isRecognizedGeminiImageModel(entry.modelId) ||
+      !entry.modelId.trim() ||
       !hasStrictQuotaExhaustedMarker(entry.message) ||
       entry.unavailableUntil <= now ||
       entry.unavailableUntil - entry.detectedAt <= MAX_LOCKOUT_SECONDS * 1000 ||
@@ -560,7 +558,7 @@ export class RateLimitTrackerService {
 
       if (
         recoveredFamilies.has(getQuotaModelFamilyId(info.model)) &&
-        !(info.preservesLongImageQuota && info.resetTimeMs > Date.now())
+        !(info.preservesExplicitQuota && info.resetTimeMs > Date.now())
       ) {
         this.lockoutByKey.delete(key);
         this.failureCounts.delete(key);
@@ -638,7 +636,7 @@ export class RateLimitTrackerService {
       backoffSteps: params.backoffSteps,
     });
     const rawResetTimeMs = Date.now() + rawRetryAfterSec * 1000;
-    const preservesLongImageQuota = this.isQualifiedLongImageQuota({
+    const preservesExplicitQuota = this.isQualifiedExplicitQuota({
       status,
       reason,
       model: params.model,
@@ -647,7 +645,7 @@ export class RateLimitTrackerService {
       resetTimeMs: rawResetTimeMs,
       now: Date.now(),
     });
-    const retryAfterSec = preservesLongImageQuota
+    const retryAfterSec = preservesExplicitQuota
       ? rawRetryAfterSec
       : Math.min(MAX_LOCKOUT_SECONDS, rawRetryAfterSec);
 
@@ -656,7 +654,7 @@ export class RateLimitTrackerService {
       retryAfterSec,
       resetTimeMs: Date.now() + retryAfterSec * 1000,
       model: params.model,
-      preservesLongImageQuota,
+      preservesExplicitQuota,
     };
 
     const useModelKey =
@@ -667,12 +665,21 @@ export class RateLimitTrackerService {
     const key = useModelKey
       ? this.buildLockoutKey(params.accountId, params.model)
       : params.accountId;
-    this.lockoutByKey.set(key, info);
+    return this.storeLockout(key, info);
+  }
 
+  private storeLockout(key: string, info: RateLimitInfo): RateLimitInfo {
+    const current = this.lockoutByKey.get(key);
+    // A transient failure must not shorten an explicit quota reset. A successful
+    // request or the reset deadline releases it through the existing clear paths.
+    if (current?.preservesExplicitQuota && current.resetTimeMs > info.resetTimeMs) {
+      return current;
+    }
+    this.lockoutByKey.set(key, info);
     return info;
   }
 
-  private isQualifiedLongImageQuota(params: {
+  private isQualifiedExplicitQuota(params: {
     status?: number;
     reason: RateLimitReason;
     model?: string;
@@ -684,7 +691,7 @@ export class RateLimitTrackerService {
     if (
       params.status !== 429 ||
       params.reason !== RateLimitReason.QuotaExhausted ||
-      !isRecognizedGeminiImageModel(params.model) ||
+      !params.model?.trim() ||
       !hasStrictQuotaExhaustedMarker(params.body) ||
       params.resetTimeMs - params.now <= MAX_LOCKOUT_SECONDS * 1000
     ) {

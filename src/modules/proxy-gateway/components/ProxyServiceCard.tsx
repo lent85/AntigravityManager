@@ -15,7 +15,8 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { ipc } from '@/ipc/manager';
-import type { ProxyConfig } from '@/modules/config/types';
+import type { ServiceConfigSnapshot } from '@/modules/config/service-config.schema';
+type ProxyConfig = ServiceConfigSnapshot['proxy'];
 import { Copy, Eye, EyeOff, RefreshCw, Zap } from 'lucide-react';
 import { ProxyServiceControl } from '@/modules/proxy-gateway/components/ProxyServiceControl';
 
@@ -37,6 +38,7 @@ export function ProxyServiceCard({
   const { t } = useTranslation();
   const { toast } = useToast();
   const [showKey, setShowKey] = useState(false);
+  const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState(false);
   const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
   const [gatewayError, setGatewayError] = useState<string | null>(null);
@@ -48,25 +50,56 @@ export function ProxyServiceCard({
     updateProxyConfig({ ...proxyConfig, port: nextPort });
   };
 
-  const copyApiKey = () => {
-    if (proxyConfig.api_key) {
-      navigator.clipboard.writeText(proxyConfig.api_key);
-      setCopiedKey(true);
-      setTimeout(() => setCopiedKey(false), 2000);
-      toast({ title: t('proxy.copied', 'Copied to clipboard!') });
+  const copyApiKey = async () => {
+    try {
+      let keyToCopy = revealedKey;
+      if (!keyToCopy) {
+        const result = await ipc.client.config.service.revealSecret({ name: 'api-key' });
+        keyToCopy = result.value;
+        setRevealedKey(result.value);
+      }
+      if (keyToCopy) {
+        await navigator.clipboard.writeText(keyToCopy);
+        setCopiedKey(true);
+        setTimeout(() => setCopiedKey(false), 2000);
+        toast({ title: t('proxy.copied', 'Copied to clipboard!') });
+      }
+    } catch {
+      toast({
+        title: t('proxy.error', 'Error'),
+        description: 'Failed to copy API key',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const toggleShowKey = async () => {
+    if (showKey) {
+      setShowKey(false);
+      return;
+    }
+    if (revealedKey) {
+      setShowKey(true);
+      return;
+    }
+    try {
+      const result = await ipc.client.config.service.revealSecret({ name: 'api-key' });
+      setRevealedKey(result.value);
+      setShowKey(true);
+    } catch {
+      toast({
+        title: t('proxy.error', 'Error'),
+        description: 'Failed to reveal API key',
+        variant: 'destructive',
+      });
     }
   };
 
   const regenerateApiKey = async () => {
     try {
-      const newKey = `sk-antigravity-${crypto.randomUUID().replace(/-/g, '')}`;
-      const existingKeys = proxyConfig.api_keys || [];
-      const updatedKeys =
-        existingKeys.length > 0
-          ? existingKeys.map((k, i) => (i === 0 || k.id === 'default' ? { ...k, key: newKey } : k))
-          : [{ id: 'default', name: 'Default Client', key: newKey, created_at: Date.now(), enabled: true }];
-
-      await updateProxyConfig({ ...proxyConfig, api_key: newKey, api_keys: updatedKeys });
+      await ipc.client.config.service.generateKey();
+      setRevealedKey(null);
+      setShowKey(false);
       setIsRegenerateDialogOpen(false);
       toast({ title: t('proxy.regenerated', 'API key regenerated') });
     } catch {
@@ -107,7 +140,7 @@ export function ProxyServiceCard({
               </Select>
             )}
           </div>
-          {!proxyConfig.api_key && (!proxyConfig.api_keys || proxyConfig.api_keys.length === 0) && (
+          {!proxyConfig.api_key_configured && (!proxyConfig.api_keys || proxyConfig.api_keys.length === 0) && (
             <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
               {t('proxy.config.no_token_warning', '⚠️ API key is empty. Proxy is open without authentication.')}
             </p>
@@ -198,7 +231,13 @@ export function ProxyServiceCard({
               <div className="flex gap-1.5">
                 <div className="relative flex-1">
                   <Input
-                    value={proxyConfig.api_key || ''}
+                    value={
+                      showKey
+                        ? (revealedKey ?? '')
+                        : proxyConfig.api_key_configured
+                          ? '••••••••••••••••'
+                          : ''
+                    }
                     readOnly
                     type={showKey ? 'text' : 'password'}
                     className="h-8 pr-8 font-mono text-xs"
@@ -209,7 +248,7 @@ export function ProxyServiceCard({
                     variant="ghost"
                     size="sm"
                     className="absolute top-0 right-0 h-8 w-8 p-0 text-muted-foreground hover:bg-transparent"
-                    onClick={() => setShowKey(!showKey)}
+                    onClick={toggleShowKey}
                   >
                     {showKey ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
                   </Button>

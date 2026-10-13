@@ -5,16 +5,8 @@ import { isValidProxyUrl } from '@/shared/utils/url';
 import type { WeeklyWarmupConfig } from '@/modules/cloud-account/services/weekly-warmup-contract';
 import type { AccountFamilyGroup } from '@/modules/cloud-account/persistence/family-group-store';
 
-export function addGoogleAccount(input: { authCode: string; oauthClientKey?: string }) {
-  return ipc.client.cloud.addGoogleAccount(input);
-}
-
 export function listCloudAccounts() {
   return ipc.client.cloud.listCloudAccounts();
-}
-
-export function getCloudAccountSecurityStatus() {
-  return ipc.client.cloud.getSecurityStatus();
 }
 
 export function deleteCloudAccount(input: { accountId: string }) {
@@ -91,24 +83,16 @@ export function setWeeklyWarmupConfig(config: WeeklyWarmupConfig) {
   return ipc.client.cloud.setWeeklyWarmupConfig(config);
 }
 
-export function syncLocalAccount(input?: { appTarget?: AntigravityAppTarget }) {
-  return ipc.client.cloud.syncLocalAccount(input);
-}
-
-export interface OAuthClientDescriptor {
-  key: string;
-  label: string;
-  client_id: string;
-  is_active: boolean;
-  is_builtin: boolean;
-}
-
 export function startAuthFlow(input?: { oauthClientKey?: string }) {
   return ipc.client.cloud.startAuthFlow(input);
 }
 
+export function submitAuthCode(input: { code: string }) {
+  return ipc.client.cloud.submitAuthCode(input);
+}
+
 export function listOAuthClients() {
-  return ipc.client.cloud.listOAuthClients() as Promise<OAuthClientDescriptor[]>;
+  return ipc.client.cloud.listOAuthClients();
 }
 
 export async function getActiveOAuthClient() {
@@ -179,15 +163,7 @@ export function exportCloudAccounts(input: { stripTokens?: boolean }) {
   return ipc.client.cloud.exportCloudAccounts(input);
 }
 
-export function importCloudAccounts(input: {
-  jsonContent: string;
-  strategy?: 'merge' | 'overwrite' | 'skip-existing';
-}) {
-  try {
-    JSON.parse(input.jsonContent);
-  } catch {
-    throw new Error('Invalid JSON content provided for import');
-  }
+export function importCloudAccounts(input: { strategy?: 'merge' | 'overwrite' | 'skip-existing' }) {
   return ipc.client.cloud.importCloudAccounts(input);
 }
 

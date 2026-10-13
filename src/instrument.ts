@@ -1,5 +1,11 @@
 import { app } from 'electron';
+import path from 'node:path';
 import * as Sentry from '@sentry/electron/main';
+import {
+  configureErrorReportingRuntime,
+  flushErrorReporting,
+} from './shared/observability/errorReporting';
+import { isolateSentryDiagnostic } from './shared/observability/sentryDiagnostic';
 import { logger } from './shared/logging/logger';
 import {
   initializeOpenTelemetry,
@@ -7,11 +13,17 @@ import {
 } from './shared/observability/openTelemetry';
 import { getQuickObservabilityConfig } from './shared/observability/observabilityConfig';
 import { filterCrashSafeSentryIntegrations } from './shared/observability/sentryIntegrations';
-import { redactSentryEventLocalPaths } from './shared/observability/sentryPrivacy';
+import {
+  redactDiagnosticText,
+  redactSentryEventLocalPaths,
+} from './shared/observability/sentryPrivacy';
 
-const quickConfig = getQuickObservabilityConfig((message, error) => {
-  logger.error(message, error);
-});
+const quickConfig = getQuickObservabilityConfig(
+  (message, error) => {
+    logger.error(message, error);
+  },
+  path.join(app.getPath('userData'), 'desktop-preferences.json'),
+);
 
 initializeOpenTelemetry({
   enabled: quickConfig.telemetryEnabled,
@@ -19,44 +31,51 @@ initializeOpenTelemetry({
 });
 
 app.on('before-quit', () => {
+  flushErrorReporting();
   shutdownOpenTelemetry().catch((error) => {
     logger.warn('Failed to flush OpenTelemetry before quit', error);
   });
 });
 
-if (quickConfig.errorReportingEnabled) {
-  Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    release: `antigravity-manager@${app.getVersion()}`,
-    integrations(defaultIntegrations) {
-      return filterCrashSafeSentryIntegrations(defaultIntegrations);
-    },
-    beforeSend(event) {
-      redactSentryEventLocalPaths(event);
-      return event;
-    },
-  });
-  logger.setErrorReportingEnabled(true);
-  logger.setSentryReporter((payload) => {
-    Sentry.withScope((scope) => {
-      scope.setTag('log_level', payload.level);
-      scope.setContext('recent_logs', {
-        entries: payload.logs.map((entry) => ({
-          timestamp: new Date(entry.timestamp).toISOString(),
-          level: entry.level,
-          message: entry.message,
-          formatted: entry.formatted,
-        })),
+configureErrorReportingRuntime(
+  {
+    initialize: () => {
+      Sentry.init({
+        dsn: process.env.SENTRY_DSN,
+        release: `antigravity-manager@${app.getVersion()}`,
+        integrations(defaultIntegrations) {
+          return filterCrashSafeSentryIntegrations(defaultIntegrations);
+        },
+        beforeSend(event) {
+          isolateSentryDiagnostic(event);
+          redactSentryEventLocalPaths(event);
+          return event;
+        },
       });
-      scope.setExtra('log_message', payload.message);
-      if (payload.error) {
-        Sentry.captureException(payload.error);
-        return;
-      }
-      Sentry.captureMessage(payload.message, 'error');
-    });
-  });
-} else {
-  logger.setErrorReportingEnabled(false);
-  logger.setSentryReporter(null);
-}
+    },
+    report: (payload) => {
+      Sentry.withScope((scope) => {
+        scope.setTag('runtime', 'desktop-embedded');
+        if (payload.isolated) {
+          scope.setTag('isolated_diagnostic', 'true');
+          scope.setFingerprint(['schema-conversion']);
+        }
+        scope.setTag('log_level', payload.level);
+        scope.setContext('recent_logs', {
+          // Objects inside this array exceed the SDK's default normalization depth.
+          entries: payload.logs.map((entry) => redactDiagnosticText(entry.formatted)),
+        });
+        const message = redactDiagnosticText(payload.message);
+        scope.setExtra('log_message', message);
+        if (payload.error) {
+          Sentry.captureException(payload.error);
+          return;
+        }
+        Sentry.captureMessage(message, 'error');
+      });
+    },
+    flush: (timeoutMs) => Sentry.flush(timeoutMs),
+  },
+  quickConfig.errorReportingEnabled,
+  Boolean(process.env.SENTRY_DSN),
+);

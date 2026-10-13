@@ -1,34 +1,126 @@
 import en from './en';
-
 const fr = {
+  'agent-tools': {
+    title: 'Connecter vos outils de programmation',
+    description: 'Choisissez un outil pour utiliser vos modèles via Antigravity Manager.',
+    loading: 'Lecture des paramètres…',
+    installed: 'Installé',
+    'not-installed': 'Installation non détectée',
+    'read-error': 'Impossible de lire les paramètres. Réessayez avant de les modifier.',
+    retry: 'Réessayer',
+    configured: 'Configuration enregistrée',
+    'custom-address': 'Autre adresse utilisée',
+    'not-configured': 'Non configuré',
+    'not-verified': 'Requêtes non vérifiées',
+    address: 'Adresse de Manager',
+    model: 'Modèle',
+    'not-set': 'Non défini',
+    'choose-model': 'Choisir pendant la configuration',
+    update: 'Mettre à jour',
+    configure: 'Configurer',
+    view: 'Voir la configuration',
+    restore: 'Restaurer la sauvegarde',
+    remove: 'Retirer la connexion',
+    'install-notice': 'Vous pouvez configurer l’outil avant son installation. Rouvrez-le ensuite.',
+    'action-error': 'Échec de la mise à jour',
+    saved: 'Paramètres mis à jour',
+    reopen: 'Rouvrez {{name}} pour appliquer les paramètres.',
+    'configure-title': 'Connecter {{name}}',
+    'configure-description':
+      'Les requêtes utiliseront Manager. Les paramètres sont sauvegardés avant la première modification.',
+    'restore-title': 'Restaurer les paramètres de {{name}} ?',
+    'restore-description':
+      'Le fichier entier sera remplacé par sa sauvegarde initiale, y compris les modifications ultérieures. Si Manager a créé le fichier, il sera supprimé. La sauvegarde est utilisée une seule fois.',
+    'remove-title': 'Retirer la connexion à Manager ?',
+    'remove-description':
+      'Restaure les anciens paramètres de connexion en conservant les autres paramètres et la sauvegarde.',
+    'preview-title': 'Paramètres de {{name}}',
+    'preview-description':
+      'Seuls les réglages nécessaires pour se connecter à Manager sont affichés. Les clés de connexion sont masquées.',
+    confirm: 'Confirmer',
+    advanced: 'Adresse et fichier de configuration',
+    'reset-address': 'Utiliser l’adresse actuelle de Manager',
+    'backend-files':
+      'Ces réglages sont enregistrés sur l’ordinateur qui exécute le service Manager, pour l’utilisateur qui le lance.',
+    'backup-notice':
+      'La première sauvegarde est conservée après les mises à jour. Rouvrez l’outil après l’enregistrement.',
+    'toml-notice':
+      'La mise en forme et les commentaires du fichier Codex peuvent changer. Une sauvegarde complète permet de les restaurer. La connexion et les autorisations existantes sont conservées.',
+    'codex-review':
+      'Configure les requêtes de tâche et de vérification automatique. Les routes de vérification actives et les paramètres d’approbation existants sont conservés.',
+    'model-count': '{{count}} modèle(s)',
+    'plugin-notice':
+      'Un plugin de connexion directe est installé. Vérifiez que Manager est sélectionné dans OpenCode.',
+    'revoke-key': 'Désactiver la clé de connexion OpenCode',
+    errors: {
+      unavailable: 'Les paramètres sont indisponibles. Réessayez.',
+      'invalid-config':
+        'Le fichier est invalide ou trop volumineux. Corrigez-le avant la configuration.',
+      'read-failed': 'Impossible de lire le fichier. Vérifiez les permissions.',
+      'write-failed': 'Échec de l’enregistrement. La sauvegarde est conservée.',
+      'backup-failed':
+        'Impossible de créer la sauvegarde. Les paramètres de l’outil ne sont pas modifiés.',
+      'backup-missing': 'Aucune sauvegarde disponible.',
+      'configuration-changed':
+        'Les paramètres ont changé pendant l’opération. Relisez-les et réessayez.',
+      'key-missing': 'Créez d’abord une clé sur la page du proxy.',
+      'review-route-disabled':
+        'La route de vérification Codex est désactivée. Activez-la dans le routage des modèles.',
+    },
+
+    'address-help':
+      'Gardez l’adresse actuelle de Manager, sauf si le service fonctionne sur un autre ordinateur.',
+    'invalid-address':
+      'Utilisez une adresse Manager commençant par http:// ou https://, sans identifiants ni paramètres supplémentaires.',
+    'model-required': 'Choisissez un modèle avant d’enregistrer.',
+  },
   appName: 'Antigravity Manager',
   'process-runtime': {
-    'close-failed': 'Impossible de fermer Antigravity. Vérifiez les permissions et réessayez.',
+    'update-in-progress':
+      'Antigravity est en cours de mise à jour. Terminez la mise à jour, puis réessayez.',
+    'close-failed':
+      'Impossible de fermer Antigravity. Enregistrez vos conversations et fichiers, fermez l’application manuellement, puis réessayez.',
     'exit-unconfirmed':
-      'Impossible de confirmer la fermeture d’Antigravity. Vérifiez l’application avant de réessayer.',
+      'Antigravity n’a pas terminé sa fermeture. Enregistrez vos conversations et fichiers, fermez l’application manuellement, puis réessayez.',
     working: 'Traitement...',
     busy: 'Antigravity est occupé. Attendez la fin de l’opération.',
     'missing-executable':
-      'Exécutable Antigravity introuvable ou non exécutable. Vérifiez le chemin configuré.',
+      'Antigravity est introuvable ou ne peut pas être ouvert. Vérifiez son emplacement dans les paramètres.',
     'target-conflict':
-      'Le chemin configuré et le processus actif appartiennent à des installations différentes. Résolvez ce conflit avant de changer de compte.',
+      'L’application Antigravity ouverte ne correspond pas à l’installation sélectionnée. Fermez-la ou sélectionnez la bonne installation avant de changer de compte.',
     'directory-conflict':
-      'Les répertoires de données configuré et utilisé sont différents. Résolvez ce conflit avant de changer de compte.',
-    'probe-failed': 'Impossible de vérifier le processus Antigravity dans le délai prévu.',
-    'launch-failed': 'Le démarrage a échoué. Vérifiez le chemin et les permissions.',
+      'Antigravity utilise un autre dossier de données que celui sélectionné. Fermez-le ou vérifiez le dossier dans les paramètres avant de changer de compte.',
+    'probe-failed':
+      'Impossible de vérifier à temps l’état d’Antigravity. Vérifiez si l’application est ouverte et réessayez.',
+    'launch-failed':
+      'Impossible d’ouvrir Antigravity. Vérifiez son emplacement et les autorisations d’accès.',
     'startup-unconfirmed':
-      'Démarrage non confirmé en six secondes. Aucun autre démarrage tenté. Vérifiez l’application avant de réessayer.',
+      'L’ouverture d’Antigravity n’a pas encore été confirmée. Aucun second lancement n’a été tenté. Vérifiez l’application avant de réessayer.',
     'switched-hot-unconfirmed':
-      'Les données du compte ont été mises à jour, mais le changement à chaud dans l’IDE n’a pas pu être confirmé. Vérifiez le compte actuel dans l’IDE avant de réessayer.',
+      'Le nouveau compte est enregistré, mais le changement dans Antigravity IDE n’a pas été confirmé. Vérifiez le compte affiché avant de réessayer.',
     'switched-startup-unconfirmed':
-      'Données du compte mises à jour, mais démarrage non confirmé. Aucun autre démarrage tenté. Vérifiez l’application avant de réessayer.',
+      'Le nouveau compte est enregistré, mais l’ouverture d’Antigravity n’a pas été confirmée. Aucun second lancement n’a été tenté. Vérifiez l’application avant de réessayer.',
   },
   common: {
+    close: 'Fermer',
+    cancel: 'Annuler',
+    'core-unavailable-title': 'Connexion à Antigravity Manager impossible',
+    'core-unavailable-body':
+      'Les comptes et le proxy sont momentanément indisponibles. Fermez puis rouvrez Antigravity Manager. Si le problème persiste, installez la dernière version.',
+    'account-data-unavailable-title': 'Impossible d’ouvrir les comptes enregistrés',
+    'account-data-unavailable-body':
+      'Les comptes enregistrés ne peuvent pas être lus pour le moment. Vérifiez que vous utilisez votre compte habituel sur cet ordinateur, puis rouvrez Antigravity Manager. Vos données de compte n’ont pas été modifiées.',
+    'already-running-title': 'Antigravity Manager est déjà ouvert',
+    'already-running-body':
+      'Fermez l’autre fenêtre d’Antigravity Manager, puis réessayez. Si vous ne la trouvez pas, redémarrez l’ordinateur.',
     loading: 'Chargement...',
     error: 'Erreur',
     unknown: 'Inconnu',
     notAvailable: 'N/A',
     openMenu: 'Ouvrir le menu',
+
+    'dismiss-notification': 'Fermer la notification',
+    'reading-settings': 'Lecture de vos paramètres…',
   },
   status: {
     checking: 'Verification du statut...',
@@ -55,6 +147,17 @@ const fr = {
     openLogs: 'Ouvrir le dossier des journaux',
   },
   update: {
+    'release-notes': {
+      view: 'Voir les nouveautés',
+      title: 'Nouveautés de cette version',
+      loading: 'Chargement des notes de version…',
+      failed:
+        'Impossible de charger les notes de version. Réessayez ou ouvrez la page de la version.',
+      empty: 'Aucune note n’a été publiée pour cette version.',
+      history: 'Historique des versions',
+      'release-page': 'Page de la version',
+      'link-failed': 'Impossible d’ouvrir ce lien. Réessayez.',
+    },
     title: 'Mises a jour',
     checking: 'Verification...',
     checkNow: 'Rechercher des mises a jour',
@@ -66,6 +169,8 @@ const fr = {
       title: 'Mise a jour disponible',
       description: 'La version {{version}} est disponible sur GitHub.',
       download: 'Telecharger',
+      'manual-download': 'Téléchargement manuel',
+      'open-download-failed': 'Impossible d’ouvrir la page de téléchargement',
       downloading: 'Telechargement...',
       dismiss: 'Ignorer',
       macosUnsignedNote:
@@ -78,36 +183,51 @@ const fr = {
     },
   },
   error: {
+    logs: en.error.logs,
+    toast: {
+      'report-issue': 'Signaler sur GitHub',
+      'no-details':
+        'Aucune trace disponible. Le texte de la notification est affiché si disponible.',
+      copied:
+        'Informations sur l’erreur copiées Collez-les dans le formulaire GitHub, décrivez vos actions, puis envoyez le rapport.',
+      'copy-failed':
+        'Impossible de copier les informations Réessayez. Vous pouvez aussi ouvrir les détails et copier l’erreur manuellement.',
+      'open-failed':
+        'Impossible d’ouvrir GitHub Les informations sont copiées. Ouvrez {{url}} et collez-les dans le rapport.',
+    },
     generic: 'Une erreur inattendue s est produite.',
     detailsTitle: 'Details de l erreur',
     detailsDescription:
-      'Les details d erreur du backend sont affiches ci-dessous. Ils peuvent inclure des chemins de fichiers locaux et des frames de pile.',
-    keychainUnavailable: 'Le trousseau n est pas disponible.',
+      'Ces détails peuvent aider à résoudre le problème et contenir des emplacements de fichiers personnels. Vérifiez-les avant de les partager.',
+    keychainUnavailable:
+      'Impossible de lire les informations de connexion enregistrées pour le moment.',
     keychainHint: {
-      translocation:
-        'Translocation d app macOS detectee. Deplacez l app vers /Applications puis rouvrez-la.',
+      translocation: 'Déplacez l’application dans le dossier Applications, puis rouvrez-la.',
       keychainDenied:
-        'Acces au trousseau refuse. L app n est peut-etre pas signee ; consultez le README pour la solution de signature locale.',
-      signNotarize: 'Utilisez une version signee et notarisee lorsqu elle est disponible.',
+        'macOS a bloqué l’accès aux informations de connexion enregistrées. Consultez les instructions d’installation de l’application, puis réessayez.',
+      signNotarize: 'Si possible, installez une version reconnue comme vérifiée par macOS.',
     },
-    dataMigrationFailed: 'Impossible de dechiffrer les donnees de compte heritees.',
+    dataMigrationFailed: 'Impossible de lire les comptes enregistrés par une ancienne version.',
     masterKeyUnavailable:
-      'Des comptes stockes ont ete trouves, mais leur cle de chiffrement est actuellement indisponible. Aucune donnee de compte ni aucun fichier de cle n a ete modifie.',
+      'Des comptes enregistrés ont été trouvés, mais ils ne peuvent pas être ouverts pour le moment. Vos données de compte n’ont pas été modifiées.',
     dataMigrationHint: {
       relogin: 'Reconnectez-vous ou ajoutez de nouveau vos comptes.',
       clearData:
         'Si le probleme persiste, effacez les donnees de compte locales et reconnectez-vous.',
     },
     antigravityStorageJsonNotFound:
-      'Le fichier storage.json d Antigravity est introuvable. Ouvrez l app Antigravity cible et connectez-vous une fois, puis reessayez de basculer.',
+      'La configuration initiale d’Antigravity est incomplète. Ouvrez l’application sélectionnée et connectez-vous une fois, puis réessayez de changer de compte.',
     antigravityProjectIdMissing:
-      'Il manque un ID de projet Antigravity a ce compte. Cela peut arriver si le compte ne s est jamais connecte a l app Antigravity. Connectez-vous une fois dans Antigravity, puis revenez dans cet outil et reessayez.',
+      'Ce compte n’est pas encore prêt pour Antigravity. Connectez-vous avec ce compte dans Antigravity une fois, puis réessayez.',
     antigravityDatabasePermissionDenied:
-      'Le stockage de base de donnees Antigravity n est pas accessible en ecriture. Verifiez le dossier de donnees utilisateur Antigravity configure ou redemarrez Antigravity Manager apres avoir ouvert Antigravity une fois.',
+      'Impossible d’enregistrer la connexion Antigravity. Vérifiez que son dossier de données peut être modifié, ou ouvrez Antigravity une fois puis redémarrez Manager.',
     cloudAccountLoginExpired:
       'Les informations de connexion de ce compte cloud ont expire. Veuillez vous reconnecter.',
   },
   nav: {
+    navigation: 'Navigation',
+    'collapse-sidebar': 'Réduire la barre latérale',
+    'expand-sidebar': 'Développer la barre latérale',
     accounts: 'Comptes',
     proxy: 'Proxy API',
     'client-tools': 'Outils Client',
@@ -134,7 +254,65 @@ const fr = {
       clickToScan: 'Cliquer pour réanalyser les processus',
     },
   },
-  traffic: en.traffic,
+  traffic: {
+    ...en.traffic,
+    'detail-load-failed': 'Impossible de charger cette requête. Réessayez.',
+    'detail-not-found': 'Cet enregistrement est indisponible. Il a peut-être été effacé.',
+    fields: {
+      category: 'Catégorie',
+      method: 'Méthode de requête',
+      'requested-model': 'Modèle demandé',
+      'mapped-model': 'Route du modèle choisie',
+      error: 'Détails de l’erreur',
+      affected: 'Enregistrements concernés',
+      'request-id': 'Identifiant de requête',
+      'client-address': 'Adresse du client',
+      username: 'Utilisateur',
+      'reasoning-tokens': 'Tokens de raisonnement',
+      'cached-tokens': 'Tokens en cache',
+      query: 'Options supplémentaires',
+    },
+    outcomes: {
+      in_progress: 'En cours',
+      completed: 'Terminé',
+      client_cancelled: 'Annulé',
+      client_disconnected: 'Connexion fermée',
+      timeout: 'Délai dépassé',
+      upstream_error: 'Erreur du service de modèle',
+      auth_failed: 'Échec de connexion',
+      internal_error: 'Erreur de l’application',
+      partial: 'Résultat partiel',
+    },
+    'search-metadata': 'Rechercher un modèle, un numéro de requête ou une adresse',
+    'copy-upstream-curl':
+      'Copier la requête au service de modèles en cURL (données privées masquées)',
+    'upstream-attempts': 'Requêtes envoyées au service de modèles',
+    'no-attempts': 'Aucune requête n’a été envoyée au service de modèles.',
+    upstream: 'Service de modèles',
+    endpoint: 'Adresse du service',
+    protocol: 'Format API',
+    'repair-databases': 'Réparer les données enregistrées',
+    'concise-help':
+      'Afficher les informations principales. Les sections développées restent affichées en entier.',
+    'full-help':
+      'Afficher toutes les informations chargées. Si le contenu ne peut pas être organisé ou est incomplet, les deux vues peuvent être identiques.',
+    'load-next-window': 'Section suivante',
+    offset: 'Position dans le contenu : {{offset}}',
+    'parse-error': 'Impossible de lire ce contenu à la position {{offset}}.',
+    'thought-oversized':
+      'Le raisonnement dépasse 64 MiB et n’a pas été enregistré en entier. Référence : {{hash}}',
+
+    'loading-description': 'Les requêtes apparaîtront ici dès qu’elles seront prêtes.',
+    'empty-description':
+      'Les requêtes envoyées via le proxy apparaissent ici. Vous pouvez aussi modifier les filtres.',
+    'empty-category-description':
+      'Les enregistrements de cette catégorie apparaissent ici. Essayez une autre catégorie ou modifiez les filtres.',
+    'load-failed': 'Impossible de lire les requêtes',
+    'load-failed-description':
+      'Réessayez. Cela ne signifie pas que vos enregistrements ont été supprimés.',
+    'refresh-failed':
+      'Impossible d’actualiser les enregistrements. Les données précédentes restent affichées.',
+  },
   editionSelection: {
     title: 'Choisissez votre edition Antigravity',
     description:
@@ -171,6 +349,14 @@ const fr = {
     },
   },
   settings: {
+    'service-unavailable':
+      'Impossible d’ouvrir ou d’enregistrer les paramètres pour le moment. Réessayez. Si le problème persiste, fermez puis rouvrez Antigravity Manager.',
+    'service-retry': 'Réessayer',
+    'service-restart-required':
+      'Paramètres enregistrés. Désactivez puis réactivez le proxy pour appliquer les modifications.',
+    'service-save': 'Enregistrer',
+    'service-secret-configured':
+      'Une adresse proxy est déjà définie. Saisissez-en une autre pour la remplacer.',
     'weekly-warmup': {
       error: 'Impossible de charger ou enregistrer les paramètres.',
       retry: 'Réessayer',
@@ -238,6 +424,12 @@ const fr = {
       clearedDescription: '{{size}} Mo ont été supprimés des dossiers de cache Antigravity.',
       failedTitle: 'Échec du nettoyage du cache',
       notFoundTitle: 'Aucun cache Antigravity trouvé',
+
+      'paths-failed': 'Impossible de trouver les emplacements du cache',
+      'paths-retry-description': 'Réessayez avant de vider le cache.',
+      'partial-title': 'Une partie du cache n’a pas été supprimée',
+      'partial-description':
+        '{{size}} Mo libérés. {{count}} emplacement(s) non supprimé(s). Fermez Antigravity et réessayez.',
     },
     version: 'Version',
     platform: 'Plateforme',
@@ -253,6 +445,11 @@ const fr = {
       },
     },
     account: {
+      'client-setup': 'Emplacement et lancement des clients',
+      'client-setup-description':
+        'À modifier si Manager ne trouve pas votre client ou si vous souhaitez personnaliser son lancement.',
+      'choose-file': 'Choisir un fichier',
+      'clear-field': 'Vider ce champ',
       title: 'Parametres du compte',
       description: 'Configurez l actualisation et la synchronisation automatiques des comptes.',
       auto_refresh: 'Actualisation automatique du quota',
@@ -324,7 +521,7 @@ const fr = {
         'Partager des diagnostics d interaction anonymes, des heatmaps et des relectures de session pour ameliorer l app.',
       clarity_unavailable: 'Microsoft Clarity n est pas configure pour cette build.',
       restart_note:
-        'Certaines modifications d observabilite prendront effet apres le redemarrage de l application.',
+        'Certains réglages de journaux et de diagnostic prennent effet après le redémarrage.',
     },
     notifications: {
       title: 'Notifications',
@@ -348,6 +545,11 @@ const fr = {
       description: 'Configurez un proxy pour les requetes sortantes vers les API Google/Gemini.',
       enable: 'Activer le proxy amont',
       url: 'URL du proxy',
+      'configure-before-enabling':
+        'Enregistrez une URL de proxy HTTP(S) valide avant de l’activer. Effacer l’URL désactive aussi le proxy.',
+      'configuration-invalid':
+        'Le proxy activé n’a pas d’URL valide. Enregistrez une adresse valide ou désactivez le proxy.',
+      'url-invalid': 'Saisissez une URL de proxy HTTP ou HTTPS valide.',
       timeout: 'Delai de requete (secondes)',
     },
     modelMapping: {
@@ -488,13 +690,14 @@ const fr = {
     },
   },
   cloud: {
+    'total-accounts': 'Total des comptes',
     title: 'Comptes',
-    description: 'Gerez votre pool de comptes Google Gemini.',
+    description: 'Gérez vos comptes Google Gemini.',
     security: {
       compatibilityMode: {
-        title: 'Le stockage de cle de compatibilite est actif',
+        title: 'Les clés de sécurité sont enregistrées sur cet ordinateur',
         description:
-          'Les donnees du compte restent chiffrees avec AES-256-GCM, mais la cle principale est stockee localement au lieu d etre protegee par le service d identifiants du systeme.',
+          'Le stockage sécurisé du système est indisponible. Les clés sont enregistrées dans un fichier local. Protégez cet ordinateur et ses sauvegardes.',
       },
     },
     autoSwitch: 'Basculement auto',
@@ -644,6 +847,18 @@ const fr = {
         deleted: 'Compte supprimé',
       },
     },
+    'auto-switch-client': 'Changer automatiquement de compte dans les clients',
+    'auto-switch-description':
+      'Change les comptes dans Antigravity, IDE et CLI. Les comptes utilisés pour les requêtes API se règlent sur la page Proxy API.',
+    'quota-display': {
+      title: 'Affichage des quotas',
+      description:
+        'Choisissez les quotas affichés sur les cartes. Cela ne change ni les quotas ni le compte utilisé pour les requêtes.',
+      'five-hours-gemini': 'Quota Gemini sur 5 heures',
+      'five-hours-claude': 'Quota Claude sur 5 heures',
+      'weekly-gemini': 'Quota hebdomadaire Gemini',
+      'weekly-claude': 'Quota hebdomadaire Claude',
+    },
     'quota-window': {
       label: 'Période de quota',
       'five-hours': 'Quota sur 5 heures',
@@ -657,9 +872,9 @@ const fr = {
       'no-5h-quota': 'Aucune donnée de quota sur 5h',
       'no-weekly-quota': 'Aucune donnée de quota hebdomadaire',
       'weekly-summary-unavailable':
-        "Le service en amont n'a renvoyé aucun résumé de quota hebdomadaire.",
+        'Le service de modèles n’a pas fourni les informations d’utilisation hebdomadaire.',
       'weekly-bucket-unavailable':
-        'Le résumé du quota ne contient aucun compartiment hebdomadaire reconnu.',
+        'L’utilisation hebdomadaire est absente des informations reçues.',
     },
     recommendation: {
       badge: 'Prochain recommandé',
@@ -672,24 +887,77 @@ const fr = {
       },
     },
     authDialog: {
+      'manual-sign-in': 'Saisir un code manuellement',
+      'waiting-for-browser':
+        'Terminez la connexion dans votre navigateur. Cette fenêtre se mettra à jour automatiquement.',
       title: 'Ajouter un compte Google',
-      description: 'Pour ajouter un compte, vous devez autoriser l application.',
-      oauthClient: 'Client OAuth',
-      oauthClientPlaceholder: 'Selectionner un client OAuth',
+      description:
+        'Choisissez une méthode de connexion, puis connectez-vous à Google dans votre navigateur. Le compte sera ajouté automatiquement.',
+      oauthClient: 'Méthode de connexion',
+      oauthClientPlaceholder: 'Choisir une méthode de connexion',
       openLogin: 'Ouvrir la page de connexion',
       authCode: 'Code d autorisation',
       placeholder: 'Collez le code commencant par 4/...',
       instruction:
-        'Le navigateur par defaut s ouvrira pour la connexion Google. Copiez le code depuis la page localhost et collez-le ici.',
+        'Si la connexion ne se termine pas automatiquement, collez ici le code du navigateur.',
       verify: 'Verifier et ajouter',
     },
-    localImport: en.cloud.localImport,
+    localImport: {
+      ...en.cloud.localImport,
+      description:
+        'Recherchez les comptes déjà connectés sur cet ordinateur, puis vérifiez les résultats avant de les importer.',
+      emailCollision: '{{email}} possède {{count}} connexions enregistrées différentes.',
+      sources: {
+        ...en.cloud.localImport['sources'],
+        'antigravity-keyring': 'Connexions enregistrées par le système',
+        'antigravity-classic-db': 'Comptes enregistrés dans Antigravity',
+        'antigravity-ide-db': 'Comptes enregistrés dans Antigravity IDE',
+      },
+      validationErrors: {
+        ...en.cloud.localImport['validationErrors'],
+        'credential-unavailable':
+          'Ces informations de connexion ne sont plus disponibles. Reconnectez-vous à Antigravity, puis relancez la recherche.',
+        'authentication-failed':
+          'Google n’a pas accepté cette connexion. Reconnectez-vous à Antigravity, puis relancez la recherche.',
+      },
+      discoveryErrors: {
+        ...en.cloud.localImport['discoveryErrors'],
+        missing: 'Aucune connexion enregistrée n’a été trouvée ici.',
+        'permission-denied':
+          'L’accès aux informations de connexion a été refusé. Vérifiez les autorisations et réessayez.',
+        locked:
+          'Les informations de connexion sont verrouillées ou utilisées. Déverrouillez l’accès ou fermez Antigravity, puis relancez la recherche.',
+        malformed:
+          'Les informations de connexion sont illisibles. Reconnectez-vous à Antigravity, puis relancez la recherche.',
+        'timed-out':
+          'La lecture des informations de connexion a pris trop de temps. Relancez la recherche.',
+        'read-failed': 'Impossible de lire les informations de connexion. Relancez la recherche.',
+      },
+      importErrors: {
+        ...en.cloud.localImport['importErrors'],
+        'credential-unavailable':
+          'Ces informations de connexion ne sont plus disponibles. Relancez la recherche avant l’importation.',
+        'identity-conflict':
+          'Ces informations de connexion ne correspondent pas au compte existant. Vérifiez les comptes avant l’importation.',
+      },
+      errors: {
+        ...en.cloud.localImport['errors'],
+        'session-not-found': 'Ces résultats ne sont plus disponibles. Relancez la recherche.',
+        'session-expired': 'Ces résultats ont expiré. Relancez la recherche.',
+        'session-consumed':
+          'Ces résultats ont déjà été utilisés. Relancez la recherche pour importer d’autres comptes.',
+      },
+
+      title: 'Importer depuis cet ordinateur',
+
+      trigger: 'Importer depuis cet ordinateur',
+    },
     card: {
       active: 'Actif',
       use: 'Utiliser',
       rateLimited: 'Limite par le debit',
       validationRiskControlled: 'Risque / limite par le debit',
-      validationOAuthReauthRequired: 'Reauthentification OAuth requise',
+      validationOAuthReauthRequired: 'Reconnectez-vous à Google',
       validationRequired: 'Verification requise',
       completeValidation: 'Verifier',
       left: 'restant',
@@ -712,9 +980,10 @@ const fr = {
       liveLimitRateLimited: 'Débit limité',
       liveLimitRemaining: '{{duration}} restantes',
       liveLimitDetectedAgo: 'détecté il y a {{duration}}',
-      liveLimitActiveTitle: 'Le point de terminaison amont est temporairement indisponible.',
-      liveLimitRecentTitle: 'Le point de terminaison amont a récemment renvoyé une erreur.',
-      liveLimitQuotaSnapshot: 'Le quota affiché peut encore indiquer {{percentage}} %.',
+      liveLimitActiveTitle: 'Le service de modèles est temporairement indisponible.',
+      liveLimitRecentTitle: 'Le service de modèles a récemment signalé une erreur.',
+      liveLimitQuotaSnapshot:
+        'La dernière vérification du quota peut encore afficher {{percentage}} %.',
       liveLimitMessage: 'Message : {{message}}',
       resetPrefix: 'reset',
       resetTime: 'Heure de reinitialisation',
@@ -728,6 +997,12 @@ const fr = {
       proxy: 'Proxy',
       proxyPlaceholder: 'ex. http://127.0.0.1:7890',
       proxySaved: 'Proxy enregistre',
+      'network-proxy': 'Proxy réseau',
+      'network-proxy-description':
+        'Facultatif : utilisez un proxy réseau pour ce compte. Appuyez sur Entrée ou quittez le champ pour enregistrer.',
+      'proxy-replace-placeholder': 'Saisir une nouvelle adresse proxy',
+      'proxy-remove': 'Supprimer le proxy',
+      'proxy-save-failed': "Impossible d'enregistrer le proxy",
       noProxy: 'Aucun proxy',
       aiCredits: 'Credits IA',
       aiCreditsValue: '{{amount}} credits',
@@ -735,19 +1010,28 @@ const fr = {
       modelVisibility: 'Visibilite des modeles',
     },
     identity: {
-      title: 'Profil d identite',
+      'profile-errors': {
+        'account-not-found': "Ce compte n'est plus disponible.",
+        'baseline-unavailable': "Aucun profil d'identité d'origine à restaurer.",
+        'revision-not-found': "Le profil d'identité choisi est introuvable.",
+        'profile-invalid': "Ce profil d'identité ne peut pas être utilisé. Choisissez-en un autre.",
+        'profile-write-failed': "Impossible d'enregistrer le profil d'identité. Réessayez.",
+        'profile-operation-failed':
+          "Impossible de terminer l'action sur le profil d'identité. Réessayez.",
+      },
+      title: 'Appareil du compte',
       loading: 'Chargement...',
-      generateAndBind: 'Creer et associer',
-      captureAndBind: 'Capturer et associer l actuel',
-      restoreOriginal: 'Restaurer la base',
-      openFolder: 'Ouvrir le stockage d identite',
-      previewTitle: 'Apercu de l identite generee',
+      generateAndBind: 'Créer de nouvelles informations',
+      captureAndBind: 'Utiliser l’appareil actuel',
+      restoreOriginal: 'Restaurer les informations d’origine',
+      openFolder: 'Ouvrir le dossier de l’appareil',
+      previewTitle: 'Nouvelles informations',
       confirm: 'Confirmer',
       cancel: 'Annuler',
       close: 'Fermer',
-      currentStorage: 'Identite d execution actuelle',
-      accountBinding: 'Identite associee au compte',
-      history: 'Historique des identites',
+      currentStorage: 'Réglages actuels de l’appareil',
+      accountBinding: 'Enregistré pour ce compte',
+      history: 'Versions enregistrées',
       noHistory: 'Aucun historique d identite',
       current: 'Actif',
       restore: 'Restaurer',
@@ -757,7 +1041,19 @@ const fr = {
       restoreVersionSuccess: 'Identite historique restauree',
       deleteVersionSuccess: 'Identite historique supprimee',
       openFolderSuccess: 'Stockage d identite ouvert',
-      baseline: 'Identite de base',
+      baseline: 'Informations d’origine',
+
+      description:
+        'Enregistrez les informations de l’appareil pour ce compte afin de les utiliser lors du changement de compte.',
+      'load-failed': 'Impossible de lire les informations de l’appareil',
+      'retry-description': 'Réessayez. Les informations enregistrées n’ont pas été modifiées.',
+      'refresh-failed': 'Actualisation impossible. Les informations précédentes restent affichées.',
+      updating: 'Mise à jour des informations de l’appareil…',
+      'device-id': 'Identifiant de l’appareil',
+      'mac-device-id': 'Identifiant de l’appareil Mac',
+      'installation-id': 'Identifiant d’installation',
+      'diagnostic-id': 'Identifiant de diagnostic',
+      'delete-version': 'Supprimer la version enregistrée : {{label}}',
     },
     list: {
       noAccounts: 'Aucun compte cloud ajoute pour le moment.',
@@ -765,34 +1061,57 @@ const fr = {
     },
     error: {
       loadFailed: 'Echec du chargement des comptes cloud.',
+      'report-issue': 'Signaler ce problème',
+      'report-preparing': 'Préparation des informations…',
+      'report-copied': 'Informations sur l’erreur copiées',
+      'report-paste-guide':
+        'Collez-les dans le formulaire GitHub, décrivez vos actions, puis envoyez le rapport.',
+      'report-copy-failed': 'Impossible de copier les informations',
+      'report-retry':
+        'Réessayez. Vous pouvez aussi ouvrir les détails et copier l’erreur manuellement.',
+      'report-open-failed': 'Impossible d’ouvrir GitHub',
+      'report-manual-open':
+        'Les informations sont copiées. Ouvrez {{url}} et collez-les dans le rapport.',
       dataRepair: {
-        title: 'Les donnees de compte chiffrees doivent etre reparees',
+        title: 'Impossible d’ouvrir les comptes enregistrés',
         description:
-          'L app n a pas pu dechiffrer les donnees de compte locales. Cela signifie generalement que les donnees ont ete creees avec une autre cle de chiffrement ou qu elles sont corrompues.',
+          'L’application ne peut pas lire certains comptes enregistrés. Cela peut arriver après un changement de compte sur l’ordinateur ou si des fichiers locaux sont endommagés.',
         stepReLogin:
-          'Si la cle ne peut toujours pas etre recuperee, reconnectez-vous ou ajoutez de nouveau les comptes affectes sans supprimer la base de donnees existante.',
+          'Si le problème persiste après avoir rouvert l’application, reconnectez-vous ou ajoutez de nouveau les comptes concernés. Conservez vos données existantes jusqu’à leur restauration.',
         stepMacPrivacy:
-          'Sur macOS, verifiez les invites du trousseau et de confidentialite. Si l app n est pas signee ou a ete resignee, signez-la de nouveau, deplacez-la vers /Applications, puis rouvrez-la.',
+          'Sur macOS, vérifiez les demandes d’autorisation. Déplacez l’application dans le dossier Applications, puis rouvrez-la.',
         stepCheckGithub:
           'Consultez le README du depot GitHub pour les dernieres etapes de depannage.',
         stepOpenIssue:
-          'Recherchez cette erreur dans les GitHub Issues avant d effacer les donnees de compte locales.',
+          'Signalez ce problème sur GitHub. Cliquez pour copier les informations et ouvrir le formulaire.',
         openRepository: 'Ouvrir le depot GitHub',
-        openIssues: 'Ouvrir les GitHub Issues',
       },
     },
     toast: {
-      syncSuccess: {
-        title: 'Synchronisation reussie',
-        description: '{{email}} importe depuis l IDE.',
-      },
-      syncFailed: {
-        title: 'Echec de la synchronisation',
-        description: 'Aucun compte actif trouve dans la base de donnees IDE.',
+      validationLinkFailed: {
+        title: 'Impossible d’ouvrir la page de vérification Google',
+        codes: {
+          'account-not-found': 'Ce compte n’est plus disponible.',
+          'no-trusted-link': 'Aucune page de vérification Google n’est disponible pour ce compte.',
+          'validation-link-failed':
+            'Impossible d’ouvrir la page de vérification Google. Réessayez.',
+        },
       },
       addSuccess: 'Compte ajoute avec succes !',
       addFailed: {
         title: 'Echec de l ajout du compte',
+        codes: {
+          'authorization-denied': 'Autorisation Google refusee. Reessayez.',
+          'login-active': 'Une connexion Google est deja en cours.',
+          'login-cancelled': 'Connexion annulee.',
+          'login-timeout': 'La connexion a expire. Recommencez.',
+          'duplicate-account': 'Ce compte Google a deja ete ajoute.',
+          'browser-open-failed':
+            'Impossible d ouvrir le navigateur. Verifiez le navigateur par defaut.',
+          'login-failed': 'Impossible d ajouter le compte. Reessayez.',
+          'proxy-configuration-invalid':
+            'Enregistrez une adresse de proxy valide ou désactivez le proxy dans les paramètres, puis réessayez de vous connecter.',
+        },
       },
       quotaRefreshed: 'Quota actualise',
       refreshFailed: 'Echec de l actualisation du quota',
@@ -802,6 +1121,17 @@ const fr = {
         description: 'Redemarrage d Antigravity...',
       },
       switchFailed: 'Echec du basculement de compte',
+      switchFailureCodes: {
+        'account-not-found': "Ce compte n'est plus disponible.",
+        'reauth-required': 'Reconnectez-vous à ce compte avant de basculer.',
+        'identity-profile-required': 'Configurez un profil d’identité avant de basculer.',
+        'process-close-failed':
+          'Impossible de confirmer la fermeture d’Antigravity. Enregistrez votre travail, répondez aux fenêtres de confirmation et fermez Antigravity avant de changer de compte.',
+        'process-control-failed': 'Impossible de fermer ou de redémarrer Antigravity. Réessayez.',
+        'target-write-failed':
+          'Impossible d’utiliser le compte choisi dans Antigravity. Réessayez.',
+        'switch-failed': 'Impossible de changer de compte. Réessayez.',
+      },
       deleted: 'Compte supprime',
       deleteFailed: 'Echec de la suppression du compte',
       deleteConfirm: 'Voulez-vous vraiment supprimer ce compte ?',
@@ -826,6 +1156,9 @@ const fr = {
       },
     },
     batch: {
+      actions: 'Actions sur les comptes sélectionnés',
+      'delete-title': 'Supprimer {{count}} comptes ?',
+      cancel: 'Annuler',
       selected: '{{count}} selectionnes',
       delete: 'Supprimer la selection',
       refresh: 'Actualiser la selection',
@@ -849,13 +1182,27 @@ const fr = {
       quotaFlash: 'Quota Flash',
     },
     exportImport: {
+      'file-errors': {
+        'file-too-large':
+          'Le fichier choisi est trop volumineux. Choisissez une sauvegarde plus petite.',
+        'invalid-export':
+          'Cette sauvegarde de comptes est illisible. Choisissez un fichier valide.',
+        'read-failed':
+          'Impossible d’ouvrir le fichier choisi. Vérifiez qu’il est toujours présent.',
+        'write-failed':
+          'Impossible d’enregistrer la sauvegarde des comptes. Vérifiez l’emplacement choisi.',
+        'import-failed': 'Impossible d’importer les comptes. Réessayez.',
+        'tokens-missing':
+          'Cette sauvegarde ne contient pas les données de connexion du compte. Exportez une sauvegarde qui les inclut.',
+        'account-write-failed': 'Impossible de sauvegarder ce compte.',
+      },
       export: 'Exporter',
       import: 'Importer',
       exportTitle: 'Exporter les comptes',
       exportDesc:
-        'Choisissez d inclure ou non les jetons d authentification dans le fichier exporte.',
-      includeTokens: 'Inclure les jetons (moins securise)',
-      stripTokens: 'Retirer les jetons (plus sur pour le partage)',
+        'Choisissez si la sauvegarde contient les données de connexion. Gardez privées les sauvegardes qui les contiennent.',
+      includeTokens: 'Inclure les données de connexion (restaure les comptes)',
+      stripTokens: 'Sans données de connexion (plus sûr à partager)',
       exportSuccess: 'Comptes exportes avec succes',
       importTitle: 'Importer des comptes',
       importDesc: 'Selectionnez un fichier JSON exporte precedemment.',
@@ -871,8 +1218,33 @@ const fr = {
       invalidJson: 'Format de fichier JSON invalide',
       readFileFailed: 'Echec de la lecture du fichier',
     },
+
+    feedback: {
+      'loading-title': 'Lecture de vos comptes',
+      'loading-description':
+        'Les informations de vos comptes apparaîtront ici dès qu’elles seront prêtes.',
+      'empty-description':
+        'Choisissez Ajouter un compte pour vous connecter, ou importez un fichier de comptes.',
+      'filtered-description':
+        'Essayez une autre offre ou effacez le filtre pour voir plus de comptes.',
+    },
   },
   proxy: {
+    'advanced-options': 'Autres réglages du service',
+    'advanced-description': 'Choix des comptes, instructions communes et compatibilité des outils.',
+    'account-strategy': {
+      'save-failed':
+        'Impossible de sauvegarder votre choix. Sélectionnez-le à nouveau pour réessayer.',
+      title: 'Comptes utilisés pour les requêtes API',
+      balanced: 'Alterner entre les comptes disponibles',
+      'account-first': 'Privilégier le même compte',
+      'balanced-description':
+        'Répartit les nouvelles conversations entre les comptes disponibles. Une conversation existante conserve son compte tant que celui-ci reste disponible.',
+      'account-first-description':
+        'Pour chaque modèle, conserve le même compte. Change de compte si son quota est épuisé, si son utilisation est temporairement limitée ou si la requête ne peut pas être traitée. Les conversations existantes conservent leur compte disponible.',
+      'client-description':
+        'Ce réglage ne change pas le compte connecté dans Antigravity, IDE ou CLI. Le changement automatique dans les clients se règle sur la page Comptes.',
+    },
     title: 'Proxy API & Passerelle AI',
     description: 'Gerez le service proxy API et la passerelle AI locale.',
     save: 'Enregistrer les parametres',
@@ -883,6 +1255,10 @@ const fr = {
     error: 'Erreur',
     saving: 'Enregistrement...',
     tabs: {
+      tools: 'Outils',
+      models: 'Modèles',
+      records: 'Historique',
+      examples: 'Exemples',
       service: 'Service & Comptes',
       guides: 'Guides & Prompts',
       gateway: 'Passerelle AI & Tarifs',
@@ -1037,20 +1413,20 @@ const fr = {
       api_key: 'Cle API',
       auto_start: 'Demarrage automatique avec l app',
       auto_start_desc: 'Demarrer le service proxy au lancement de l application',
-      cloud_code_meta: 'Blocs de metadonnees Cloud Code',
+      cloud_code_meta: 'Compatibilité Cloud Code',
       cloud_code_meta_desc:
-        'Injecter des blocs SSE __cloudCodeMeta non standard pour la compatibilite avec l ancien Cloud Code. Gardez desactive pour les clients OpenAI stricts.',
+        'Ajouter les informations de réponse nécessaires aux anciens clients Cloud Code. Activez cette option uniquement si votre outil en a besoin ; les autres peuvent les refuser.',
       'allow-local-video-paths': 'Autoriser les chemins video locaux',
       'allow-local-video-paths-desc':
-        'Autorise les requetes API a lire via video_url les fichiers locaux accessibles a votre compte. Activez uniquement si tous les clients du proxy sont fiables.',
-      'global-system-prompt-title': 'Invite système globale',
+        'Autoriser les outils connectés à lire les vidéos de cet ordinateur accessibles à votre compte. Activez uniquement pour des outils de confiance.',
+      'global-system-prompt-title': 'Consignes pour toutes les requêtes IA',
       'global-system-prompt-description':
-        'Injecte cette instruction avant les instructions système fournies par le client pour chaque requête proxy.',
+        'Ajouter automatiquement ces consignes avant celles de chaque outil connecté, pour toute requête passant par Manager.',
       'global-system-prompt-placeholder':
         'Saisissez une invite système globale...\nExemple : Répondez en chinois simplifié et expliquez brièvement les modifications de code.',
       'global-system-prompt-character-count': '{{count}} caractères',
       'global-system-prompt-long-warning':
-        'Une invite de plus de 2 000 caractères peut réduire sensiblement la fenêtre de contexte disponible.',
+        'Plus de 2 000 caractères laissent moins de place à l’historique de conversation. Pensez à raccourcir ces consignes.',
       local_access: 'Acces reseau local :',
       select_ip: 'Selectionner une IP',
       no_token_warning: 'La cle API n est pas definie. L acces est ouvert a tout le monde !',
@@ -1059,30 +1435,30 @@ const fr = {
     },
     mapping: {
       title: 'Mappage des modeles',
-      description: 'Mapper les modeles Claude vers les modeles Gemini pour le routage.',
+      description: 'Choisissez le modèle Gemini utilisé pour chaque demande de modèle Claude.',
       maps_to: 'Mappe vers',
       restore: 'Restaurer les valeurs par defaut',
-      'only-raw-quota-models': 'Afficher uniquement les modèles avec quota',
+      'only-raw-quota-models': 'Afficher uniquement les modèles trouvés dans vos comptes',
       'only-raw-quota-models-desc':
-        'Les API de liste renvoient uniquement les modèles physiques détectés dans les caches de quota des comptes connectés.',
+        'Les outils connectés voient uniquement les modèles des dernières vérifications de quota, sans noms supplémentaires.',
     },
     'open-code': {
       title: 'Synchronisation OpenCode',
       description:
-        'Synchronise le fournisseur géré sans réécrire les commentaires ni le format JSONC personnalisé.',
+        'Connectez OpenCode à Manager en conservant les autres réglages, commentaires et la mise en forme.',
       synced: 'Synchronisé',
       'synced-custom-url': 'Synchronisé avec une URL personnalisée',
       'not-synced': 'Non synchronisé',
       'config-path': 'Configuration',
       'configured-models': 'Modèles configurés',
-      runtime: 'Environnement OpenCode',
+      runtime: 'Installation d’OpenCode',
       installed: 'Installé',
       'not-installed': 'Non détecté',
-      credential: 'Identifiant dédié',
-      'key-stored': "Stocké dans le coffre d'identifiants du système",
+      credential: 'Clé de connexion OpenCode',
+      'key-stored': 'Enregistrée dans le stockage sécurisé du système',
       'key-missing': 'Créé lors de la prochaine synchronisation',
       'backup-notice':
-        "Les sauvegardes conservent les commentaires et le format. L'identifiant est remplacé par un espace réservé invalide, puis la clé actuelle est injectée lors de la restauration.",
+        'Les sauvegardes conservent les commentaires et la mise en forme. La clé Manager est remplacée par une valeur inutilisable ; la restauration utilise la clé actuelle.',
       sync: 'Configurer et synchroniser OpenCode',
       restore: 'Restaurer la sauvegarde',
       clear: 'Effacer la configuration gérée',
@@ -1090,40 +1466,43 @@ const fr = {
       'model-dialog-title': 'Choisir les modèles OpenCode',
       'model-dialog-description':
         'Les modèles sélectionnés sont ajoutés ou mis à jour. Les modèles existants non sélectionnés ne sont pas supprimés.',
-      'custom-base-url': 'URL de base Manager personnalisée',
+      'custom-base-url': 'Adresse de Manager',
       'reset-base-url': 'Réinitialiser',
       'invalid-base-url': 'Saisissez une URL HTTP ou HTTPS valide.',
-      'sync-accounts': 'Synchroniser les comptes vers antigravity-accounts.json',
+      'sync-accounts': 'Utiliser les comptes dans le module de connexion OpenCode',
       'sync-accounts-description':
-        'OpenCode exige les jetons d’actualisation dans son fichier de plugin local. Cette option est désactivée par défaut ; les jetons ne transitent jamais par la réponse IPC du processus de rendu ni par les journaux.',
+        'Si cette option est activée, OpenCode enregistre dans un fichier sur cet ordinateur les informations qui maintiennent la connexion à ces comptes. Elle est désactivée par défaut. Activez-la uniquement sur un ordinateur de confiance.',
       'select-models': 'Modèles à ajouter ou à mettre à jour',
       'selected-count': '{{selected}} sur {{total}} sélectionnés',
       'select-all': 'Tout sélectionner',
       'deselect-all': 'Tout désélectionner',
       'confirm-sync': 'Confirmer la synchronisation',
-      'auth-plugin-warning-title': "Ancien plugin d'authentification détecté",
+      'auth-plugin-warning-title': 'Un autre module de connexion a été trouvé',
       'auth-plugin-warning-description':
-        'opencode-antigravity-auth peut entrer en conflit avec le fournisseur géré. Vérifiez ce plugin avant d’utiliser cette configuration.',
+        'opencode-antigravity-auth peut utiliser une autre connexion. Vérifiez que Manager est sélectionné dans OpenCode avant d’utiliser ces réglages.',
       'view-config': 'Afficher la configuration',
       'restore-confirm-title': 'Restaurer la sauvegarde OpenCode ?',
       'restore-confirm-description':
-        'Cette action remplace la configuration OpenCode active par la sauvegarde unique. La sauvegarde est supprimée après une restauration réussie.',
+        'Le fichier entier sera remplacé par la sauvegarde initiale, y compris les modifications ultérieures. La sauvegarde sera ensuite supprimée.',
       'confirm-restore': 'Confirmer la restauration',
-      'clear-confirm-title': 'Effacer la configuration OpenCode gérée ?',
+      'clear-confirm-title': 'Supprimer la connexion à Manager ?',
       'clear-confirm-description':
-        'Cette action supprime le fournisseur géré, les entrées Google et Anthropic héritées correspondantes ainsi que la clé dédiée. Les autres paramètres restent inchangés et la sauvegarde masquée peut toujours être restaurée.',
+        'Cette connexion et sa clé seront supprimées. Les autres services, réglages et la sauvegarde seront conservés.',
       'confirm-clear': 'Confirmer l’effacement',
       'config-viewer-title': 'Configuration OpenCode',
       'config-viewer-description': 'Aperçu de la configuration en lecture seule',
-      'config-redacted-notice':
-        'Les commentaires sont omis et les champs sensibles sont masqués avant que cet aperçu atteigne le processus de rendu.',
-      'config-copied': 'Configuration masquée copiée',
+      'config-redacted-notice': 'Les valeurs privées sont masquées dans cet aperçu.',
+      'config-copied': 'Configuration copiée avec les données privées masquées',
       'config-copy-failed': 'Échec de la copie de la configuration',
       'config-load-failed': 'Échec du chargement de la configuration',
-      'copy-config': 'Copier la configuration masquée',
+      'copy-config': 'Copier la configuration (données privées masquées)',
       'success-title': 'Configuration OpenCode mise à jour',
       'error-title': 'Échec de la mise à jour OpenCode',
       'unknown-error': 'Erreur de configuration OpenCode inconnue',
+
+      'choose-model-hint': 'Choisissez au moins un modèle pour continuer.',
+      'config-retry-description':
+        'Réessayez. Votre configuration enregistrée n’a pas été modifiée.',
     },
     examples: {
       title: 'Exemples d utilisation',
@@ -1132,39 +1511,41 @@ const fr = {
     persistence: {
       title: 'Request history and reasoning',
       description: 'Inspect bounded local records without slowing model traffic.',
-      'audit-title': 'Traffic audit',
+      'audit-title': 'Historique des requêtes',
       'audit-description':
-        'Stores redacted request, response and upstream-attempt records in a dedicated SQLite database.',
+        'Enregistrer sur cet ordinateur les requêtes, réponses et tentatives vers le service de modèles, en masquant les données sensibles.',
       rows: '{{count}} requests',
-      queue: '{{count}} queued writes',
+      queue: '{{count}} enregistrements en attente',
       dropped:
-        '{{count}} audit writes were dropped ({{reason}}). Model requests were not interrupted.',
+        '{{count}} enregistrements n’ont pas pu être sauvegardés ({{reason}}). Les requêtes ont continué normalement.',
       'disk-gib': 'Disk limit (GiB)',
-      'body-hours': 'Body retention (hours)',
+      'body-hours': 'Conservation du contenu complet (heures)',
       'summary-days': 'Summary retention (days)',
       'max-rows': 'Maximum rows',
       'no-audit': 'No traffic records yet.',
-      'audit-metadata': 'Request and attempt metadata',
-      'audit-body-missing': 'The audit body no longer exists.',
-      'audit-body-expired': 'The body expired; its metadata remains available.',
+      'audit-metadata': 'Détails des requêtes et tentatives vers le service de modèles',
+      'audit-body-missing':
+        'Le contenu complet de la requête ou de la réponse n’est plus enregistré.',
+      'audit-body-expired':
+        'Le contenu complet a expiré, mais les détails de la requête restent disponibles.',
       partial: 'Partial',
-      'logical-size': 'Logical size',
-      'parse-error-offset': 'Parse error offset',
+      'logical-size': 'Taille du contenu',
+      'parse-error-offset': 'Position impossible à lire',
       loading: 'Loading…',
       'copy-progress': 'Preparing full copy: {{value}}%',
       'previous-page': 'Previous page',
       'next-page': 'Next page',
       'copy-full': 'Copy complete body',
       'confirm-copy-full': 'Confirm copying {{size}}',
-      'clear-audit': 'Clear traffic audit',
-      'repair-audit': 'Repair audit database',
+      'clear-audit': 'Effacer l’historique des requêtes',
+      'repair-audit': 'Réparer l’historique des requêtes',
       'thought-title': 'Reasoning history',
       'thought-description': 'Save reasoning so later turns can continue the conversation.',
       sessions: '{{count}} sessions',
-      'hard-limit': 'Hard limit: 200 turns / 64 MiB per session',
+      'hard-limit': 'Chaque conversation conserve au maximum 200 échanges et 64 MiB de contenu.',
       'retention-days': 'Retention (days)',
       'max-sessions': 'Maximum sessions',
-      oversized: 'body omitted: over 64 MiB',
+      oversized: 'Le contenu dépasse 64 MiB et n’a pas été enregistré en entier.',
       'no-thought-body': 'No stored thought body.',
       signature: 'Signature',
       'copy-signature': 'Copy signature',
@@ -1251,5 +1632,4 @@ const fr = {
     },
   },
 } satisfies typeof en;
-
 export default fr;

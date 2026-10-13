@@ -52,7 +52,7 @@ function calculateAverage(values: number[]): number | null {
 }
 
 export function calculateProvidersGlobalQuota(
-  accounts: CloudAccount[],
+  accounts: Pick<CloudAccount, 'quota'>[],
   modelVisibility: Record<string, boolean> = {},
 ): ProvidersGlobalQuotaSummary {
   if (accounts.length === 0) {

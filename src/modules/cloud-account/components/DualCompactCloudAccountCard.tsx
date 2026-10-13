@@ -38,7 +38,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { AccountTierBadge } from '@/modules/cloud-account/components/AccountTierBadge';
 import { QuotaIndicatorTooltip } from '@/modules/cloud-account/components/QuotaIndicatorTooltip';
-import type { CloudAccount } from '@/modules/cloud-account/types';
+import type { CloudAccountView } from '@/modules/cloud-account/services/cloud-account-view';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
 import { aggregateVisibleQuotaModelFamilies } from '@/modules/cloud-account/utils/quota-model-families';
 import { selectWeeklyQuotaItems } from '@/modules/cloud-account/utils/quota-groups';
@@ -70,7 +70,7 @@ function formatCreditsExpiry(expiryDate: string): string {
 }
 
 interface DualCompactCloudAccountCardProps {
-  account: CloudAccount;
+  account: CloudAccountView;
   onRefresh: (id: string) => void;
   onDelete: (id: string) => void;
   onSwitch: (id: string, appTarget?: AntigravityAppTarget) => void;

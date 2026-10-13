@@ -12,7 +12,8 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { ipc } from '@/ipc/manager';
-import type { ProxyConfig } from '@/modules/config/types';
+import type { ServiceConfigSnapshot } from '@/modules/config/service-config.schema';
+type ProxyConfig = ServiceConfigSnapshot['proxy'];
 
 const RISK_ACKNOWLEDGEMENT_KEY = 'proxy-risk-acknowledged:v1';
 
@@ -38,6 +39,7 @@ export function ProxyServiceControl({ config, onConfigChange, onError }: ProxySe
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const operationPending = useRef(false);
+  const toggleButton = useRef<HTMLButtonElement>(null);
 
   const toggleService = async () => {
     if (operationPending.current) {
@@ -77,11 +79,7 @@ export function ProxyServiceControl({ config, onConfigChange, onError }: ProxySe
     } catch (error) {
       const description = error instanceof Error ? error.message : t('proxy.service.start_failed');
       onError(description);
-      toast({
-        title: t('proxy.service.start_failed'),
-        description,
-        variant: 'destructive',
-      });
+      toast({ error, title: t('proxy.service.start_failed'), description, variant: 'destructive' });
     } finally {
       operationPending.current = false;
       setPending(false);
@@ -114,6 +112,7 @@ export function ProxyServiceControl({ config, onConfigChange, onError }: ProxySe
   return (
     <>
       <Button
+        ref={toggleButton}
         variant={config.enabled ? 'destructive' : 'default'}
         disabled={pending}
         aria-busy={pending}
@@ -123,7 +122,12 @@ export function ProxyServiceControl({ config, onConfigChange, onError }: ProxySe
         {config.enabled ? t('proxy.service.stop') : t('proxy.service.start')}
       </Button>
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent>
+        <DialogContent
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            toggleButton.current?.focus();
+          }}
+        >
           <DialogHeader className="space-y-3">
             <DialogTitle className="flex items-center gap-2">
               <ShieldAlert className="size-5 shrink-0 text-amber-600" aria-hidden="true" />

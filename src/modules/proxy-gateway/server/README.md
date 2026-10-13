@@ -133,6 +133,20 @@ When reading, updating, or refactoring code within this directory, strictly foll
 
 ---
 
+## Account Selection
+
+**API Proxy > Accounts used for API requests** controls `proxy.account_selection_strategy`. It is saved in the existing service configuration and takes effect on the next lease without restarting the service. The default, `balanced`, preserves quota-weighted rotation and available conversation bindings.
+
+`account-first` retains an available account per model across independent requests. Explicit preferred accounts and existing available conversation bindings take precedence; otherwise the last selected account is reused, with the first eligible account as the initial choice. Model capability checks, request exclusions, cooldowns, rate limits, and cached exhausted quota still apply. Failover retains the replacement instead of immediately returning to the recovered account. Typed OAuth refresh rejection continues through the existing bounded alternate-account loop. Temporary continuity bindings are bounded to 256 model identifiers and reset after a service restart or strategy change; the selected strategy itself persists.
+
+This policy runs independently of the experimental parity scheduler. The account-page auto-switch toggle changes official client credentials, not proxy leases. Neither API strategy signs Antigravity, IDE, or CLI into another account. Display-only quota preferences do not filter the account pool.
+
+## JSON Request Capacity
+
+Model conversation, completion, token-counting, batch creation, and enabled diagnostic routes accept JSON bodies up to 64 MiB through the production adapter's route hooks. One byte above that ceiling is rejected with HTTP 413 before handler execution. Administrative, cancellation, and other non-model routes retain Fastify's 1 MiB default. Image generation keeps its dedicated Base64-sized ceiling; raw-media, multipart, and decoded image/file limits remain independent.
+
+Fastify parses model request bodies before the Nest authentication guards execute. Limiting administrative routes reduces unnecessary parsing memory, but model requests can still allocate substantial memory before authentication. These are per-request limits, not a concurrent process memory budget or a guarantee that upstream services accept every payload of that size.
+
 ## 4a. Durable Proxy State
 
 State a client can still reference after the process goes away is kept in `~/.antigravity-agent/proxy-state/`, one JSON file per owner, through `shared/persistence/durable-record-store.ts`. Writes are atomic (temp file plus rename) and coalesced, records are bounded by both count and age, and a damaged file costs the affected records rather than the app's start.
@@ -161,7 +175,7 @@ Deliberate deviation: `store: false` suppresses retrieval but not continuation. 
 
 `POST /v1/images/generations` accepts the Canvas-compatible top-level `image` extension only as one inline Base64 `data:image/*` URL or a non-empty ordered array of them. It never fetches remote image URLs. `POST /v1/images/edits` accepts multipart `image`, repeated `image`, `image[]`, and numbered `imageN` fields in arrival order; a mask is placed immediately after the first input image in the upstream parts list.
 
-Both routes allow at most 16 input images, 20 MiB decoded per image, and 32 MiB decoded across input images plus masks. The JSON body limit is raised only for the generation route so valid Base64 expansion can reach those checks; other JSON routes keep Fastify's normal ceiling. Explicit `image_size` / `imageSize` wins over `quality`, which wins over model suffixes. A valid `aspect_ratio` wins over a valid `size`, and invalid values fall through to the next source instead of forcing `1:1`. Image monitoring records counts and byte metadata, never prompt text, filenames, or Base64 payloads.
+Both routes allow at most 16 input images, 20 MiB decoded per image, and 32 MiB decoded across input images plus masks. Generation retains a dedicated JSON ceiling sized for Base64 expansion; see [JSON Request Capacity](#json-request-capacity) for the other gateway parsing limits. Explicit `image_size` / `imageSize` wins over `quality`, which wins over model suffixes. A valid `aspect_ratio` wins over a valid `size`, and invalid values fall through to the next source instead of forcing `1:1`. Image monitoring records counts and byte metadata, never prompt text, filenames, or Base64 payloads.
 
 ---
 
@@ -221,7 +235,7 @@ Pending upload sessions and their parts follow the repository's durable/in-memor
 
 Pending sessions are bounded three ways, matching the store they feed into: by size (a declared byte count over the per-file ceiling is refused at `create`, before any bytes are accepted), by time (a session expires one hour after `create` and answers `upload_expired` rather than silently taking more parts), and by count (a fixed ceiling on sessions held at once, configured via `AGM_UPLOADS_MAX_PENDING` / default 256, refused with `429` once reached). A sweep on the same interval as the file store's own reclaims sessions abandoned past their expiry.
 
-`bytes` at `complete` is a claim the assembled parts must match exactly; a short or long result is `byte_count_mismatch` in OpenAI's envelope with `param: "bytes"`, never a silent concatenation. `upload_id` and `part_id` are opaque server-issued strings, checked the same way a file handle is -- never built into a path. `OpenAIUploadsController` acts as a thin adapter delegating to `OpenAIUploadsService` and `sendFilesResponse`.
+`bytes` at `complete` is a claim the assembled parts must match exactly; a short or long result is `byte_count_mismatch` in OpenAI's envelope with `param: "bytes"`, never a silent concatenation. `upload_id` and `part_id` are opaque server-issued strings, checked the same way a file handle is -- never built into a path. `OpenAIUploadsController` delegates operations to `OpenAIUploadsService`, returns protocol objects with HTTP 200 and declares the existing error mapper through `ProtocolErrors`. Only multipart part uploads normalize transport upload errors; parsing remains explicit in that handler.
 
 As with Files, this is **local** session state, not provider-side storage: the file `complete` produces is read back through the ordinary `/v1/files` surface, and every later reference to it still travels to Google inline. No token saving is claimed here either.
 
@@ -346,6 +360,10 @@ a single user turn), `max_tokens_to_sample` becomes `max_tokens`, and the Messag
 rendered back as `{type, id, completion, stop_reason, stop, model}` with the leading space the
 old API always emitted. Streaming is refused with a `400` rather than half-served: the old
 `completion` event stream is a different wire format from the Messages SSE this proxy produces.
+
+The controller returns the completion object with HTTP 200 and uses `ProtocolErrors` with the
+existing legacy error mapper. It explicitly assigns `request-id` through a passthrough reply;
+the mapper reads that header to retain the same ID in each error body's `request_id`.
 
 ---
 

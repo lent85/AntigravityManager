@@ -11,6 +11,7 @@ import {
   runProcessOperation,
 } from '@/modules/antigravity-runtime/operation';
 import type { LaunchContext } from '@/modules/antigravity-runtime/types';
+import { processError } from '@/modules/antigravity-runtime/processErrors';
 
 const mocks = vi.hoisted(() => ({
   spawn: vi.fn(),
@@ -66,10 +67,65 @@ afterEach(() => {
   Object.defineProperty(process, 'platform', { value: platform, configurable: true });
 });
 
+async function settleStartup(request: Promise<void>) {
+  await vi.advanceTimersByTimeAsync(1000);
+  await request;
+}
+
 describe('direct launch', () => {
+  it('does not launch when context preflight finds a running update installer', async () => {
+    mocks.prepare.mockRejectedValueOnce(processError('update-in-progress'));
+    await expect(startAntigravity('classic')).rejects.toMatchObject({
+      messageKey: 'process-runtime.update-in-progress',
+    });
+    expect(mocks.spawn).not.toHaveBeenCalled();
+    expect(mocks.observe).not.toHaveBeenCalled();
+  });
+  it('does not confirm startup from a client that immediately exits', async () => {
+    mocks.observe.mockResolvedValueOnce([mainProcess]).mockResolvedValue([]);
+    const startup = startFromContext(context);
+    const result = expect(startup).rejects.toMatchObject({
+      messageKey: 'process-runtime.startup-unconfirmed',
+    });
+    void result.catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(6000);
+    await result;
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+  });
+  it('starts confirmation again if a process ID is reused', async () => {
+    mocks.observe
+      .mockResolvedValueOnce([{ ...mainProcess, startTime: 1n }])
+      .mockResolvedValue([{ ...mainProcess, startTime: 2n }]);
+    let confirmed = false;
+    const startup = startFromContext(context).then(() => {
+      confirmed = true;
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(confirmed).toBe(false);
+    await vi.advanceTimersByTimeAsync(200);
+    await startup;
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+  });
+  it('requires fresh confirmation after an inconclusive observation', async () => {
+    mocks.observe
+      .mockResolvedValueOnce([mainProcess])
+      .mockRejectedValueOnce(new Error('probe unavailable'))
+      .mockResolvedValue([mainProcess]);
+    let confirmed = false;
+    const startup = startFromContext(context).then(() => {
+      confirmed = true;
+    });
+    await vi.advanceTimersByTimeAsync(1200);
+    expect(confirmed).toBe(false);
+    await vi.advanceTimersByTimeAsync(200);
+    await startup;
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+  });
   it('allows the first GUI window to show on Windows', async () => {
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
-    await startFromContext({ ...context, executablePath: 'C:\\Apps\\Antigravity.exe' });
+    await settleStartup(
+      startFromContext({ ...context, executablePath: 'C:\\Apps\\Antigravity.exe' }),
+    );
     expect(mocks.spawn).toHaveBeenCalledExactlyOnceWith(
       'C:\\Apps\\Antigravity.exe',
       [],
@@ -77,7 +133,7 @@ describe('direct launch', () => {
     );
   });
   it('starts Classic directly with empty args, independent of URI registration', async () => {
-    await startAntigravity();
+    await settleStartup(startAntigravity());
     expect(mocks.exec).not.toHaveBeenCalled();
     expect(mocks.spawn).toHaveBeenCalledExactlyOnceWith(
       context.executablePath,
@@ -103,6 +159,7 @@ describe('direct launch', () => {
       messageKey: 'process-runtime.busy',
     });
     release(context);
+    await vi.advanceTimersByTimeAsync(1000);
     await Promise.all([first, second]);
     expect(mocks.spawn).toHaveBeenCalledTimes(1);
   });
@@ -130,7 +187,40 @@ describe('direct launch', () => {
     });
     await vi.advanceTimersByTimeAsync(6000);
     await rejection;
-    expect(mocks.observe.mock.calls.map((call) => call[1])).toEqual([1000, 1000, 1000, 1000, 1000]);
+    expect(mocks.observe.mock.calls.map((call) => call[1])).toEqual([6000]);
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+  });
+
+  it('confirms a stable client when a native snapshot takes longer than one second', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    mocks.observe.mockImplementation(async (_target, timeout: number) => {
+      const queryMs = 1500;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(timeout, queryMs)));
+      if (timeout < queryMs) {
+        throw processError('probe-failed');
+      }
+      return [{ ...mainProcess, startTime: 1n }];
+    });
+    const startup = startFromContext(context);
+    const result = expect(startup).resolves.toBeUndefined();
+    void result.catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(6000);
+    await result;
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+    expect(mocks.observe).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not accept a stable observation delivered after the startup deadline', async () => {
+    mocks.observe.mockResolvedValueOnce([{ ...mainProcess, startTime: 1n }]);
+    mocks.observe.mockImplementationOnce(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 6000));
+      return [{ ...mainProcess, startTime: 1n }];
+    });
+    const result = expect(startFromContext(context)).rejects.toMatchObject({
+      messageKey: 'process-runtime.startup-unconfirmed',
+    });
+    await vi.advanceTimersByTimeAsync(6200);
+    await result;
     expect(mocks.spawn).toHaveBeenCalledTimes(1);
   });
 
@@ -144,7 +234,7 @@ describe('direct launch', () => {
       messageKey: 'process-runtime.launch-failed',
     });
     expect(mocks.observe).not.toHaveBeenCalled();
-    await startAntigravity();
+    await settleStartup(startAntigravity());
     expect(mocks.spawn).toHaveBeenCalledTimes(2);
   });
 
@@ -180,7 +270,7 @@ describe('direct launch', () => {
       executablePath: '/Custom/Antigravity IDE.app/Contents/MacOS/Antigravity IDE',
       args: ['--user-data-dir', '/Users/test/My Data'],
     };
-    await startFromContext(mac);
+    await settleStartup(startFromContext(mac));
     expect(mocks.spawn).toHaveBeenCalledExactlyOnceWith(
       'open',
       ['/Custom/Antigravity IDE.app', '--args', ...mac.args],
@@ -195,7 +285,7 @@ describe('direct launch', () => {
       executablePath: '/mnt/c/Program Files/Antigravity/Antigravity.exe',
       args: ['--user-data-dir', 'C:\\Users\\测试\\My Data', '--title=quote"value'],
     };
-    await startFromContext(wsl);
+    await settleStartup(startFromContext(wsl));
     expect(mocks.spawn).toHaveBeenCalledExactlyOnceWith(
       wsl.executablePath,
       [...wsl.args],

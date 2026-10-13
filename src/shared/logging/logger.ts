@@ -26,6 +26,7 @@ type SentryReporter = (payload: {
   message: string;
   error?: Error;
   logs: LogEntry[];
+  isolated?: boolean;
 }) => void;
 
 /**
@@ -77,7 +78,7 @@ class Logger {
    * point, importing this module must stay free of filesystem side effects. Safe to
    * call more than once; only the first call adds the file transport.
    */
-  enableFileLogging(directory: string = getAgentDir()): void {
+  enableFileLogging(directory: string = getAgentDir(), role: 'app' | 'core' = 'app'): void {
     if (this.fileLoggingEnabled) {
       return;
     }
@@ -99,12 +100,12 @@ class Logger {
     );
 
     const rotateTransport = new DailyRotateFile({
-      filename: path.join(directory, 'app-%DATE%.log'),
+      filename: path.join(directory, `${role}-%DATE%.log`),
       datePattern: 'YYYY-MM-DD',
       maxSize: LOG_MAX_SIZE,
       maxFiles: LOG_RETENTION,
       zippedArchive: false,
-      auditFile: path.join(directory, '.app-log-audit.json'),
+      auditFile: path.join(directory, `.${role}-log-audit.json`),
       level: 'debug',
       format: fileFormat,
     });
@@ -150,6 +151,10 @@ class Logger {
   }
 
   log(level: LogLevel, message: string, ...args: unknown[]) {
+    this.write(level, message, args, false);
+  }
+
+  private write(level: LogLevel, message: string, args: unknown[], isolated: boolean) {
     const formattedArgs = this.formatArgs(args);
     const sanitizedMessage = String(sanitizeObject(message));
     const mergedMessage = formattedArgs ? `${sanitizedMessage} ${formattedArgs}` : sanitizedMessage;
@@ -176,12 +181,18 @@ class Logger {
       shouldReportErrorToSentry(mergedMessage) &&
       shouldReportErrorToSentry(this.extractError(args))
     ) {
-      this.sentryReporter({
-        level,
-        message: mergedMessage,
-        error: this.extractError(args),
-        logs: [...this.recentLogs],
-      });
+      try {
+        this.sentryReporter({
+          level,
+          message: mergedMessage,
+          error: this.extractError(args),
+          logs: isolated ? [] : [...this.recentLogs],
+          isolated,
+        });
+      } catch {
+        // Reporting is best-effort and must never recursively report its own failure.
+        this.winstonLogger.log({ level: 'warn', message: 'Error reporter failed' });
+      }
     }
   }
 
@@ -195,6 +206,10 @@ class Logger {
 
   error(message: string, ...args: unknown[]) {
     this.log('error', message, ...args);
+  }
+
+  diagnosticError(message: string): void {
+    this.write('error', message, [], true);
   }
 
   debug(message: string, ...args: unknown[]) {

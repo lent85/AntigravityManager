@@ -96,6 +96,7 @@ export const ProxyConfigSchema = z.object({
       'performance-first',
     ])
     .default('round-robin'),
+  account_selection_strategy: z.enum(['balanced', 'account-first']).default('balanced'),
   max_wait_seconds: z.number().default(60),
   preferred_account_id: z.string().default(''),
   circuit_breaker_enabled: z.boolean().default(true),
@@ -238,6 +239,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     backend_canary_enabled: true,
     parity_enabled: false,
     quota_aware_scheduling_enabled: true,
+    account_selection_strategy: 'balanced',
     parity_shadow_enabled: false,
     parity_kill_switch: false,
     parity_no_go_mismatch_rate: 0.15,

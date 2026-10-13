@@ -4,7 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
-import type { ProxyConfig, ModelPricingConfig } from '@/modules/config/types';
+import type { ModelPricingConfig } from '@/modules/config/types';
+import type { ServiceConfigSnapshot } from '@/modules/config/service-config.schema';
+type ProxyConfig = ServiceConfigSnapshot['proxy'];
 import type { ProxyExampleModel } from './proxy-example-models';
 import { DollarSign, Terminal } from 'lucide-react';
 
@@ -189,7 +191,7 @@ export function ProxyGatewayPricingTab({
               </p>
               <pre className="bg-muted/50 text-foreground overflow-x-auto rounded p-2 font-mono text-[11px]">
                 curl {baseUrl}/v1/models/quote -H "Authorization: Bearer{' '}
-                {proxyConfig.api_key || 'YOUR_KEY'}"
+                {proxyConfig.api_keys?.[0]?.key || 'YOUR_KEY'}"
               </pre>
             </div>
 
@@ -205,7 +207,7 @@ export function ProxyGatewayPricingTab({
               </p>
               <pre className="bg-muted/50 text-foreground overflow-x-auto rounded p-2 font-mono text-[11px]">
                 curl {baseUrl}/v1/gateway/quota -H "Authorization: Bearer{' '}
-                {proxyConfig.api_key || 'YOUR_KEY'}"
+                {proxyConfig.api_keys?.[0]?.key || 'YOUR_KEY'}"
               </pre>
             </div>
           </div>

@@ -1,33 +1,122 @@
 const en = {
+  'agent-tools': {
+    title: 'Connect your coding tools',
+    description: 'Choose a tool and use your available models through Antigravity Manager.',
+    loading: 'Reading settings…',
+    installed: 'Installed',
+    'not-installed': 'Installation not detected',
+    'read-error': 'Could not read the existing settings. Retry before making changes.',
+    retry: 'Retry',
+    configured: 'Configuration saved',
+    'custom-address': 'Using another address',
+    'not-configured': 'Not configured',
+    'not-verified': 'Requests not verified',
+    address: 'Manager address',
+    model: 'Model',
+    'not-set': 'Not set',
+    'choose-model': 'Choose during setup',
+    update: 'Update configuration',
+    configure: 'Configure',
+    view: 'View configuration',
+    restore: 'Restore backup',
+    remove: 'Remove connection',
+    'install-notice':
+      'You can save settings before installing the tool. Reopen it after installation.',
+    'action-error': 'Could not update tool settings',
+    saved: 'Settings updated',
+    reopen: 'Reopen {{name}} to load the settings.',
+    'configure-title': 'Connect {{name}}',
+    'configure-description':
+      'Requests will use Manager. The existing settings are backed up before the first change.',
+    'restore-title': 'Restore {{name}} settings?',
+    'restore-description':
+      'This replaces the whole settings file with its original backup, including any later edits. If Manager created the file, it will be removed. The backup is used once.',
+    'remove-title': 'Remove the Manager connection?',
+    'remove-description':
+      'Restore the previous connection settings while keeping unrelated settings and the backup.',
+    'preview-title': '{{name}} settings',
+    'preview-description':
+      'Only the settings needed to connect to Manager are shown. Connection keys are hidden.',
+    confirm: 'Confirm',
+    advanced: 'Address and configuration file',
+    'reset-address': 'Use current Manager address',
+    'backend-files':
+      'These settings are saved on the computer running the Manager service, under the user running it.',
+    'backup-notice': 'The first backup is retained across updates. Reopen the tool after saving.',
+    'toml-notice':
+      'Formatting and comments in the Codex settings file may change. A full backup is saved for recovery. Existing sign-in and permission settings are kept.',
+    'codex-review':
+      'Configure both task and automatic review requests. Existing enabled review routes and approval settings are kept.',
+    'model-count': '{{count}} model(s)',
+    'plugin-notice':
+      'A direct-login plugin is installed. It can use a different connection; check the selected provider in OpenCode.',
+    'revoke-key': 'Disable the OpenCode connection key',
+    errors: {
+      unavailable: 'Tool settings are unavailable. Please retry.',
+      'invalid-config':
+        'The settings file is invalid or too large. Fix it before configuring the tool.',
+      'read-failed': 'Could not read the settings file. Check access and retry.',
+      'write-failed': 'Could not save the settings. The recovery backup is retained.',
+      'backup-failed': 'Could not create the backup. The tool settings were not changed.',
+      'backup-missing': 'No recovery backup is available.',
+      'configuration-changed':
+        'The settings changed during this operation. Read them again and retry.',
+      'key-missing': 'Generate a connection key on the proxy page first.',
+      'review-route-disabled':
+        'The Codex review route is disabled. Enable it in model routing before configuration.',
+    },
+
+    'address-help': 'Use the current Manager address unless the service runs on another computer.',
+    'invalid-address':
+      'Use a Manager address starting with http:// or https://, without sign-in details or extra parameters.',
+    'model-required': 'Choose a model before saving.',
+  },
   appName: 'Antigravity Manager',
   'process-runtime': {
-    'close-failed': 'Could not close Antigravity. Check permissions and retry.',
+    'update-in-progress': 'Antigravity is updating. Finish the update, then try again.',
+    'close-failed':
+      'Could not close Antigravity. Save your chats and files, close the app manually, and retry.',
     'exit-unconfirmed':
-      'Could not confirm that Antigravity exited. Check the application before retrying.',
+      'Antigravity has not finished closing. Save your chats and files, close the app manually, and retry.',
     working: 'Processing...',
     busy: 'Antigravity is busy. Wait for the current operation to finish.',
     'missing-executable':
-      'Antigravity executable was not found or cannot be executed. Check its configured path.',
+      'Antigravity could not be found or opened. Check its application location in Settings.',
     'target-conflict':
-      'The configured executable and the running Antigravity belong to different installations. Resolve the conflict before switching accounts.',
+      'The running Antigravity app is from a different installation than the one selected in Settings. Close it or select the matching installation before switching accounts.',
     'directory-conflict':
-      'The configured and running user data directories conflict. Resolve the conflict before switching accounts.',
-    'probe-failed': 'Antigravity process status could not be checked within the deadline.',
+      'Antigravity is using a different data folder than the one selected in Settings. Close it or check the folder setting before switching accounts.',
+    'probe-failed':
+      'Antigravity status could not be checked in time. Check whether the app is open and try again.',
     'launch-failed':
-      'The Antigravity launch command failed. Check the executable path and permissions.',
+      'Antigravity could not be opened. Check its application location and access permissions.',
     'startup-unconfirmed':
-      'Antigravity startup could not be confirmed within six seconds. No additional launch was attempted. Check the app before retrying.',
+      'Antigravity has not been confirmed open yet. To avoid opening it twice, no second launch was attempted. Check the app before trying again.',
     'switched-hot-unconfirmed':
-      'Account data was updated, but the IDE hot switch could not be confirmed. Check the current account in the IDE before retrying.',
+      'The new account was saved, but the change in Antigravity IDE could not be confirmed. Check the account shown in the IDE before trying again.',
     'switched-startup-unconfirmed':
-      'Account data was updated, but Antigravity startup could not be confirmed. No additional launch was attempted. Check the app before retrying.',
+      'The new account was saved, but Antigravity has not been confirmed open yet. No second launch was attempted. Check the app before trying again.',
   },
   common: {
+    close: 'Close',
+    cancel: 'Cancel',
+    'core-unavailable-title': "Can't connect to Antigravity Manager",
+    'core-unavailable-body':
+      'Accounts and proxy are unavailable right now. Close and reopen Antigravity Manager. If the problem continues, install the latest version.',
+    'account-data-unavailable-title': "Can't open saved accounts",
+    'account-data-unavailable-body':
+      "Your saved accounts can't be read right now. Make sure you're signed in to your usual computer account, then reopen Antigravity Manager. Your account data has not been changed.",
+    'already-running-title': 'Antigravity Manager is already running',
+    'already-running-body':
+      "Close the other Antigravity Manager window and try again. If you can't find it, restart your computer.",
     loading: 'Loading...',
     error: 'Error',
     unknown: 'Unknown',
     notAvailable: 'N/A',
     openMenu: 'Open menu',
+
+    'dismiss-notification': 'Dismiss notification',
+    'reading-settings': 'Reading your settings…',
   },
   status: {
     checking: 'Checking status...',
@@ -54,6 +143,16 @@ const en = {
     openLogs: 'Open Log Directory',
   },
   update: {
+    'release-notes': {
+      view: 'View changes',
+      title: 'Release notes',
+      loading: 'Loading release notes...',
+      failed: 'Could not load release notes. You can still download or install this update.',
+      empty: 'This release does not include release notes.',
+      history: 'Release history',
+      'release-page': 'Release page',
+      'link-failed': 'Could not open this link. Please try again.',
+    },
     title: 'Updates',
     checking: 'Checking...',
     checkNow: 'Check for Updates',
@@ -64,6 +163,8 @@ const en = {
       title: 'Update available',
       description: 'Version {{version}} is available on GitHub.',
       download: 'Download',
+      'manual-download': 'Manual download',
+      'open-download-failed': 'Could not open the download page',
       downloading: 'Downloading...',
       dismiss: 'Dismiss',
       macosUnsignedNote:
@@ -76,34 +177,65 @@ const en = {
     },
   },
   error: {
+    logs: {
+      title: 'Sanitized log preview',
+      description:
+        'Optional: preview logs from the last 10 minutes, then save and manually attach the file to GitHub. Uncertain content is removed. Original logs are unchanged.',
+      generate: 'Generate sanitized log attachment',
+      save: 'Save reviewed attachment',
+      summary: '{{kib}} KiB · {{removed}} records with content removed · 1 MiB maximum',
+      missing: 'Missing or unreadable log sources: {{sources}}. This attachment is incomplete.',
+      truncated:
+        'Logs were truncated by the read or attachment limit. This attachment is incomplete.',
+      generating: 'Preparing sanitized logs…',
+      saving: 'Choose a save location…',
+      saved: 'Attachment saved. Add the file to your GitHub issue manually.',
+      cancelled: 'Save cancelled. You can choose a location again.',
+      expired: 'This preview expired. Generate a new attachment before saving.',
+      failed:
+        'No recent logs are available, or the attachment could not be generated or saved. Retry, or report the error details alone. Original logs are never used as a fallback.',
+    },
+    toast: {
+      'report-issue': 'Report to GitHub',
+      'no-details': 'No error stack is available. The notification text is shown when available.',
+      copied:
+        'Error information copied Paste it into the GitHub report, describe what you were doing, then submit.',
+      'copy-failed':
+        'Could not copy the error information Please try again. You can also open Details and copy the error manually.',
+      'open-failed':
+        'Could not open GitHub Your error information is copied. Open {{url}} and paste it into the report.',
+    },
     generic: 'An unexpected error occurred.',
     detailsTitle: 'Error details',
     detailsDescription:
-      'Backend error details are shown below. They may include local file paths and stack frames.',
-    keychainUnavailable: 'Keychain is unavailable.',
+      'These details can help troubleshoot the problem and may include private file locations. Review them before sharing.',
+    keychainUnavailable: "Can't access saved sign-in information right now.",
     keychainHint: {
-      translocation: 'Detected macOS App Translocation. Move the app to /Applications and reopen.',
+      translocation: 'Move the app to the Applications folder, then open it again.',
       keychainDenied:
-        'Keychain access denied. The app may be unsigned; see README for the self-signing workaround.',
-      signNotarize: 'Please use a signed and notarized build when available.',
+        "macOS blocked access to saved sign-in information. Check the app's installation instructions and try again.",
+      signNotarize: 'If available, install a version that macOS recognizes as verified.',
     },
-    dataMigrationFailed: 'Unable to decrypt legacy account data.',
+    dataMigrationFailed: "Can't read accounts saved by an earlier version.",
     masterKeyUnavailable:
-      'Stored accounts were found, but their encryption key is currently unavailable. No account data or key files were changed.',
+      "Saved accounts were found, but they can't be opened right now. Your account data has not been changed.",
     dataMigrationHint: {
       relogin: 'Please re-login or re-add your accounts.',
       clearData: 'If the issue persists, clear local account data and sign in again.',
     },
     antigravityStorageJsonNotFound:
-      'Antigravity storage.json was not found. Open the target Antigravity app and sign in once, then try switching again.',
+      'Antigravity setup is incomplete. Open the selected Antigravity app and sign in once, then try switching accounts again.',
     antigravityProjectIdMissing:
-      'This account is missing an Antigravity project ID. This may happen if the account has not signed in to the Antigravity app before. Please sign in once in the Antigravity app, then return to this tool and try switching again.',
+      'This account is not ready to use with Antigravity. Sign in to it in Antigravity once, then try switching again.',
     antigravityDatabasePermissionDenied:
-      'Antigravity database storage is not writable. Check the configured Antigravity user-data directory or restart Antigravity Manager after opening Antigravity once.',
+      'Antigravity sign-in details could not be saved. Check that its data folder allows changes, or open Antigravity once and restart Manager.',
     cloudAccountLoginExpired:
       'The login information for this cloud account has expired. Please log in again.',
   },
   nav: {
+    navigation: 'Navigation',
+    'collapse-sidebar': 'Collapse sidebar',
+    'expand-sidebar': 'Expand sidebar',
     accounts: 'Accounts',
     proxy: 'API Proxy',
     'client-tools': 'Client Tools',
@@ -131,6 +263,33 @@ const en = {
     },
   },
   traffic: {
+    'detail-load-failed': 'Could not load this request. Please try again.',
+    'detail-not-found': 'This record is no longer available. It may have been cleared.',
+    fields: {
+      category: 'Category',
+      method: 'Request method',
+      'requested-model': 'Requested model',
+      'mapped-model': 'Selected model route',
+      error: 'Error details',
+      affected: 'Affected records',
+      'request-id': 'Request ID',
+      'client-address': 'Client address',
+      username: 'User',
+      'reasoning-tokens': 'Reasoning tokens',
+      'cached-tokens': 'Cached tokens',
+      query: 'Additional request options',
+    },
+    outcomes: {
+      in_progress: 'In progress',
+      completed: 'Completed',
+      client_cancelled: 'Cancelled',
+      client_disconnected: 'Connection closed',
+      timeout: 'Timed out',
+      upstream_error: 'Model service error',
+      auth_failed: 'Sign-in failed',
+      internal_error: 'App error',
+      partial: 'Partial result',
+    },
     title: 'Traffic Monitor',
     description: 'Review model requests and app activity to find issues quickly.',
     records: '{{count}} records',
@@ -141,7 +300,7 @@ const en = {
     ipc: 'App actions',
     system: 'System events',
     'advanced-diagnostics': 'Advanced diagnostics',
-    'search-metadata': 'Search metadata: request ID, model, URL, protocol',
+    'search-metadata': 'Search by model, request ID or address',
     'date-from': 'From',
     'date-to': 'To',
     account: 'Account',
@@ -168,7 +327,7 @@ const en = {
       'The copied command exposes the current proxy key to your clipboard and any place you paste it. The switch resets when filters change or you leave this page.',
     'current-credential': 'current key',
     'copy-request-curl': 'Copy request as cURL',
-    'copy-upstream-curl': 'Copy upstream attempt as redacted cURL',
+    'copy-upstream-curl': 'Copy model-service request as cURL (private values hidden)',
     'curl-copied': 'cURL command copied to clipboard.',
     'curl-copy-failed': 'Unable to copy cURL command.',
     'new-records': '{{count}} new records',
@@ -187,50 +346,61 @@ const en = {
     'client-request': 'Client request',
     'request-headers': 'Request headers',
     'response-headers': 'Response headers',
-    'upstream-attempts': 'Upstream attempts',
-    'no-attempts': 'No upstream attempts.',
+    'upstream-attempts': 'Requests sent to the model service',
+    'no-attempts': 'No requests were sent to the model service.',
     attempt: 'Attempt {{index}}',
     running: 'running',
     client: 'Client',
-    upstream: 'Upstream',
+    upstream: 'Model service',
     request: 'request',
     response: 'response',
     'select-body': 'Select a request or response body.',
     concise: 'Concise',
     full: 'Full',
     'view-mode-help': 'About view modes',
-    'concise-help': 'Concise keeps common top-level JSON fields. Nested content is not shortened.',
+    'concise-help':
+      'Show the main request details. Expanded sections still show their full content.',
     'full-help':
-      'Full shows every loaded field. For non-JSON or incomplete content, both modes may look the same.',
+      'Show all loaded details. If the content cannot be organized or is incomplete, both views may look the same.',
     'search-body': 'Search this body',
     'copy-loaded': 'Copy loaded',
     'view-all-body': 'View all',
     'load-more': 'Load more',
-    'load-next-window': 'Next window',
+    'load-next-window': 'Next section',
     'save-full': 'Save full',
     matches: '{{count}} matches',
     'first-100': 'first 100',
-    'parse-error': 'Parse error at {{offset}}',
+    'parse-error': 'This content could not be read at position {{offset}}.',
     partial: 'Partial',
     'session-key': 'Session ID',
     'select-session': 'Select a session to view saved reasoning.',
     'no-sessions': 'No saved reasoning yet.',
     'delete-session': 'Delete session history',
     turns: '{{count}} turns',
-    offset: 'Offset {{offset}}',
+    offset: 'Content position {{offset}}',
     'unknown-model': 'Unknown model',
     'thought-oversized':
-      'Reasoning content exceeded 64 MiB and was not saved in full. SHA-256: {{hash}}',
+      'Reasoning content exceeded 64 MiB and was not saved in full. Reference: {{hash}}',
     time: 'Time',
     operation: 'Operation',
     'operation-url': 'Operation / URL',
     result: 'Result',
     duration: 'Duration',
     status: 'Status',
-    endpoint: 'Endpoint',
-    protocol: 'Protocol',
-    'repair-databases': 'Repair databases',
+    endpoint: 'Service address',
+    protocol: 'API format',
+    'repair-databases': 'Repair saved records',
     'open-monitor': 'Open Traffic Monitor',
+
+    'loading-description': 'Your request records will appear here when they are ready.',
+    'empty-description':
+      'Requests sent through the proxy appear here. You can also adjust the filters.',
+    'empty-category-description':
+      'Records for this category appear here. Try another category or adjust the filters.',
+    'load-failed': 'Could not read request records',
+    'load-failed-description':
+      'Please try again. This does not mean your records have been deleted.',
+    'refresh-failed': 'Could not refresh records. Previously loaded records are still shown.',
   },
   editionSelection: {
     title: 'Choose Your Antigravity Edition',
@@ -268,6 +438,13 @@ const en = {
     },
   },
   settings: {
+    'service-unavailable':
+      "Settings can't be loaded or saved right now. Try again. If the problem continues, close and reopen Antigravity Manager.",
+    'service-retry': 'Retry',
+    'service-restart-required':
+      'Settings saved. Turn the proxy off and back on to apply the changes.',
+    'service-save': 'Save',
+    'service-secret-configured': 'Proxy address is set. Enter a new address to replace it.',
     'weekly-warmup': {
       error: 'Warmup settings could not be loaded or saved.',
       retry: 'Retry',
@@ -335,6 +512,12 @@ const en = {
       clearedDescription: '{{size}} MB was removed from Antigravity cache directories.',
       failedTitle: 'Failed to clear cache',
       notFoundTitle: 'No Antigravity cache found',
+
+      'paths-failed': 'Could not find the cache locations',
+      'paths-retry-description': 'Please retry before clearing the cache.',
+      'partial-title': 'Some cache could not be cleared',
+      'partial-description':
+        'Freed {{size}} MB. {{count}} location(s) could not be cleared. Close Antigravity and try again.',
     },
     version: 'Version',
     platform: 'Platform',
@@ -350,6 +533,11 @@ const en = {
       },
     },
     account: {
+      'client-setup': 'Client locations and launch options',
+      'client-setup-description':
+        'Change these only if Manager cannot find your client or you need custom launch options.',
+      'choose-file': 'Choose a file',
+      'clear-field': 'Clear this field',
       title: 'Account Settings',
       description: 'Configure automatic account refresh and sync.',
       auto_refresh: 'Auto Refresh Quota',
@@ -420,7 +608,7 @@ const en = {
       clarity_desc:
         'Share anonymous interaction diagnostics, heatmaps, and session replay to improve the app.',
       clarity_unavailable: 'Microsoft Clarity is not configured for this build.',
-      restart_note: 'Some observability changes will take effect after restarting the application.',
+      restart_note: 'Some logging and diagnostics settings take effect after restarting the app.',
     },
     notifications: {
       title: 'Notifications',
@@ -443,6 +631,11 @@ const en = {
       description: 'Configure a proxy for outgoing requests to Google/Gemini APIs.',
       enable: 'Enable Upstream Proxy',
       url: 'Proxy URL',
+      'configure-before-enabling':
+        'Save a valid HTTP(S) proxy URL before enabling. Clearing the URL also disables the proxy.',
+      'configuration-invalid':
+        'The enabled upstream proxy has no valid URL. Save a valid address or disable the proxy.',
+      'url-invalid': 'Enter a valid HTTP or HTTPS proxy URL.',
       timeout: 'Request Timeout (Seconds)',
     },
     modelMapping: {
@@ -510,7 +703,6 @@ const en = {
       limited: 'Limited',
       critical: 'Critical',
     },
-
     examples: {
       title: 'Usage Examples',
       description: 'Example commands to call the local API proxy.',
@@ -584,13 +776,14 @@ const en = {
     },
   },
   cloud: {
+    'total-accounts': 'Total accounts',
     title: 'Accounts',
-    description: 'Manage your Google Gemini account pool.',
+    description: 'Manage your Google Gemini accounts.',
     security: {
       compatibilityMode: {
-        title: 'Compatibility key storage is active',
+        title: 'Security keys are saved on this computer',
         description:
-          'Account data remains encrypted with AES-256-GCM, but the master key is stored locally instead of being protected by the operating system credential service.',
+          'Secure system storage is unavailable, so security keys are saved in a local file. Keep this computer and its backups private.',
       },
     },
     autoSwitch: 'Auto-Switch',
@@ -739,6 +932,18 @@ const en = {
         deleted: 'Account Removed',
       },
     },
+    'auto-switch-client': 'Auto-switch client account',
+    'auto-switch-description':
+      'Switches accounts in Antigravity, IDE, and CLI. Choose which accounts API requests use on the API Proxy page.',
+    'quota-display': {
+      title: 'Quota display',
+      description:
+        'Choose what appears on account cards. This does not change quota or which account is used for requests.',
+      'five-hours-gemini': 'Gemini 5-hour quota',
+      'five-hours-claude': 'Claude 5-hour quota',
+      'weekly-gemini': 'Gemini weekly quota',
+      'weekly-claude': 'Claude weekly quota',
+    },
     'quota-window': {
       label: 'Quota window',
       'five-hours': '5-hour quota',
@@ -751,8 +956,8 @@ const en = {
       'both-short': 'Both',
       'no-5h-quota': 'No 5h quota data',
       'no-weekly-quota': 'No weekly quota data',
-      'weekly-summary-unavailable': 'The upstream service did not return a weekly quota summary.',
-      'weekly-bucket-unavailable': 'The quota summary contains no recognizable weekly bucket.',
+      'weekly-summary-unavailable': 'The model service did not provide weekly usage information.',
+      'weekly-bucket-unavailable': 'Weekly usage could not be found in the information returned.',
     },
     recommendation: {
       badge: 'Recommended Next',
@@ -765,22 +970,25 @@ const en = {
       },
     },
     authDialog: {
+      'manual-sign-in': 'Enter a code manually',
+      'waiting-for-browser':
+        'Complete sign-in in your browser. This window will update when it finishes.',
       title: 'Add Google Account',
-      description: 'To add an account, you need to authorize the application.',
-      oauthClient: 'OAuth Client',
-      oauthClientPlaceholder: 'Select OAuth client',
+      description:
+        'Choose a sign-in method, then sign in to Google in your browser. Your account will be added automatically.',
+      oauthClient: 'Sign-in method',
+      oauthClientPlaceholder: 'Select a sign-in method',
       openLogin: 'Open Login Page',
       authCode: 'Authorization Code',
       placeholder: 'Paste the code starting with 4/...',
-      instruction:
-        'Will open default browser for Google login. Copy the code from localhost page and paste here.',
+      instruction: 'If automatic sign-in does not finish, paste the code from the browser here.',
       verify: 'Verify & Add',
     },
     localImport: {
-      trigger: 'Scan Local Accounts',
-      title: 'Import Local Accounts',
+      trigger: 'Import from this computer',
+      title: 'Import from this computer',
       description:
-        'Scan signed-in Antigravity credentials, review verified accounts, then confirm the import.',
+        'Find accounts already signed in on this computer. Review the results before importing.',
       scanning: 'Scanning and verifying local accounts…',
       importing: 'Importing the confirmed accounts…',
       summary: 'Local account scan summary',
@@ -791,7 +999,7 @@ const en = {
       noAccounts: 'No verified local accounts were found.',
       issues: 'Items that will not be imported',
       project: 'Project',
-      emailCollision: '{{email}} appears in {{count}} different credentials.',
+      emailCollision: '{{email}} has {{count}} different saved sign-ins.',
       rescan: 'Scan Again',
       cancel: 'Cancel',
       close: 'Close',
@@ -802,38 +1010,46 @@ const en = {
       skipped: 'Skipped {{count}}',
       failed: 'Failed {{count}}',
       sources: {
-        'antigravity-keyring': 'System Credential Store',
-        'antigravity-classic-db': 'Antigravity Database',
-        'antigravity-ide-db': 'Antigravity IDE Database',
+        'antigravity-keyring': 'System sign-in storage',
+        'antigravity-classic-db': 'Antigravity saved accounts',
+        'antigravity-ide-db': 'Antigravity IDE saved accounts',
         'legacy-agent': 'Legacy Agent Data',
       },
       validationErrors: {
-        'credential-unavailable': 'The credential is no longer available.',
-        'authentication-failed': 'Google rejected this credential.',
+        'credential-unavailable':
+          'These sign-in details are no longer available. Sign in to Antigravity again, then rescan.',
+        'authentication-failed':
+          'Google did not accept this sign-in. Sign in to Antigravity again, then rescan.',
         'network-failed': 'The account could not be verified because of a network error.',
         'timed-out': 'Account verification timed out.',
         'unverified-email': 'The Google account email is not verified.',
         'invalid-profile': 'Google returned an invalid account profile.',
       },
       discoveryErrors: {
-        missing: 'The credential source was not found.',
-        'permission-denied': 'Permission to read the credential source was denied.',
-        locked: 'The credential source is locked or busy.',
-        malformed: 'The credential source contains malformed data.',
-        'timed-out': 'Reading the credential source timed out.',
-        'read-failed': 'The credential source could not be read.',
+        missing: 'No saved sign-in details were found here.',
+        'permission-denied':
+          'Access to the saved sign-in details was denied. Check the access permissions and try again.',
+        locked:
+          'The saved sign-in details are locked or in use. Unlock access or close Antigravity, then rescan.',
+        malformed:
+          'The saved sign-in details could not be read. Sign in to Antigravity again, then rescan.',
+        'timed-out': 'Reading the saved sign-in details took too long. Please rescan.',
+        'read-failed': 'The saved sign-in details could not be read. Please rescan.',
       },
       importErrors: {
-        'credential-unavailable': 'The credential expired before confirmation.',
+        'credential-unavailable':
+          'These sign-in details are no longer available. Rescan before importing.',
         'identity-required': 'A verified account identity is required.',
-        'identity-conflict': 'This credential conflicts with an existing account identity.',
+        'identity-conflict':
+          'These sign-in details do not match the existing account. Please review the accounts before importing.',
         'persistence-failed': 'The account could not be saved.',
       },
       errors: {
         'preview-failed': 'The local account preview could not be prepared.',
-        'session-not-found': 'The import session was not found. Scan again.',
-        'session-expired': 'The import session expired. Scan again.',
-        'session-consumed': 'This import session was already used. Scan again.',
+        'session-not-found': 'These scan results are no longer available. Please scan again.',
+        'session-expired': 'These scan results have expired. Please scan again.',
+        'session-consumed':
+          'These scan results have already been used. Scan again to import more accounts.',
         'confirmation-failed': 'The local account import could not be completed.',
         'internal-error': 'The local account import request failed.',
       },
@@ -843,7 +1059,7 @@ const en = {
       use: 'Use',
       rateLimited: 'Rate Limited',
       validationRiskControlled: 'Risk / Rate Limited',
-      validationOAuthReauthRequired: 'OAuth Re-auth Required',
+      validationOAuthReauthRequired: 'Sign in to Google again',
       validationRequired: 'Verification Required',
       completeValidation: 'Verify',
       left: 'left',
@@ -866,9 +1082,9 @@ const en = {
       liveLimitRateLimited: 'Rate limited',
       liveLimitRemaining: '{{duration}} remaining',
       liveLimitDetectedAgo: 'detected {{duration}} ago',
-      liveLimitActiveTitle: 'The live upstream endpoint is temporarily unavailable.',
-      liveLimitRecentTitle: 'The live upstream endpoint recently returned an error.',
-      liveLimitQuotaSnapshot: 'The quota snapshot can still show {{percentage}}%.',
+      liveLimitActiveTitle: 'The model service is temporarily unavailable.',
+      liveLimitRecentTitle: 'The model service recently reported an error.',
+      liveLimitQuotaSnapshot: 'The last quota check may still show {{percentage}}%.',
       liveLimitMessage: 'Message: {{message}}',
       resetPrefix: 'reset',
       resetTime: 'Reset time',
@@ -882,6 +1098,12 @@ const en = {
       proxy: 'Proxy',
       proxyPlaceholder: 'e.g. http://127.0.0.1:7890',
       proxySaved: 'Proxy saved',
+      'network-proxy': 'Network proxy',
+      'network-proxy-description':
+        'Optional: use a network proxy for this account. Press Enter or leave the address field to save.',
+      'proxy-replace-placeholder': 'Enter a new proxy address',
+      'proxy-remove': 'Remove proxy',
+      'proxy-save-failed': 'Could not save proxy',
       noProxy: 'No proxy',
       aiCredits: 'AI Credits',
       aiCreditsValue: '{{amount}} credits',
@@ -889,19 +1111,27 @@ const en = {
       modelVisibility: 'Model Visibility',
     },
     identity: {
-      title: 'Identity Profile',
+      'profile-errors': {
+        'account-not-found': 'This account is no longer available.',
+        'baseline-unavailable': 'There is no original identity profile to restore.',
+        'revision-not-found': 'The selected identity profile could not be found.',
+        'profile-invalid': 'This identity profile cannot be used. Choose another one.',
+        'profile-write-failed': 'Could not save the identity profile. Please retry.',
+        'profile-operation-failed': 'Could not complete the identity action. Please retry.',
+      },
+      title: 'Account device information',
       loading: 'Loading...',
-      generateAndBind: 'Create and Bind',
-      captureAndBind: 'Capture and Bind Current',
-      restoreOriginal: 'Restore Baseline',
-      openFolder: 'Open Identity Storage',
-      previewTitle: 'Generated Identity Preview',
+      generateAndBind: 'Create new device information',
+      captureAndBind: 'Use current device information',
+      restoreOriginal: 'Restore original device information',
+      openFolder: 'Open device information folder',
+      previewTitle: 'New device information',
       confirm: 'Confirm',
       cancel: 'Cancel',
       close: 'Close',
-      currentStorage: 'Current Runtime Identity',
-      accountBinding: 'Bound Account Identity',
-      history: 'Identity History',
+      currentStorage: 'Current device settings',
+      accountBinding: 'Saved for this account',
+      history: 'Saved versions',
       noHistory: 'No identity history',
       current: 'Active',
       restore: 'Restore',
@@ -911,7 +1141,18 @@ const en = {
       restoreVersionSuccess: 'Historical identity restored',
       deleteVersionSuccess: 'Historical identity deleted',
       openFolderSuccess: 'Identity storage opened',
-      baseline: 'Baseline Identity',
+      baseline: 'Original device information',
+
+      description: 'Save device information for this account to use when switching accounts.',
+      'load-failed': 'Could not read device information',
+      'retry-description': 'Please retry. Your saved device information has not been changed.',
+      'refresh-failed': 'Could not refresh. Previously loaded device information is still shown.',
+      updating: 'Updating device information…',
+      'device-id': 'Device ID',
+      'mac-device-id': 'Mac device ID',
+      'installation-id': 'Installation ID',
+      'diagnostic-id': 'Diagnostics ID',
+      'delete-version': 'Delete saved version: {{label}}',
     },
     list: {
       noAccounts: 'No cloud accounts added yet.',
@@ -919,32 +1160,54 @@ const en = {
     },
     error: {
       loadFailed: 'Failed to load cloud accounts.',
+      'report-issue': 'Report this problem',
+      'report-preparing': 'Preparing error information…',
+      'report-copied': 'Error information copied',
+      'report-paste-guide':
+        'Paste it into the GitHub report, describe what you were doing, then submit.',
+      'report-copy-failed': 'Could not copy the error information',
+      'report-retry': 'Please try again. You can also open Details and copy the error manually.',
+      'report-open-failed': 'Could not open GitHub',
+      'report-manual-open':
+        'Your error information is copied. Open {{url}} and paste it into the report.',
       dataRepair: {
-        title: 'Encrypted account data needs repair',
+        title: "Saved accounts can't be opened",
         description:
-          'The app could not decrypt local account data. This usually means the data was created with a different encryption key or the local data is corrupted.',
+          "The app can't read some saved accounts. This can happen after changing computer accounts or if local files are damaged.",
         stepReLogin:
-          'If key recovery still fails, re-login or re-add affected accounts without deleting the existing database.',
+          'If reopening the app does not help, sign in again or re-add the affected accounts. Keep your existing app data until your accounts are restored.',
         stepMacPrivacy:
-          'On macOS, check Keychain/privacy prompts. If the app is unsigned or was re-signed, sign it again, move it to /Applications, then reopen it.',
+          'On macOS, check for permission prompts. Move the app to the Applications folder, then open it again.',
         stepCheckGithub: 'Check the GitHub repository README for the latest troubleshooting steps.',
-        stepOpenIssue: 'Search GitHub Issues for this error before clearing local account data.',
+        stepOpenIssue:
+          'Report this problem on GitHub. Click to copy your error information and open the report form.',
         openRepository: 'Open GitHub Repository',
-        openIssues: 'Open GitHub Issues',
       },
     },
     toast: {
-      syncSuccess: {
-        title: 'Sync Successful',
-        description: 'Imported {{email}} from IDE.',
-      },
-      syncFailed: {
-        title: 'Sync Failed',
-        description: 'No active account found in IDE database.',
+      validationLinkFailed: {
+        title: 'Could not open the Google verification page',
+        codes: {
+          'account-not-found': 'This account is no longer available.',
+          'no-trusted-link': 'No Google verification page is available for this account.',
+          'validation-link-failed': 'Could not open the Google verification page. Try again.',
+        },
       },
       addSuccess: 'Account added successfully!',
       addFailed: {
         title: 'Failed to add account',
+        codes: {
+          'authorization-denied': 'Google authorization was denied. Try again to add the account.',
+          'login-active': 'A Google sign-in is already in progress.',
+          'login-cancelled': 'Sign-in was cancelled.',
+          'login-timeout': 'Sign-in timed out. Start again when ready.',
+          'duplicate-account': 'This Google account is already added.',
+          'browser-open-failed':
+            'Could not open the browser. Check your default browser and retry.',
+          'login-failed': 'Could not add the account. Please retry.',
+          'proxy-configuration-invalid':
+            'Save a valid upstream proxy address or disable the upstream proxy in Settings, then try signing in again.',
+        },
       },
       quotaRefreshed: 'Quota refreshed',
       refreshFailed: 'Failed to refresh quota',
@@ -954,6 +1217,16 @@ const en = {
         description: 'Restarting Antigravity...',
       },
       switchFailed: 'Failed to switch account',
+      switchFailureCodes: {
+        'account-not-found': 'This account is no longer available.',
+        'reauth-required': 'Sign in to this account again before switching.',
+        'identity-profile-required': 'Set up an identity profile before switching.',
+        'process-close-failed':
+          'Could not confirm that Antigravity exited. Save your work, resolve any confirmation dialogs, and close Antigravity before switching again.',
+        'process-control-failed': 'Could not close or restart Antigravity. Please retry.',
+        'target-write-failed': 'Could not use the selected account in Antigravity. Try again.',
+        'switch-failed': 'Could not switch accounts. Please retry.',
+      },
       deleted: 'Account deleted',
       deleteFailed: 'Failed to delete account',
       deleteConfirm: 'Are you sure you want to delete this account?',
@@ -978,6 +1251,9 @@ const en = {
       },
     },
     batch: {
+      actions: 'Selected account actions',
+      'delete-title': 'Delete {{count}} accounts?',
+      cancel: 'Cancel',
       selected: 'Selected {{count}}',
       delete: 'Delete Selected',
       refresh: 'Refresh Selected',
@@ -1001,12 +1277,24 @@ const en = {
       quotaFlash: 'Flash Quota',
     },
     exportImport: {
+      'file-errors': {
+        'file-too-large': 'The selected file is too large. Choose a smaller account backup.',
+        'invalid-export':
+          'This account backup could not be recognized. Choose a valid backup file.',
+        'read-failed': 'Could not open the selected file. Check that it is still in place.',
+        'write-failed': 'Could not save the account backup. Check the save location and try again.',
+        'import-failed': 'Could not import the accounts. Please try again.',
+        'tokens-missing':
+          'This account backup is missing sign-in details. Export a backup that includes them.',
+        'account-write-failed': 'Unable to save this account.',
+      },
       export: 'Export',
       import: 'Import',
       exportTitle: 'Export Accounts',
-      exportDesc: 'Choose whether to include authentication tokens in the export file.',
-      includeTokens: 'Include tokens (less secure)',
-      stripTokens: 'Strip tokens (safer for sharing)',
+      exportDesc:
+        'Choose whether to include account sign-in details. Keep backups with sign-in details private.',
+      includeTokens: 'Include sign-in details (restores accounts)',
+      stripTokens: 'Exclude sign-in details (safer to share)',
       exportSuccess: 'Accounts exported successfully',
       importTitle: 'Import Accounts',
       importDesc: 'Select a previously exported JSON file.',
@@ -1022,8 +1310,29 @@ const en = {
       invalidJson: 'Invalid JSON file format',
       readFileFailed: 'Failed to read file',
     },
+
+    feedback: {
+      'loading-title': 'Reading your accounts',
+      'loading-description': 'Your account details will appear here when they are ready.',
+      'empty-description': 'Choose Add Account to sign in, or import an existing account file.',
+      'filtered-description': 'Try another plan or clear the filter to see more accounts.',
+    },
   },
   proxy: {
+    'advanced-options': 'More service settings',
+    'advanced-description': 'Account selection, shared instructions and tool compatibility.',
+    'account-strategy': {
+      'save-failed': 'Could not save your choice. Please select it again to retry.',
+      title: 'Accounts used for API requests',
+      balanced: 'Rotate between available accounts',
+      'account-first': 'Prefer the same account',
+      'balanced-description':
+        'Distributes new conversations across available accounts. An existing conversation keeps its account while it remains available.',
+      'account-first-description':
+        'For each model, keep using the same account. Switch when its quota is exhausted, it is temporarily limited, or it cannot serve the request. Existing conversations keep their available account.',
+      'client-description':
+        'This setting does not change the account signed in to Antigravity, IDE, or CLI. Client auto-switching is controlled on the Accounts page.',
+    },
     title: 'API Proxy & AI Gateway',
     description: 'Manage the local API proxy and AI gateway service.',
     save: 'Save Settings',
@@ -1064,20 +1373,20 @@ const en = {
       api_key: 'API Key',
       auto_start: 'Auto Start with App',
       auto_start_desc: 'Start proxy service when application launches',
-      cloud_code_meta: 'Cloud Code metadata chunks',
+      cloud_code_meta: 'Cloud Code compatibility',
       cloud_code_meta_desc:
-        'Inject non-standard __cloudCodeMeta SSE chunks for legacy Cloud Code compatibility. Keep disabled for strict OpenAI clients.',
+        'Add the extra response information needed by older Cloud Code clients. Leave off unless your client needs it, as other clients may not accept it.',
       'allow-local-video-paths': 'Allow local video paths',
       'allow-local-video-paths-desc':
-        'Allow API requests to read local files accessible to your user account through video_url. Enable only when every proxy client is trusted.',
-      'global-system-prompt-title': 'Global system prompt',
+        'Let connected tools read video files on this computer that your user account can access. Enable only for tools you trust.',
+      'global-system-prompt-title': 'Instructions for all AI requests',
       'global-system-prompt-description':
-        'Inject this instruction before client-supplied system instructions on every proxy request.',
+        'Automatically add these instructions before the instructions from each connected tool, for every request sent through Manager.',
       'global-system-prompt-placeholder':
         'Enter a global system prompt...\nFor example: Reply in Simplified Chinese and explain code changes concisely.',
       'global-system-prompt-character-count': '{{count}} characters',
       'global-system-prompt-long-warning':
-        'A prompt longer than 2,000 characters can materially reduce the available context window.',
+        'More than 2,000 characters leaves less room for conversation history. Consider shortening these instructions.',
       local_access: 'Local network access:',
       select_ip: 'Select IP',
       no_token_warning: '⚠️ API key is not set. Access is open to everyone!',
@@ -1087,6 +1396,10 @@ const en = {
     error: 'Error',
     saving: 'Saving...',
     tabs: {
+      tools: 'Tools',
+      models: 'Models',
+      records: 'Records',
+      examples: 'Examples',
       service: 'Service & Accounts',
       guides: 'Guides & Prompts',
       gateway: 'AI Gateway & Pricing',
@@ -1226,30 +1539,30 @@ const en = {
     },
     mapping: {
       title: 'Model Mapping',
-      description: 'Map Claude models to Gemini models for routing.',
+      description: 'Choose which Gemini model handles each Claude model request.',
       maps_to: 'Maps to',
       restore: 'Restore Defaults',
-      'only-raw-quota-models': 'Only expose quota models',
+      'only-raw-quota-models': 'Only list models found in your accounts',
       'only-raw-quota-models-desc':
-        'Model list APIs return only physical models discovered from connected account quota caches.',
+        'Connected tools see only model names from the latest account quota checks. Additional model aliases are not listed.',
     },
     'open-code': {
       title: 'OpenCode sync',
       description:
-        'Sync the managed provider without rewriting comments or hand-maintained JSONC formatting.',
+        'Connect OpenCode to Manager while keeping your other settings, comments and formatting.',
       synced: 'Synced',
       'synced-custom-url': 'Synced with custom URL',
       'not-synced': 'Not synced',
       'config-path': 'Configuration',
       'configured-models': 'Configured models',
-      runtime: 'OpenCode runtime',
+      runtime: 'OpenCode installation',
       installed: 'Installed',
       'not-installed': 'Not detected',
-      credential: 'Dedicated credential',
-      'key-stored': 'Stored in the OS credential vault',
+      credential: 'OpenCode connection key',
+      'key-stored': 'Saved in secure system storage',
       'key-missing': 'Created on the next sync',
       'backup-notice':
-        'Backups retain comments and formatting. The credential is replaced by an invalid placeholder and the current key is injected during restore.',
+        'Backups keep comments and formatting. The Manager connection key is replaced with a value that cannot be used; restoring uses the current key.',
       sync: 'Configure and sync OpenCode',
       restore: 'Restore backup',
       clear: 'Clear managed configuration',
@@ -1257,40 +1570,42 @@ const en = {
       'model-dialog-title': 'Choose OpenCode models',
       'model-dialog-description':
         'Selected models are added or updated. Unselected existing models are not deleted.',
-      'custom-base-url': 'Custom Manager BaseURL',
+      'custom-base-url': 'Manager address',
       'reset-base-url': 'Reset',
       'invalid-base-url': 'Enter a valid HTTP or HTTPS URL.',
-      'sync-accounts': 'Sync accounts to antigravity-accounts.json',
+      'sync-accounts': 'Use accounts in the OpenCode sign-in plugin',
       'sync-accounts-description':
-        'OpenCode requires refresh tokens in its local plugin file. This option is off by default; tokens never cross the renderer IPC response or logs.',
+        'When enabled, OpenCode saves information that keeps these accounts signed in to a file on this computer. This is off by default. Only enable it on a computer you trust.',
       'select-models': 'Models to add or update',
       'selected-count': '{{selected}} of {{total}} selected',
       'select-all': 'Select all',
       'deselect-all': 'Deselect all',
       'confirm-sync': 'Confirm sync',
-      'auth-plugin-warning-title': 'Legacy auth plugin detected',
+      'auth-plugin-warning-title': 'Another sign-in plugin was found',
       'auth-plugin-warning-description':
-        'opencode-antigravity-auth may conflict with the managed provider. Review the plugin before relying on this configuration.',
+        'opencode-antigravity-auth may use a different connection. Check that Manager is selected in OpenCode before using these settings.',
       'view-config': 'View configuration',
       'restore-confirm-title': 'Restore OpenCode backup?',
       'restore-confirm-description':
-        'This replaces the active OpenCode configuration with the one-time backup. The backup is consumed after a successful restore.',
+        'This replaces the whole settings file with the original backup, including later edits. The backup is used once.',
       'confirm-restore': 'Confirm restore',
-      'clear-confirm-title': 'Clear managed OpenCode configuration?',
+      'clear-confirm-title': 'Remove the Manager connection?',
       'clear-confirm-description':
-        'This removes the managed provider, matching legacy Google and Anthropic entries, and the dedicated key. Unrelated settings remain unchanged, and the redacted backup can still be restored.',
+        'Remove this connection and its dedicated key. Other providers, settings and the backup are kept.',
       'confirm-clear': 'Confirm clear',
       'config-viewer-title': 'OpenCode configuration',
       'config-viewer-description': 'Read-only configuration preview',
-      'config-redacted-notice':
-        'Comments are omitted and sensitive fields are redacted before this preview reaches the renderer.',
-      'config-copied': 'Redacted configuration copied',
+      'config-redacted-notice': 'Private values are hidden in this preview.',
+      'config-copied': 'Configuration copied with private values hidden',
       'config-copy-failed': 'Failed to copy configuration',
       'config-load-failed': 'Failed to load configuration',
-      'copy-config': 'Copy redacted configuration',
+      'copy-config': 'Copy configuration (private values hidden)',
       'success-title': 'OpenCode configuration updated',
       'error-title': 'OpenCode update failed',
       'unknown-error': 'Unknown OpenCode configuration error',
+
+      'choose-model-hint': 'Choose at least one model to continue.',
+      'config-retry-description': 'Please retry. Your saved configuration has not been changed.',
     },
     examples: {
       title: 'Usage Examples',
@@ -1299,39 +1614,40 @@ const en = {
     persistence: {
       title: 'Request history and reasoning',
       description: 'Keep requests and conversation history on this device to help diagnose issues.',
-      'audit-title': 'Traffic audit',
+      'audit-title': 'Request history',
       'audit-description':
-        'Stores redacted request, response and upstream-attempt records in a dedicated SQLite database.',
+        'Save requests, replies and attempts to reach the model service on this computer, with sensitive details hidden.',
       rows: '{{count}} requests',
-      queue: '{{count}} queued writes',
+      queue: '{{count}} records waiting to be saved',
       dropped:
-        '{{count}} audit writes were dropped ({{reason}}). Model requests were not interrupted.',
+        '{{count}} records could not be saved ({{reason}}). Model requests continued normally.',
       'disk-gib': 'Disk limit (GiB)',
-      'body-hours': 'Body retention (hours)',
+      'body-hours': 'Full content retention (hours)',
       'summary-days': 'Summary retention (days)',
       'max-rows': 'Maximum rows',
       'no-audit': 'No traffic records yet.',
-      'audit-metadata': 'Request and attempt metadata',
-      'audit-body-missing': 'The audit body no longer exists.',
-      'audit-body-expired': 'The body expired; its metadata remains available.',
+      'audit-metadata': 'Request details and model-service attempts',
+      'audit-body-missing': 'The full request or reply content is no longer saved.',
+      'audit-body-expired':
+        'The full content has expired, but the request details are still available.',
       partial: 'Partial',
-      'logical-size': 'Logical size',
-      'parse-error-offset': 'Parse error offset',
+      'logical-size': 'Content size',
+      'parse-error-offset': 'Position that could not be read',
       loading: 'Loading…',
       'copy-progress': 'Preparing full copy: {{value}}%',
       'previous-page': 'Previous page',
       'next-page': 'Next page',
       'copy-full': 'Copy complete body',
       'confirm-copy-full': 'Confirm copying {{size}}',
-      'clear-audit': 'Clear traffic audit',
-      'repair-audit': 'Repair audit database',
+      'clear-audit': 'Clear request history',
+      'repair-audit': 'Repair request history',
       'thought-title': 'Conversation reasoning history',
       'thought-description': 'Save reasoning so later turns can continue the conversation.',
       sessions: '{{count}} sessions',
-      'hard-limit': 'Hard limit: 200 turns / 64 MiB per session',
+      'hard-limit': 'Each conversation can save up to 200 turns and 64 MiB of content.',
       'retention-days': 'Retention (days)',
       'max-sessions': 'Maximum sessions',
-      oversized: 'body omitted: over 64 MiB',
+      oversized: 'Content exceeded 64 MiB and was not saved in full.',
       'no-thought-body': 'No saved reasoning content.',
       signature: 'Signature',
       'copy-signature': 'Copy signature',

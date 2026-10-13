@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { groupBy } from 'lodash-es';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -31,6 +31,7 @@ interface OpenCodeModelSyncDialogProps {
   availableModels: readonly ProxyExampleModel[];
   configuredModels: readonly OpenCodeModelInput[];
   initialBaseUrl: string;
+  defaultBaseUrl?: string;
   syncAccounts: boolean;
   onOpenChange: (open: boolean) => void;
   onSyncAccountsChange: (syncAccounts: boolean) => void;
@@ -67,6 +68,7 @@ export function OpenCodeModelSyncDialog({
   availableModels,
   configuredModels,
   initialBaseUrl,
+  defaultBaseUrl = initialBaseUrl,
   syncAccounts,
   onOpenChange,
   onSyncAccountsChange,
@@ -78,6 +80,7 @@ export function OpenCodeModelSyncDialog({
     () => new Set(configuredModels.map((model) => canonicalizeOpenCodeModelId(model.id))),
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitting = useRef(false);
 
   const selectableModels = useMemo(() => {
     const modelsById = new Map<string, ProxyExampleModel>();
@@ -124,10 +127,11 @@ export function OpenCodeModelSyncDialog({
   };
 
   const handleSubmit = async () => {
-    if (!isBaseUrlValid || selectedModels.length === 0) {
+    if (submitting.current || !isBaseUrlValid || selectedModels.length === 0) {
       return;
     }
 
+    submitting.current = true;
     setIsSubmitting(true);
     try {
       const succeeded = await onSync({
@@ -139,6 +143,7 @@ export function OpenCodeModelSyncDialog({
         onOpenChange(false);
       }
     } finally {
+      submitting.current = false;
       setIsSubmitting(false);
     }
   };
@@ -152,8 +157,12 @@ export function OpenCodeModelSyncDialog({
         }
       }}
     >
-      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col overflow-hidden p-0">
-        <DialogHeader className="border-b p-5 pb-4">
+      <DialogContent
+        closeDisabled={isSubmitting}
+        aria-busy={isSubmitting}
+        className="flex max-w-2xl flex-col gap-0 overflow-hidden p-0"
+      >
+        <DialogHeader className="shrink-0 border-b px-6 py-5 pr-14">
           <DialogTitle>
             {t('proxy.open-code.model-dialog-title', 'Choose OpenCode models')}
           </DialogTitle>
@@ -165,18 +174,21 @@ export function OpenCodeModelSyncDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-1">
+        <fieldset
+          disabled={isSubmitting}
+          className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4"
+        >
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
               <Label htmlFor="open-code-base-url">
-                {t('proxy.open-code.custom-base-url', 'Custom Manager BaseURL')}
+                {t('proxy.open-code.custom-base-url', 'Manager address')}
               </Label>
-              {baseUrl !== initialBaseUrl ? (
+              {baseUrl !== defaultBaseUrl ? (
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setBaseUrl(initialBaseUrl)}
+                  onClick={() => setBaseUrl(defaultBaseUrl)}
                 >
                   <RefreshCw className="mr-1.5 size-3.5" />
                   {t('proxy.open-code.reset-base-url', 'Reset')}
@@ -188,18 +200,23 @@ export function OpenCodeModelSyncDialog({
               value={baseUrl}
               onChange={(event) => setBaseUrl(event.target.value)}
               aria-invalid={!isBaseUrlValid}
+              aria-describedby="open-code-address-help"
+              spellCheck={false}
               placeholder="http://127.0.0.1:8045/v1"
             />
-            {!isBaseUrlValid ? (
-              <p className="text-destructive text-xs">
-                {t('proxy.open-code.invalid-base-url', 'Enter a valid HTTP or HTTPS URL.')}
-              </p>
-            ) : null}
+            <p
+              id="open-code-address-help"
+              className={
+                isBaseUrlValid ? 'text-muted-foreground text-xs' : 'text-destructive text-xs'
+              }
+            >
+              {t(isBaseUrlValid ? 'agent-tools.address-help' : 'proxy.open-code.invalid-base-url')}
+            </p>
           </div>
 
           <label
             htmlFor="open-code-sync-accounts"
-            className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
+            className="bg-muted flex cursor-default items-start gap-3 rounded-lg border p-3"
           >
             <Checkbox
               id="open-code-sync-accounts"
@@ -208,12 +225,12 @@ export function OpenCodeModelSyncDialog({
             />
             <span className="min-w-0">
               <span className="block text-sm font-medium">
-                {t('proxy.open-code.sync-accounts', 'Sync accounts to antigravity-accounts.json')}
+                {t('proxy.open-code.sync-accounts', 'Use accounts in the OpenCode sign-in plugin')}
               </span>
               <span className="text-muted-foreground mt-1 block text-xs">
                 {t(
                   'proxy.open-code.sync-accounts-description',
-                  'OpenCode requires refresh tokens in its local plugin file. This option is off by default; tokens never cross the renderer IPC response or logs.',
+                  'OpenCode saves sign-in details on this computer. Only enable this on a computer you trust.',
                 )}
               </span>
             </span>
@@ -258,7 +275,7 @@ export function OpenCodeModelSyncDialog({
                     {models.map((model) => (
                       <label
                         key={model.id}
-                        className="hover:bg-muted/60 flex cursor-pointer items-start gap-2 rounded-md border p-2.5 transition-colors"
+                        className="hover:bg-muted/60 flex cursor-default items-start gap-2 rounded-md border p-2.5"
                       >
                         <Checkbox
                           checked={selectedModelIds.has(model.id)}
@@ -277,9 +294,14 @@ export function OpenCodeModelSyncDialog({
               ))}
             </div>
           </div>
-        </div>
+          {selectedModels.length === 0 && (
+            <p role="status" className="text-warning text-xs">
+              {t('proxy.open-code.choose-model-hint')}
+            </p>
+          )}
+        </fieldset>
 
-        <DialogFooter className="border-t p-5 pt-4">
+        <DialogFooter className="shrink-0 border-t px-6 py-4">
           <Button
             type="button"
             variant="outline"
@@ -292,6 +314,7 @@ export function OpenCodeModelSyncDialog({
             type="button"
             onClick={handleSubmit}
             disabled={isSubmitting || !isBaseUrlValid || selectedModels.length === 0}
+            aria-busy={isSubmitting}
           >
             {isSubmitting ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
             {t('proxy.open-code.confirm-sync', 'Confirm sync')}

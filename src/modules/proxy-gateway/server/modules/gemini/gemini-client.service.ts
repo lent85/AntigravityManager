@@ -21,7 +21,7 @@ import {
   Upstream4xxCaptureService,
   type Upstream4xxCaptureInput,
 } from '../../common/upstream-4xx-capture.service';
-import { safeStringifyPacket } from '@/shared/security/sensitiveDataMasking';
+import { safeStringifyPacket, sanitizeObject } from '@/shared/security/sensitiveDataMasking';
 import {
   completeCurrentUpstreamAttempt,
   startCurrentUpstreamAttempt,
@@ -30,6 +30,10 @@ import { IncrementalSseRedactor } from '@/modules/proxy-gateway/audit/incrementa
 import { trafficAuditService } from '@/modules/proxy-gateway/audit/traffic-audit.service';
 import type { UpstreamAttemptHandle } from '@/modules/proxy-gateway/audit/traffic-audit.service';
 import { thoughtStoreService } from '@/modules/proxy-gateway/thought-store/thought-store.service';
+import {
+  hasStrictQuotaExhaustedMarker,
+  parseRetryDelay,
+} from '../../shared/services/rate-limit-tracker.service';
 import {
   getCurrentProxyTimingState,
   markProxyNormalizationComplete,
@@ -58,6 +62,11 @@ interface InternalEndpointRetryPolicy {
   allowProjectHeaderDowngrade: boolean;
 }
 
+export interface InternalGenerationOptions {
+  /** Signature recovery must not restore the history that the provider just rejected. */
+  thoughtReplay?: 'restore' | 'skip';
+}
+
 const PROJECT_HEADER_ATTEMPT_COUNT = 2;
 
 @Injectable()
@@ -66,8 +75,8 @@ export class GeminiClient {
   // Default to v1beta for most features
   private readonly baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
   private readonly defaultInternalBaseUrls = [
-    'https://cloudcode-pa.googleapis.com/v1internal',
     'https://daily-cloudcode-pa.googleapis.com/v1internal',
+    'https://cloudcode-pa.googleapis.com/v1internal',
   ];
 
   constructor(
@@ -232,6 +241,7 @@ export class GeminiClient {
     upstreamProxyUrl?: string,
     extraHeaders?: Record<string, string>,
     signal?: AbortSignal,
+    options?: InternalGenerationOptions,
   ): Promise<NodeJS.ReadableStream> {
     const response = await this.executeInternalWithExplicitContextCache<NodeJS.ReadableStream>(
       ':streamGenerateContent?alt=sse',
@@ -244,6 +254,7 @@ export class GeminiClient {
       },
       'stream-generate',
       extraHeaders,
+      options,
     );
 
     return response.data;
@@ -255,6 +266,7 @@ export class GeminiClient {
     upstreamProxyUrl?: string,
     extraHeaders?: Record<string, string>,
     signal?: AbortSignal,
+    options?: InternalGenerationOptions,
   ): Promise<GeminiResponse> {
     const response = await this.executeInternalWithExplicitContextCache<
       GeminiResponse | { response: GeminiResponse }
@@ -266,6 +278,7 @@ export class GeminiClient {
       { signal },
       'generate-content',
       extraHeaders,
+      options,
     );
     const payload = response.data;
     if (isObjectLike(payload) && 'response' in payload) {
@@ -375,9 +388,12 @@ export class GeminiClient {
     config: AxiosRequestConfig,
     operation: string,
     extraHeaders?: Record<string, string>,
+    options: InternalGenerationOptions = {},
   ): Promise<AxiosResponse<T>> {
     markProxyNormalizationComplete();
-    await thoughtStoreService.prepareInternalRequest(body, body.model);
+    if (options.thoughtReplay !== 'skip') {
+      await thoughtStoreService.prepareInternalRequest(body, body.model);
+    }
     const prepared = await this.applyExplicitContextCache(body, accessToken, upstreamProxyUrl);
     try {
       return await this.executeRequestWithEndpointFailover<T>(
@@ -583,6 +599,18 @@ export class GeminiClient {
     // Permanent auth errors should fail fast for current token.
     if (status === 401 || status === 403) {
       return false;
+    }
+
+    if (status === 429) {
+      const body = this.describeAxiosErrorData(error.response.data);
+      if (
+        hasStrictQuotaExhaustedMarker(body) &&
+        (parseRetryDelay(body, this.extractRetryAfterHeader(error.response.headers))?.delayMs ??
+          0) > 300_000
+      ) {
+        // Quota belongs to the account/model, so another regional endpoint cannot restore it.
+        return false;
+      }
     }
 
     // 499 is Google's client-cancelled code. Upstream emits it for its own aborts, so the next
@@ -872,11 +900,10 @@ export class GeminiClient {
     attempt: UpstreamAttemptHandle | null,
     error: unknown,
   ): Promise<void> {
-    if (!attempt) {
-      return;
-    }
     if (!axios.isAxiosError(error)) {
-      completeCurrentUpstreamAttempt(attempt, { error, outcome: 'internal_error' });
+      if (attempt) {
+        completeCurrentUpstreamAttempt(attempt, { error, outcome: 'internal_error' });
+      }
       return;
     }
 
@@ -888,6 +915,10 @@ export class GeminiClient {
       if (error.response) {
         error.response.data = responseBody;
       }
+    }
+    // Retry classification needs the error body even when traffic recording is disabled.
+    if (!attempt) {
+      return;
     }
     const status = error.response?.status;
     completeCurrentUpstreamAttempt(attempt, {
@@ -1109,6 +1140,14 @@ export class GeminiClient {
   private describeAxiosErrorData(responseData: unknown): string {
     if (this.isReadableStream(responseData)) {
       return '[stream]';
+    }
+    if (isString(responseData) || Buffer.isBuffer(responseData)) {
+      const sanitized = sanitizeObject(
+        Buffer.isBuffer(responseData) ? responseData.toString('utf-8') : responseData,
+      );
+      if (isString(sanitized)) {
+        return sanitized;
+      }
     }
     return this.safeStringify(responseData);
   }

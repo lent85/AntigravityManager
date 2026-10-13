@@ -7,6 +7,7 @@ import {
   type AutoSwitchModelConfig,
   type CloudAccount,
 } from '@/modules/cloud-account/types';
+import { switchCloudAccountCore } from './cloud-account-switch.service';
 import { logger } from '@/shared/logging/logger';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
 import {
@@ -30,6 +31,17 @@ const BooleanSettingSchema = z.boolean();
 const AUTO_SWITCH_DEPLETION_THRESHOLD_PERCENT = 5;
 
 export class AutoSwitchService {
+  private static effects = {
+    switchAccount: (accountId: string, target?: AntigravityAppTarget) =>
+      switchCloudAccountCore(accountId, target, { presentationReason: 'auto' }),
+    onSwitched: (_accountId: string, _email: string, _target?: AntigravityAppTarget): void => {},
+  };
+  static configureEffects(effects: {
+    switchAccount(accountId: string, target?: AntigravityAppTarget): Promise<void>;
+    onSwitched(accountId: string, email: string, target?: AntigravityAppTarget): void;
+  }): void {
+    this.effects = effects;
+  }
   /**
    * Checks if auto switch is enabled for a specific target or globally.
    */
@@ -307,12 +319,9 @@ export class AutoSwitchService {
         const targetLabel =
           appTarget === 'agy' ? 'CLI' : appTarget === 'ide' ? 'IDE' : 'App (Classic)';
 
-        const { markActiveAccount, switchCloudAccount } = await import(
-          '@/modules/cloud-account/ipc/handler'
-        );
-
         if (isNoRestart && appTarget !== 'agy') {
           // Perform live sync without restarting GUI process
+          const { markActiveAccount } = await import('@/modules/cloud-account/ipc/handler');
           await markActiveAccount(nextAccount.id, appTarget);
 
           try {
@@ -324,17 +333,12 @@ export class AutoSwitchService {
             logger.error('Failed to show auto-switch desktop notification', err);
           }
         } else {
-          // Perform standard switch (CLI is always seamless; GUI apps restart)
-          await switchCloudAccount(nextAccount.id, appTarget);
+          // Perform the switch via configured effects
+          await this.effects.switchAccount(nextAccount.id, appTarget);
 
+          // Show Desktop Notification to alert the user of the switch
           try {
-            new Notification({
-              title: `Antigravity Manager: Auto-Switch (${targetLabel})`,
-              body:
-                appTarget === 'agy'
-                  ? `Switched CLI account to ${nextAccount.email} due to quota limit.`
-                  : `Switched account to ${nextAccount.email} due to quota limit. Reopen IDE and type "continue" if needed!`,
-            }).show();
+            this.effects.onSwitched(nextAccount.id, nextAccount.email, appTarget);
           } catch (err) {
             logger.error('Failed to show auto-switch desktop notification', err);
           }

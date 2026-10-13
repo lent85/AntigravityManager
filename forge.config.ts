@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 import type {
   HookFunction,
@@ -143,6 +145,7 @@ const appImageMaker = new ResolvedMakerAppImage({
 appImageMaker.name = '@pengx17/electron-forge-maker-appimage';
 
 const config: ForgeConfig = {
+  outDir: process.env.AGM_PACKAGE_OUTPUT,
   packagerConfig: {
     asar: {
       unpack: '**/{better-sqlite3,keytar}/**/*',
@@ -155,8 +158,28 @@ const config: ForgeConfig = {
     ignore: (packagePath: string) => shouldIgnorePackagePath(packagePath),
     prune: true,
   },
-  rebuildConfig: {},
+  // Standalone Node builds can replace a binary while Electron rebuild metadata stays cached.
+  rebuildConfig: { force: true },
   hooks: {
+    prePackage: async (_config, platform, arch) => {
+      const npmCli = process.env.npm_execpath;
+      if (!npmCli) {
+        throw new Error('Package through the owning npm script');
+      }
+      await promisify(execFile)(
+        process.execPath,
+        [npmCli, 'run', 'prepare:standalone', '--', platform, arch],
+        { cwd: process.cwd(), windowsHide: true, timeout: 900_000, maxBuffer: 16_384 },
+      );
+      _config.packagerConfig ??= {};
+      _config.packagerConfig.extraResource = [
+        'src/assets',
+        path.join(process.cwd(), 'dist', '.runtime', `${platform}-${arch}`, 'standalone'),
+        ...(platform === 'linux'
+          ? [path.join(process.cwd(), 'resources/linux/app-update.yml')]
+          : []),
+      ];
+    },
     packageAfterCopy: async (_config, buildPath, _electronVersion, platform, arch) => {
       // Copy native modules to the packaged app
       const nodeModulesPath = path.join(buildPath, 'node_modules');
@@ -428,6 +451,9 @@ const config: ForgeConfig = {
     ...(process.platform === 'win32' && process.arch === 'x64'
       ? [
           new MakerWix({
+            arch: 'x64',
+            // Stable product family for future x64 MSI upgrades; ProductCode remains per build.
+            upgradeCode: '38716d7d-9554-4b44-bebe-463d17fe39ab',
             language: 1033,
             icon: path.join(process.cwd(), 'images', 'icon.ico'),
             exe: `${windowsExecutableName}.exe`,

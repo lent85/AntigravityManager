@@ -1,32 +1,117 @@
 const tr = {
+  'agent-tools': {
+    title: 'Kodlama araçlarınızı bağlayın',
+    description: 'Modellerinizi Antigravity Manager üzerinden kullanmak için bir araç seçin.',
+    loading: 'Ayarlar okunuyor…',
+    installed: 'Yüklü',
+    'not-installed': 'Kurulum bulunamadı',
+    'read-error': 'Mevcut ayarlar okunamadı. Değişiklik yapmadan önce yeniden deneyin.',
+    retry: 'Yeniden dene',
+    configured: 'Yapılandırma kaydedildi',
+    'custom-address': 'Başka bir adres kullanılıyor',
+    'not-configured': 'Yapılandırılmadı',
+    'not-verified': 'İstekler doğrulanmadı',
+    address: 'Manager adresi',
+    model: 'Model',
+    'not-set': 'Ayarlanmadı',
+    'choose-model': 'Kurulum sırasında seçin',
+    update: 'Yapılandırmayı güncelle',
+    configure: 'Yapılandır',
+    view: 'Yapılandırmayı görüntüle',
+    restore: 'Yedeği geri yükle',
+    remove: 'Bağlantıyı kaldır',
+    'install-notice': 'Aracı yüklemeden önce ayarları kaydedebilirsiniz. Sonra aracı yeniden açın.',
+    'action-error': 'Ayarlar güncellenemedi',
+    saved: 'Ayarlar güncellendi',
+    reopen: 'Ayarları yüklemek için {{name}} aracını yeniden açın.',
+    'configure-title': '{{name}} aracını bağla',
+    'configure-description':
+      'İstekler Manager üzerinden gönderilecek. İlk değişiklikten önce mevcut ayarlar yedeklenir.',
+    'restore-title': '{{name}} ayarları geri yüklensin mi?',
+    'restore-description':
+      'Tüm dosya ilk yedekle değiştirilir; sonraki düzenlemeler de kaybolur. Dosyayı Manager oluşturduysa dosya kaldırılır. Yedek bir kez kullanılır.',
+    'remove-title': 'Manager bağlantısı kaldırılsın mı?',
+    'remove-description':
+      'Diğer ayarları ve yedeği koruyarak önceki bağlantı ayarlarını geri getirir.',
+    'preview-title': '{{name}} ayarları',
+    'preview-description':
+      'Yalnızca Manager bağlantısı için gereken ayarlar gösterilir. Bağlantı anahtarları gizlidir.',
+    confirm: 'Onayla',
+    advanced: 'Adres ve yapılandırma dosyası',
+    'reset-address': 'Geçerli Manager adresini kullan',
+    'backend-files':
+      'Bu ayarlar, Manager hizmetinin çalıştığı bilgisayarda hizmeti çalıştıran kullanıcı için kaydedilir.',
+    'backup-notice': 'İlk yedek güncellemelerde korunur. Kaydettikten sonra aracı yeniden açın.',
+    'toml-notice':
+      'Codex ayar dosyasının biçimi ve yorumları değişebilir. Geri yüklemek için tam yedek alınır. Mevcut giriş ve izin ayarları korunur.',
+    'codex-review':
+      'Görev ve otomatik inceleme istekleri yapılandırılır. Etkin inceleme yolları ve onay ayarları korunur.',
+    'model-count': '{{count}} model',
+    'plugin-notice':
+      'Doğrudan giriş eklentisi yüklü. OpenCode içinde Manager seçili olduğundan emin olun.',
+    'revoke-key': 'OpenCode bağlantı anahtarını devre dışı bırak',
+    errors: {
+      unavailable: 'Ayarlar kullanılamıyor. Yeniden deneyin.',
+      'invalid-config': 'Dosya geçersiz veya çok büyük. Önce dosyayı düzeltin.',
+      'read-failed': 'Dosya okunamadı. Erişim izinlerini kontrol edin.',
+      'write-failed': 'Kaydedilemedi. Kurtarma yedeği korunuyor.',
+      'backup-failed': 'Yedek oluşturulamadı. Araç ayarları değiştirilmedi.',
+      'backup-missing': 'Kurtarma yedeği yok.',
+      'configuration-changed': 'İşlem sırasında ayarlar değişti. Tekrar okuyup deneyin.',
+      'key-missing': 'Önce proxy sayfasında bağlantı anahtarı oluşturun.',
+      'review-route-disabled': 'Codex inceleme yolu kapalı. Model yönlendirmesinde etkinleştirin.',
+    },
+
+    'address-help': 'Hizmet başka bir bilgisayarda çalışmıyorsa mevcut Manager adresini kullanın.',
+    'invalid-address':
+      'http:// veya https:// ile başlayan, oturum bilgisi ve ek parametre içermeyen bir Manager adresi kullanın.',
+    'model-required': 'Kaydetmeden önce bir model seçin.',
+  },
   appName: 'Antigravity Manager',
   'process-runtime': {
-    'close-failed': 'Antigravity kapatılamadı. İzinleri kontrol edip tekrar deneyin.',
+    'update-in-progress': 'Antigravity güncelleniyor. Güncellemeyi tamamlayıp tekrar deneyin.',
+    'close-failed':
+      'Antigravity kapatılamadı. Sohbetlerinizi ve dosyalarınızı kaydedin, uygulamayı elle kapatıp tekrar deneyin.',
     'exit-unconfirmed':
-      'Antigravity işleminin sonlandığı doğrulanamadı. Yeniden denemeden önce uygulamayı kontrol edin.',
+      'Antigravity henüz kapanmadı. Sohbetlerinizi ve dosyalarınızı kaydedin, uygulamayı elle kapatıp tekrar deneyin.',
     working: 'İşleniyor...',
     busy: 'Antigravity meşgul. İşlemin tamamlanmasını bekleyin.',
     'missing-executable':
-      'Çalıştırılabilir dosya bulunamadı veya çalıştırılamıyor. Yolu kontrol edin.',
+      'Antigravity bulunamadı veya açılamadı. Ayarlardan uygulama konumunu kontrol edin.',
     'target-conflict':
-      'Yapılandırılan yol ve çalışan işlem farklı kurulumlara ait. Hesap değiştirmeden önce çakışmayı çözün.',
+      'Çalışan Antigravity, ayarlarda seçilen kurulumla aynı değil. Hesap değiştirmeden önce uygulamayı kapatın veya doğru kurulumu seçin.',
     'directory-conflict':
-      'Yapılandırılan ve kullanılan veri dizinleri farklı. Hesap değiştirmeden önce çakışmayı çözün.',
-    'probe-failed': 'İşlem süre sınırı içinde kontrol edilemedi.',
-    'launch-failed': 'Başlatma başarısız oldu. Yolu ve izinleri kontrol edin.',
+      'Antigravity, ayarlarda seçilenden farklı bir veri klasörü kullanıyor. Hesap değiştirmeden önce uygulamayı kapatın veya klasör ayarını kontrol edin.',
+    'probe-failed':
+      'Antigravity durumu zamanında kontrol edilemedi. Uygulamanın açık olup olmadığını kontrol edip yeniden deneyin.',
+    'launch-failed': 'Antigravity açılamadı. Uygulama konumunu ve erişim izinlerini kontrol edin.',
     'startup-unconfirmed':
-      'Başlangıç altı saniye içinde doğrulanamadı. Tekrar başlatılmadı. Yeniden denemeden önce uygulamayı kontrol edin.',
+      'Antigravity uygulamasının açıldığı henüz doğrulanamadı. İki kez açılmaması için yeniden başlatılmadı. Tekrar denemeden önce uygulamayı kontrol edin.',
     'switched-hot-unconfirmed':
-      'Hesap verileri güncellendi ancak IDE içindeki çalışırken hesap değiştirme doğrulanamadı. Yeniden denemeden önce IDE içindeki mevcut hesabı kontrol edin.',
+      'Yeni hesap kaydedildi ancak Antigravity IDE içinde değişiklik doğrulanamadı. Yeniden denemeden önce IDE içindeki hesabı kontrol edin.',
     'switched-startup-unconfirmed':
-      'Hesap verileri güncellendi ancak başlangıç doğrulanamadı. Tekrar başlatılmadı. Yeniden denemeden önce uygulamayı kontrol edin.',
+      'Yeni hesap kaydedildi ancak Antigravity uygulamasının açıldığı doğrulanamadı. Yeniden başlatılmadı. Tekrar denemeden önce uygulamayı kontrol edin.',
   },
   common: {
+    close: 'Kapat',
+    cancel: 'İptal',
+    'core-unavailable-title': "Antigravity Manager'a bağlanılamıyor",
+    'core-unavailable-body':
+      "Hesaplar ve proxy şu anda kullanılamıyor. Antigravity Manager'ı kapatıp yeniden açın. Sorun sürerse en son sürümü yükleyin.",
+    'account-data-unavailable-title': 'Kayıtlı hesaplar açılamıyor',
+    'account-data-unavailable-body':
+      "Kayıtlı hesaplar şu anda okunamıyor. Bu bilgisayarda her zamanki kullanıcı hesabınızla oturum açtığınızdan emin olun, ardından Antigravity Manager'ı yeniden açın. Hesap verileriniz değiştirilmedi.",
+    'already-running-title': 'Antigravity Manager zaten açık',
+    'already-running-body':
+      'Diğer Antigravity Manager penceresini kapatıp tekrar deneyin. Bulamıyorsanız bilgisayarınızı yeniden başlatın.',
     loading: 'Yükleniyor...',
     error: 'Hata',
     unknown: 'Bilinmeyen',
     notAvailable: 'Yok',
     openMenu: 'Menüyü aç',
+
+    'dismiss-notification': 'Bildirimi kapat',
+    'reading-settings': 'Ayarlarınız okunuyor…',
   },
   status: {
     checking: 'Durum kontrol ediliyor...',
@@ -75,35 +160,47 @@ const tr = {
     },
   },
   error: {
+    toast: {
+      'report-issue': 'GitHub üzerinden bildir',
+      'no-details': 'Hata yığını mevcut değil. Varsa bildirim metni gösterilir.',
+      copied:
+        'Hata bilgileri kopyalandı GitHub formuna yapıştırın, yaptığınız işlemleri açıklayın ve bildirimi gönderin.',
+      'copy-failed':
+        'Hata bilgileri kopyalanamadı Tekrar deneyin. Ayrıntıları açıp hatayı elle de kopyalayabilirsiniz.',
+      'open-failed':
+        'GitHub açılamadı Bilgiler kopyalandı. {{url}} adresini açıp bildirime yapıştırın.',
+    },
     generic: 'Beklenmeyen bir hata oluştu.',
     detailsTitle: 'Hata ayrıntıları',
     detailsDescription:
-      'Backend hata ayrıntıları aşağıda gösterilir. Yerel dosya yolları ve stack frame bilgileri içerebilir.',
-    keychainUnavailable: 'Anahtar Zinciri (Keychain) kullanılamıyor.',
+      'Bu ayrıntılar sorunu çözmeye yardımcı olabilir ve kişisel dosya konumlarını içerebilir. Paylaşmadan önce kontrol edin.',
+    keychainUnavailable: 'Kayıtlı oturum açma bilgileri şu anda okunamıyor.',
     keychainHint: {
-      translocation:
-        'macOS App Translocation algılandı. Uygulamayı /Applications klasörüne taşıyıp yeniden açın.',
+      translocation: 'Uygulamayı Uygulamalar klasörüne taşıyın, ardından yeniden açın.',
       keychainDenied:
-        'Anahtar Zinciri erişimi reddedildi. Uygulama imzalanmamış olabilir; kendi kendinize imzalama yöntemi için README dosyasına bakın.',
-      signNotarize: 'Mümkünse lütfen imzalanmış ve noter onaylı bir sürüm kullanın.',
+        'macOS, kayıtlı oturum açma bilgilerine erişimi engelledi. Uygulamanın kurulum yönergelerini kontrol edip tekrar deneyin.',
+      signNotarize: 'Mümkünse macOS tarafından doğrulanmış bir sürüm yükleyin.',
     },
-    dataMigrationFailed: 'Eski hesap verilerinin şifresi çözülemedi.',
+    dataMigrationFailed: 'Önceki bir sürümde kaydedilen hesaplar okunamıyor.',
     masterKeyUnavailable:
-      'Kayıtlı hesaplar bulundu ancak şifreleme anahtarına şu anda erişilemiyor. Hesap verileri veya anahtar dosyaları değiştirilmedi.',
+      'Kayıtlı hesaplar bulundu ancak şu anda açılamıyor. Hesap verileriniz değiştirilmedi.',
     dataMigrationHint: {
       relogin: 'Lütfen yeniden giriş yapın veya hesaplarınızı tekrar ekleyin.',
       clearData: 'Sorun devam ederse yerel hesap verilerini temizleyip tekrar giriş yapın.',
     },
     antigravityStorageJsonNotFound:
-      'Antigravity storage.json bulunamadı. Hedef Antigravity uygulamasını açıp bir kez giriş yapın, ardından değiştirmeyi tekrar deneyin.',
+      'Antigravity ilk kurulumu tamamlanmamış. Seçilen uygulamayı açıp bir kez giriş yapın, ardından hesap değiştirmeyi yeniden deneyin.',
     antigravityProjectIdMissing:
-      'Bu hesapta Antigravity proje kimliği eksik. Bu durum, hesap daha önce Antigravity uygulamasında oturum açmadıysa oluşabilir. Lütfen Antigravity uygulamasında bir kez oturum açın, ardından bu araca dönüp değiştirmeyi tekrar deneyin.',
+      'Bu hesap henüz Antigravity için hazır değil. Antigravity içinde bu hesapla bir kez giriş yapıp yeniden deneyin.',
     antigravityDatabasePermissionDenied:
-      'Antigravity veritabanı depolama alanı yazılabilir değil. Yapılandırılmış Antigravity user-data dizinini kontrol edin veya Antigravity uygulamasını bir kez açtıktan sonra Antigravity Managerı yeniden başlatın.',
+      'Antigravity giriş bilgileri kaydedilemedi. Veri klasörünün yazılabilir olduğunu kontrol edin veya Antigravity uygulamasını açıp Manager uygulamasını yeniden başlatın.',
     cloudAccountLoginExpired:
       'Bu bulut hesabının giriş bilgileri süresi dolmuş. Lütfen tekrar giriş yapın.',
   },
   nav: {
+    navigation: 'Gezinme',
+    'collapse-sidebar': 'Kenar çubuğunu daralt',
+    'expand-sidebar': 'Kenar çubuğunu genişlet',
     accounts: 'Hesaplar',
     proxy: 'API Proxy',
     emulation: 'Simülasyon',
@@ -158,6 +255,13 @@ const tr = {
     },
   },
   settings: {
+    'service-unavailable':
+      "Ayarlar şu anda açılamıyor veya kaydedilemiyor. Tekrar deneyin. Sorun sürerse Antigravity Manager'ı kapatıp yeniden açın.",
+    'service-retry': 'Tekrar dene',
+    'service-restart-required':
+      "Ayarlar kaydedildi. Değişiklikleri uygulamak için proxy'yi kapatıp yeniden açın.",
+    'service-save': 'Kaydet',
+    'service-secret-configured': 'Proxy adresi ayarlı. Değiştirmek için yeni bir adres girin.',
     'weekly-warmup': {
       error: 'Isınma ayarları yüklenemedi veya kaydedilemedi.',
       retry: 'Yeniden dene',
@@ -219,6 +323,12 @@ const tr = {
       clearedDescription: 'Antigravity önbellek klasörlerinden {{size}} MB silindi.',
       failedTitle: 'Önbellek temizlenemedi',
       notFoundTitle: 'Antigravity önbelleği bulunamadı',
+
+      'paths-failed': 'Önbellek konumları bulunamadı',
+      'paths-retry-description': 'Önbelleği temizlemeden önce tekrar deneyin.',
+      'partial-title': 'Önbelleğin bir kısmı temizlenemedi',
+      'partial-description':
+        '{{size}} MB boşaltıldı. {{count}} konum temizlenemedi. Antigravity’yi kapatıp tekrar deneyin.',
     },
     version: 'Sürüm',
     platform: 'Platform',
@@ -234,6 +344,11 @@ const tr = {
       },
     },
     account: {
+      'client-setup': 'İstemci konumu ve başlatma ayarları',
+      'client-setup-description':
+        'Manager istemcinizi bulamıyorsa veya özel başlatma seçenekleri gerekiyorsa değiştirin.',
+      'choose-file': 'Dosya seç',
+      'clear-field': 'Bu alanı temizle',
       title: 'Hesap Ayarları',
       description: 'Otomatik hesap yenileme ve eşitleme ayarlarını yapılandırın.',
       auto_refresh: 'Kotayı Otomatik Yenile',
@@ -303,7 +418,7 @@ const tr = {
         'Uygulamayı iyileştirmek için anonim etkileşim tanıları, ısı haritaları ve oturum tekrarları paylaşın.',
       clarity_unavailable: 'Microsoft Clarity bu derleme için yapılandırılmamış.',
       restart_note:
-        'Bazı gözlemlenebilirlik değişiklikleri uygulamayı yeniden başlattıktan sonra geçerli olur.',
+        'Bazı günlük ve sorun giderme ayarları uygulama yeniden başlatıldığında etkinleşir.',
     },
     notifications: {
       title: 'Bildirimler',
@@ -326,6 +441,11 @@ const tr = {
       description: "Google/Gemini API'lerine giden istekler için bir proxy yapılandırın.",
       enable: "Üst Akış Proxy'sini Etkinleştir",
       url: "Proxy URL'si",
+      'configure-before-enabling':
+        'Etkinleştirmeden önce geçerli bir HTTP(S) proxy adresi kaydedin. Adresi temizlemek proxy’yi de kapatır.',
+      'configuration-invalid':
+        'Proxy etkin ancak adresi geçersiz. Geçerli bir adres kaydedin veya proxy’yi kapatın.',
+      'url-invalid': 'Geçerli bir HTTP veya HTTPS proxy adresi girin.',
       timeout: 'İstek Zaman Aşımı (Saniye)',
     },
     modelMapping: {
@@ -466,13 +586,14 @@ const tr = {
     },
   },
   cloud: {
+    'total-accounts': 'Toplam hesap',
     title: 'Hesaplar',
-    description: 'Google Gemini hesap havuzunuzu yönetin.',
+    description: 'Google Gemini hesaplarınızı yönetin.',
     security: {
       compatibilityMode: {
-        title: 'Uyumluluk anahtarı depolaması etkin',
+        title: 'Güvenlik anahtarları bu bilgisayarda saklanıyor',
         description:
-          'Hesap verileri AES-256-GCM ile şifrelenmeye devam eder, ancak ana anahtar işletim sistemi kimlik bilgisi hizmeti yerine yerel olarak saklanır.',
+          'Sistemin güvenli depolaması kullanılamadığından anahtarlar yerel bir dosyada saklanır. Bilgisayarı ve yedeklerini koruyun.',
       },
     },
     autoSwitch: 'Otomatik Değiştir',
@@ -505,7 +626,7 @@ const tr = {
       success: 'Hesap {{target}} için kullanımda olarak işaretlendi',
       failed: 'Hesap kullanımda olarak işaretlenemedi',
     },
-    checkQuota: 'Kotaları Şimdi Denetle',
+    checkQuota: 'Kotayı Şimdi Kontrol Et',
     polling: 'Sorgulama tetiklendi',
     globalQuota: 'Genel Kota',
     layout: {
@@ -515,6 +636,18 @@ const tr = {
       list: 'Liste',
       compact: 'Sıkışık',
       compactDual: 'Sıkışık (5sa ve Hafta)',
+    },
+    'auto-switch-client': 'İstemci hesabını otomatik değiştir',
+    'auto-switch-description':
+      'Antigravity, IDE ve CLI hesaplarını değiştirir. API isteklerinde kullanılan hesapları API Proxy sayfasında seçebilirsiniz.',
+    'quota-display': {
+      title: 'Kota görünümü',
+      description:
+        'Hesap kartlarında gösterilecek kotaları seçin. Bu ayar kotayı veya isteklerde kullanılan hesabı değiştirmez.',
+      'five-hours-gemini': 'Gemini 5 saatlik kota',
+      'five-hours-claude': 'Claude 5 saatlik kota',
+      'weekly-gemini': 'Gemini haftalık kota',
+      'weekly-claude': 'Claude haftalık kota',
     },
     'quota-window': {
       label: 'Kota dönemi',
@@ -528,19 +661,22 @@ const tr = {
       'both-short': 'İkisi',
       'no-5h-quota': '5 saatlik kota verisi yok',
       'no-weekly-quota': 'Haftalık kota verisi yok',
-      'weekly-summary-unavailable': 'Üst hizmet haftalık kota özeti döndürmedi.',
-      'weekly-bucket-unavailable': 'Kota özetinde tanınabilir bir haftalık kota bulunmuyor.',
+      'weekly-summary-unavailable': 'Model hizmeti haftalık kullanım bilgilerini sağlamadı.',
+      'weekly-bucket-unavailable': 'Dönen bilgilerde haftalık kullanım bulunamadı.',
     },
     authDialog: {
+      'manual-sign-in': 'Kodu elle gir',
+      'waiting-for-browser':
+        'Tarayıcınızda oturum açmayı tamamlayın. Bu pencere otomatik olarak güncellenecek.',
       title: 'Google Hesabı Ekle',
-      description: 'Bir hesap eklemek için uygulamaya yetki vermeniz gerekir.',
-      oauthClient: 'OAuth İstemcisi',
-      oauthClientPlaceholder: 'OAuth istemcisini seçin',
+      description:
+        'Giriş yöntemini seçip tarayıcıda Google hesabınıza giriş yapın. Hesap otomatik olarak eklenecektir.',
+      oauthClient: 'Oturum açma yöntemi',
+      oauthClientPlaceholder: 'Giriş yöntemi seçin',
       openLogin: 'Giriş Sayfasını Aç',
       authCode: 'Yetkilendirme Kodu',
       placeholder: '4/ ile başlayan kodu yapıştırın...',
-      instruction:
-        'Google girişi için varsayılan tarayıcı açılacaktır. Localhost sayfasındaki kodu kopyalayıp buraya yapıştırın.',
+      instruction: 'Giriş otomatik tamamlanmazsa tarayıcıdaki kodu buraya yapıştırın.',
       verify: 'Doğrula ve Ekle',
     },
     card: {
@@ -548,7 +684,7 @@ const tr = {
       use: 'Kullan',
       rateLimited: 'Hız Sınırına Takıldı',
       validationRiskControlled: 'Risk / Hız Sınırı',
-      validationOAuthReauthRequired: 'OAuth Yeniden Yetkilendirme Gerekiyor',
+      validationOAuthReauthRequired: 'Google hesabına yeniden giriş yapın',
       validationRequired: 'Doğrulama Gerekiyor',
       completeValidation: 'Doğrulamayı tamamla',
       left: 'kaldı',
@@ -571,9 +707,9 @@ const tr = {
       liveLimitRateLimited: 'Hız sınırı',
       liveLimitRemaining: '{{duration}} kaldı',
       liveLimitDetectedAgo: '{{duration}} önce algılandı',
-      liveLimitActiveTitle: 'Canlı üst uç nokta geçici olarak kullanılamıyor.',
-      liveLimitRecentTitle: 'Canlı üst uç nokta kısa süre önce hata döndürdü.',
-      liveLimitQuotaSnapshot: 'Kota anlık görüntüsü hâlâ %{{percentage}} gösterebilir.',
+      liveLimitActiveTitle: 'Model hizmeti geçici olarak kullanılamıyor.',
+      liveLimitRecentTitle: 'Model hizmeti yakın zamanda bir hata bildirdi.',
+      liveLimitQuotaSnapshot: 'Son kota kontrolü hâlâ %{{percentage}} gösterebilir.',
       liveLimitMessage: 'Mesaj: {{message}}',
       resetPrefix: 'sıfırlama',
       resetTime: 'Sıfırlanma zamanı',
@@ -586,6 +722,12 @@ const tr = {
       proxy: 'Proxy',
       proxyPlaceholder: 'örn. http://127.0.0.1:7890',
       proxySaved: 'Proxy kaydedildi',
+      'network-proxy': 'Ağ proxy’si',
+      'network-proxy-description':
+        'İsteğe bağlı: bu hesap için bir ağ proxy’si kullanın. Kaydetmek için Enter tuşuna basın veya adres alanından çıkın.',
+      'proxy-replace-placeholder': 'Yeni proxy adresi girin',
+      'proxy-remove': "Proxy'yi kaldır",
+      'proxy-save-failed': 'Proxy kaydedilemedi',
       noProxy: 'Proxy yok',
       aiCredits: 'Yapay Zeka Kredileri',
       aiCreditsValue: '{{amount}} kredi',
@@ -593,19 +735,27 @@ const tr = {
       modelVisibility: 'Model Görünürlüğü',
     },
     identity: {
-      title: 'Kimlik Profili',
+      'profile-errors': {
+        'account-not-found': 'Bu hesap artık kullanılamıyor.',
+        'baseline-unavailable': 'Geri yüklenecek ilk kimlik profili bulunamadı.',
+        'revision-not-found': 'Seçilen kimlik profili bulunamadı.',
+        'profile-invalid': 'Bu kimlik profili kullanılamıyor. Başka bir profil seçin.',
+        'profile-write-failed': 'Kimlik profili kaydedilemedi. Yeniden deneyin.',
+        'profile-operation-failed': 'Kimlik profili işlemi tamamlanamadı. Yeniden deneyin.',
+      },
+      title: 'Hesabın cihaz bilgileri',
       loading: 'Yükleniyor...',
-      generateAndBind: 'Oluştur ve Bağla',
-      captureAndBind: 'Mevcut Olanı Yakala ve Bağla',
-      restoreOriginal: 'Temel Profili Geri Yükle',
-      openFolder: 'Kimlik Depolama Klasörünü Aç',
-      previewTitle: 'Oluşturulan Kimlik Önizlemesi',
+      generateAndBind: 'Yeni cihaz bilgileri oluştur',
+      captureAndBind: 'Mevcut cihaz bilgilerini kullan',
+      restoreOriginal: 'İlk cihaz bilgilerini geri yükle',
+      openFolder: 'Cihaz bilgileri klasörünü aç',
+      previewTitle: 'Yeni cihaz bilgileri',
       confirm: 'Onayla',
       cancel: 'İptal',
       close: 'Kapat',
-      currentStorage: 'Geçerli Çalışma Zamanı Kimliği',
-      accountBinding: 'Bağlı Hesap Kimliği',
-      history: 'Kimlik Geçmişi',
+      currentStorage: 'Mevcut cihaz ayarları',
+      accountBinding: 'Bu hesap için kaydedilen',
+      history: 'Kaydedilmiş sürümler',
       noHistory: 'Kimlik geçmişi yok',
       current: 'Aktif',
       restore: 'Geri Yükle',
@@ -615,7 +765,18 @@ const tr = {
       restoreVersionSuccess: 'Geçmiş kimlik geri yüklendi',
       deleteVersionSuccess: 'Geçmiş kimlik silindi',
       openFolderSuccess: 'Kimlik depolama klasörü açıldı',
-      baseline: 'Temel Kimlik',
+      baseline: 'İlk cihaz bilgileri',
+
+      description: 'Hesap değiştirirken kullanmak için bu hesabın cihaz bilgilerini kaydedin.',
+      'load-failed': 'Cihaz bilgileri okunamadı',
+      'retry-description': 'Tekrar deneyin. Kaydedilmiş cihaz bilgileri değiştirilmedi.',
+      'refresh-failed': 'Yenilenemedi. Önceden okunan cihaz bilgileri gösteriliyor.',
+      updating: 'Cihaz bilgileri güncelleniyor…',
+      'device-id': 'Cihaz numarası',
+      'mac-device-id': 'Mac cihaz numarası',
+      'installation-id': 'Kurulum numarası',
+      'diagnostic-id': 'Tanılama numarası',
+      'delete-version': 'Kaydedilmiş sürümü sil: {{label}}',
     },
     list: {
       noAccounts: 'Henüz bulut hesabı eklenmedi.',
@@ -623,19 +784,43 @@ const tr = {
     },
     error: {
       loadFailed: 'Bulut hesapları yüklenemedi.',
+      'report-issue': 'Bu sorunu bildirin',
+      'report-preparing': 'Hata bilgileri hazırlanıyor…',
+      'report-copied': 'Hata bilgileri kopyalandı',
+      'report-paste-guide':
+        'GitHub formuna yapıştırın, yaptığınız işlemleri açıklayın ve bildirimi gönderin.',
+      'report-copy-failed': 'Hata bilgileri kopyalanamadı',
+      'report-retry': 'Tekrar deneyin. Ayrıntıları açıp hatayı elle de kopyalayabilirsiniz.',
+      'report-open-failed': 'GitHub açılamadı',
+      'report-manual-open': 'Bilgiler kopyalandı. {{url}} adresini açıp bildirime yapıştırın.',
+      dataRepair: {
+        stepOpenIssue:
+          'Bu sorunu GitHub’da bildirin. Bilgileri kopyalayıp formu açmak için tıklayın.',
+      },
     },
     toast: {
-      syncSuccess: {
-        title: 'Eşitleme Başarılı',
-        description: "IDE'den {{email}} içe aktarıldı.",
-      },
-      syncFailed: {
-        title: 'Eşitleme Başarısız',
-        description: 'IDE veritabanında aktif bir hesap bulunamadı.',
+      validationLinkFailed: {
+        title: 'Google doğrulama sayfası açılamadı',
+        codes: {
+          'account-not-found': 'Bu hesap artık kullanılamıyor.',
+          'no-trusted-link': 'Bu hesap için açılabilecek bir Google doğrulama sayfası yok.',
+          'validation-link-failed': 'Google doğrulama sayfası açılamadı. Tekrar deneyin.',
+        },
       },
       addSuccess: 'Hesap başarıyla eklendi!',
       addFailed: {
         title: 'Hesap eklenemedi',
+        codes: {
+          'authorization-denied': 'Google erişimine izin verilmedi. Tekrar deneyin.',
+          'login-active': 'Google girişi zaten devam ediyor.',
+          'login-cancelled': 'Giriş iptal edildi.',
+          'login-timeout': 'Giriş süresi doldu. Yeniden başlayın.',
+          'duplicate-account': 'Bu Google hesabı zaten ekli.',
+          'browser-open-failed': 'Tarayıcı açılamadı. Varsayılan tarayıcınızı kontrol edin.',
+          'login-failed': 'Hesap eklenemedi. Tekrar deneyin.',
+          'proxy-configuration-invalid':
+            'Ayarlarda geçerli bir proxy adresi kaydedin veya proxy’yi kapatın, ardından tekrar giriş yapın.',
+        },
       },
       quotaRefreshed: 'Kota yenilendi',
       refreshFailed: 'Kota yenilenemedi',
@@ -645,6 +830,17 @@ const tr = {
         description: 'Antigravity yeniden başlatılıyor...',
       },
       switchFailed: 'Hesap değiştirilemedi',
+      switchFailureCodes: {
+        'account-not-found': 'Bu hesap artık kullanılamıyor.',
+        'reauth-required': 'Hesap değiştirmeden önce yeniden giriş yapın.',
+        'identity-profile-required': 'Hesap değiştirmeden önce kimlik profili oluşturun.',
+        'process-close-failed':
+          'Antigravity uygulamasının kapandığı doğrulanamadı. Çalışmanızı kaydedin, onay pencerelerini yanıtlayın ve hesabı yeniden değiştirmeden önce Antigravity uygulamasını kapatın.',
+        'process-control-failed':
+          'Antigravity kapatılamadı veya yeniden başlatılamadı. Tekrar deneyin.',
+        'target-write-failed': "Seçilen hesap Antigravity'de kullanılamadı. Tekrar deneyin.",
+        'switch-failed': 'Hesap değiştirilemedi. Tekrar deneyin.',
+      },
       deleted: 'Hesap silindi',
       deleteFailed: 'Hesap silinemedi',
       deleteConfirm: 'Bu hesabı silmek istediğinizden emin misiniz?',
@@ -669,6 +865,9 @@ const tr = {
       },
     },
     batch: {
+      actions: 'Seçili hesap işlemleri',
+      'delete-title': '{{count}} hesap silinsin mi?',
+      cancel: 'İptal',
       selected: '{{count}} adet seçildi',
       delete: 'Seçilenleri Sil',
       refresh: 'Seçilenleri Yenile',
@@ -692,13 +891,23 @@ const tr = {
       quotaFlash: 'Flash Kotası',
     },
     exportImport: {
+      'file-errors': {
+        'file-too-large': 'Seçilen dosya çok büyük. Daha küçük bir hesap yedeği seçin.',
+        'invalid-export': 'Bu hesap yedeği tanınamadı. Geçerli bir yedek dosyası seçin.',
+        'read-failed': 'Seçilen dosya açılamadı. Dosyanın yerinde olduğunu kontrol edin.',
+        'write-failed': 'Hesap yedeği kaydedilemedi. Kaydetme konumunu kontrol edin.',
+        'import-failed': 'Hesaplar içe aktarılamadı. Tekrar deneyin.',
+        'tokens-missing':
+          'Bu hesap yedeğinde giriş bilgileri yok. Giriş bilgilerini içeren bir yedek dışa aktarın.',
+        'account-write-failed': 'Hesap kaydedilemedi.',
+      },
       export: 'Dışa Aktar',
       import: 'İçe Aktar',
       exportTitle: 'Hesapları Dışa Aktar',
       exportDesc:
-        'Dışa aktarma dosyasına kimlik doğrulama belirteçlerinin (token) dahil edilip edilmeyeceğini seçin.',
-      includeTokens: 'Belirteçleri dahil et (daha az güvenli)',
-      stripTokens: 'Belirteçleri çıkar (paylaşım için daha güvenli)',
+        'Yedeğe hesap giriş bilgilerinin eklenip eklenmeyeceğini seçin. Bu bilgileri içeren yedekleri gizli tutun.',
+      includeTokens: 'Giriş bilgilerini ekle (hesapları geri yükler)',
+      stripTokens: 'Giriş bilgilerini çıkar (paylaşmak için daha güvenli)',
       exportSuccess: 'Hesaplar başarıyla dışa aktarıldı',
       importTitle: 'Hesapları İçe Aktar',
       importDesc: 'Daha önce dışa aktarılmış bir JSON dosyası seçin.',
@@ -714,8 +923,74 @@ const tr = {
       invalidJson: 'Geçersiz JSON dosya biçimi',
       readFileFailed: 'Dosya okunamadı',
     },
+    localImport: {
+      description:
+        'Bu bilgisayarda oturum açılmış hesapları bulun. Aktarmadan önce sonuçları kontrol edin.',
+      emailCollision: '{{email}} için {{count}} farklı kayıtlı giriş bulundu.',
+      sources: {
+        'antigravity-keyring': 'Sistemde kayıtlı giriş bilgileri',
+        'antigravity-classic-db': 'Antigravity kayıtlı hesapları',
+        'antigravity-ide-db': 'Antigravity IDE kayıtlı hesapları',
+      },
+      validationErrors: {
+        'credential-unavailable':
+          'Bu giriş bilgileri artık kullanılamıyor. Antigravity hesabına yeniden giriş yapıp tekrar tarayın.',
+        'authentication-failed':
+          'Google bu girişi kabul etmedi. Antigravity hesabına yeniden giriş yapıp tekrar tarayın.',
+      },
+      discoveryErrors: {
+        missing: 'Burada kayıtlı giriş bilgisi bulunamadı.',
+        'permission-denied':
+          'Kayıtlı giriş bilgilerine erişim reddedildi. Erişim izinlerini kontrol edip yeniden deneyin.',
+        locked:
+          'Giriş bilgileri kilitli veya kullanımda. Erişim kilidini açın ya da Antigravity uygulamasını kapatıp tekrar tarayın.',
+        malformed:
+          'Kayıtlı giriş bilgileri okunamadı. Antigravity hesabına yeniden giriş yapıp tekrar tarayın.',
+        'timed-out': 'Giriş bilgilerinin okunması çok uzun sürdü. Lütfen tekrar tarayın.',
+        'read-failed': 'Kayıtlı giriş bilgileri okunamadı. Lütfen tekrar tarayın.',
+      },
+      importErrors: {
+        'credential-unavailable':
+          'Bu giriş bilgileri artık kullanılamıyor. İçeri aktarmadan önce tekrar tarayın.',
+        'identity-conflict':
+          'Bu giriş bilgileri mevcut hesapla eşleşmiyor. İçeri aktarmadan önce hesapları kontrol edin.',
+      },
+      errors: {
+        'session-not-found': 'Bu tarama sonuçları artık kullanılamıyor. Lütfen tekrar tarayın.',
+        'session-expired': 'Bu tarama sonuçlarının süresi doldu. Lütfen tekrar tarayın.',
+        'session-consumed':
+          'Bu tarama sonuçları zaten kullanıldı. Daha fazla hesap aktarmak için tekrar tarayın.',
+      },
+
+      title: 'Bu bilgisayardan hesap aktar',
+
+      trigger: 'Bu bilgisayardan hesap aktar',
+    },
+
+    feedback: {
+      'loading-title': 'Hesaplarınız okunuyor',
+      'loading-description': 'Hesap bilgileriniz hazır olduğunda burada görünecek.',
+      'empty-description':
+        'Oturum açmak için Hesap Ekle’yi seçin veya mevcut bir hesap dosyasını içe aktarın.',
+      'filtered-description':
+        'Daha fazla hesap görmek için başka bir plan deneyin veya filtreyi temizleyin.',
+    },
   },
   proxy: {
+    'advanced-options': 'Diğer hizmet ayarları',
+    'advanced-description': 'Hesap seçimi, ortak talimatlar ve araç uyumluluğu.',
+    'account-strategy': {
+      'save-failed': 'Seçiminiz kaydedilemedi. Yeniden denemek için tekrar seçin.',
+      title: 'API isteklerinde kullanılan hesaplar',
+      balanced: 'Kullanılabilir hesapları sırayla kullan',
+      'account-first': 'Aynı hesabı tercih et',
+      'balanced-description':
+        'Yeni sohbetleri kullanılabilir hesaplara dağıtır. Mevcut sohbet, hesabı kullanılabilir olduğu sürece aynı hesabı kullanır.',
+      'account-first-description':
+        'Her model için aynı hesabı kullanmaya devam eder. Kota bittiğinde, hesap geçici olarak sınırlandığında veya isteği karşılayamadığında başka hesaba geçer. Mevcut sohbetler kullanılabilir hesaplarını korur.',
+      'client-description':
+        'Bu ayar Antigravity, IDE veya CLI oturum hesabını değiştirmez. İstemci hesabının otomatik değiştirilmesi Hesaplar sayfasından yönetilir.',
+    },
     title: 'API Proxy & AI Ağ Geçidi',
     description: 'Yerel API proxy ve AI Gateway hizmetini yönetin.',
     save: 'Ayarları Kaydet',
@@ -726,6 +1001,10 @@ const tr = {
     error: 'Hata',
     saving: 'Kaydediliyor...',
     tabs: {
+      tools: 'Araçlar',
+      models: 'Modeller',
+      records: 'Kayıtlar',
+      examples: 'Örnekler',
       service: 'Hizmet & Hesaplar',
       guides: 'Kılavuzlar & Promptlar',
       gateway: 'AI Ağ Geçidi & Fiyatlandırma',
@@ -883,47 +1162,50 @@ const tr = {
       auto_start_desc: 'Uygulama başlatıldığında proxy hizmetini de başlat',
       'allow-local-video-paths': 'Yerel video yollarına izin ver',
       'allow-local-video-paths-desc':
-        'API isteklerinin video_url aracılığıyla kullanıcı hesabınızın erişebildiği yerel dosyaları okumasına izin verir. Yalnızca tüm proxy istemcilerine güveniyorsanız etkinleştirin.',
-      'global-system-prompt-title': 'Genel sistem istemi',
+        'Bağlı araçların bu bilgisayarda hesabınızın erişebildiği video dosyalarını okumasına izin verir. Yalnızca güvendiğiniz araçlar için etkinleştirin.',
+      'global-system-prompt-title': 'Tüm yapay zekâ istekleri için talimatlar',
       'global-system-prompt-description':
-        'Bu istemi her proxy isteğinde istemcinin sistem talimatlarından önce ekler.',
+        'Manager üzerinden gönderilen her istekte bu talimatlar, bağlı aracın talimatlarından önce otomatik olarak eklenir.',
       'global-system-prompt-placeholder':
         'Genel bir sistem istemi girin...\nÖrneğin: Basitleştirilmiş Çince yanıt verin ve kod değişikliklerini kısa açıklayın.',
       'global-system-prompt-character-count': '{{count}} karakter',
       'global-system-prompt-long-warning':
-        '2.000 karakterden uzun bir istem, kullanılabilir bağlam penceresini önemli ölçüde azaltabilir.',
+        '2.000 karakterden uzun talimatlar sohbet geçmişi için daha az yer bırakır. Talimatları kısaltmayı düşünün.',
       local_access: 'Yerel ağ erişimi:',
       select_ip: 'IP Seç',
       no_token_warning: '⚠️ API anahtarı ayarlanmadı. Erişim herkese açık!',
       show_key: 'Göster',
       hide_key: 'Gizle',
+      cloud_code_meta: 'Cloud Code uyumluluğu',
+      cloud_code_meta_desc:
+        'Eski Cloud Code araçlarının ihtiyaç duyduğu ek yanıt bilgilerini ekler. Diğer araçlar bu bilgileri kabul etmeyebilir; yalnızca gerektiğinde açın.',
     },
     mapping: {
       title: 'Model Eşleme',
-      description: 'Yönlendirme için Claude modellerini Gemini modelleriyle eşleyin.',
+      description: 'Her Claude model isteğini hangi Gemini modelinin karşılayacağını seçin.',
       maps_to: 'Şu modele eşlenir:',
       restore: 'Varsayılanlara Sıfırla',
-      'only-raw-quota-models': 'Yalnızca kota modellerini göster',
+      'only-raw-quota-models': 'Yalnızca hesaplarınızda bulunan modelleri listele',
       'only-raw-quota-models-desc':
-        'Model listeleme API’leri yalnızca bağlı hesapların kota önbelleklerinde bulunan fiziksel modelleri döndürür.',
+        'Bağlı araçlar yalnızca son hesap kota kontrollerindeki model adlarını görür. Ek model takma adları listelenmez.',
     },
     'open-code': {
       title: 'OpenCode eşitleme',
       description:
-        'Yönetilen sağlayıcıyı yorumları ve elle düzenlenen JSONC biçimini değiştirmeden eşitler.',
+        'Diğer ayarlarınızı, yorumları ve biçimi koruyarak OpenCode uygulamasını Manager uygulamasına bağlayın.',
       synced: 'Eşitlendi',
       'synced-custom-url': 'Özel URL ile eşitlendi',
       'not-synced': 'Eşitlenmedi',
       'config-path': 'Yapılandırma',
       'configured-models': 'Yapılandırılmış modeller',
-      runtime: 'OpenCode çalışma ortamı',
+      runtime: 'OpenCode kurulumu',
       installed: 'Yüklü',
       'not-installed': 'Algılanmadı',
-      credential: 'Özel kimlik bilgisi',
-      'key-stored': 'İşletim sistemi kimlik bilgisi kasasında saklanıyor',
+      credential: 'OpenCode bağlantı anahtarı',
+      'key-stored': 'Sistemin güvenli depolamasında kayıtlı',
       'key-missing': 'Bir sonraki eşitlemede oluşturulacak',
       'backup-notice':
-        'Yedekler yorumları ve biçimi korur. Kimlik bilgisi geçersiz bir yer tutucuyla değiştirilir ve geri yükleme sırasında geçerli anahtar eklenir.',
+        'Yedekler yorumları ve biçimi korur. Manager bağlantı anahtarı kullanılamayan bir değerle değiştirilir; geri yüklemede geçerli anahtar kullanılır.',
       sync: "OpenCode'u yapılandır ve eşitle",
       restore: 'Yedeği geri yükle',
       clear: 'Yönetilen yapılandırmayı temizle',
@@ -931,40 +1213,42 @@ const tr = {
       'model-dialog-title': 'OpenCode modellerini seçin',
       'model-dialog-description':
         'Seçilen modeller eklenir veya güncellenir. Seçilmeyen mevcut modeller silinmez.',
-      'custom-base-url': 'Özel Manager BaseURL',
+      'custom-base-url': 'Manager adresi',
       'reset-base-url': 'Sıfırla',
       'invalid-base-url': 'Geçerli bir HTTP veya HTTPS URL girin.',
-      'sync-accounts': 'Hesapları antigravity-accounts.json dosyasına eşitle',
+      'sync-accounts': 'Hesapları OpenCode giriş eklentisinde kullan',
       'sync-accounts-description':
-        'OpenCode, yenileme belirteçlerini yerel eklenti dosyasında gerektirir. Bu seçenek varsayılan olarak kapalıdır; belirteçler renderer IPC yanıtlarından veya günlüklerden geçmez.',
+        'Etkinleştirildiğinde OpenCode, bu hesaplarda oturumun açık kalmasını sağlayan bilgileri bu bilgisayardaki bir dosyaya kaydeder. Varsayılan olarak kapalıdır. Yalnızca güvendiğiniz bir bilgisayarda etkinleştirin.',
       'select-models': 'Eklenecek veya güncellenecek modeller',
       'selected-count': '{{total}} modelden {{selected}} tanesi seçili',
       'select-all': 'Tümünü seç',
       'deselect-all': 'Tümünün seçimini kaldır',
       'confirm-sync': 'Eşitlemeyi onayla',
-      'auth-plugin-warning-title': 'Eski kimlik doğrulama eklentisi algılandı',
+      'auth-plugin-warning-title': 'Başka bir giriş eklentisi bulundu',
       'auth-plugin-warning-description':
-        'opencode-antigravity-auth yönetilen sağlayıcıyla çakışabilir. Bu yapılandırmaya güvenmeden önce eklentiyi inceleyin.',
+        'opencode-antigravity-auth farklı bir bağlantı kullanabilir. Bu ayarları kullanmadan önce OpenCode içinde Manager seçildiğini kontrol edin.',
       'view-config': 'Yapılandırmayı görüntüle',
       'restore-confirm-title': 'OpenCode yedeği geri yüklensin mi?',
       'restore-confirm-description':
-        'Etkin OpenCode yapılandırması tek kullanımlık yedekle değiştirilir. Başarılı geri yüklemeden sonra yedek silinir.',
+        'Dosyanın tamamı ilk yedekle değiştirilir; sonraki değişiklikler de üzerine yazılır. Başarılı geri yüklemeden sonra yedek kaldırılır.',
       'confirm-restore': 'Geri yüklemeyi onayla',
-      'clear-confirm-title': 'Yönetilen OpenCode yapılandırması temizlensin mi?',
+      'clear-confirm-title': 'Manager bağlantısı kaldırılsın mı?',
       'clear-confirm-description':
-        'Yönetilen sağlayıcı, eşleşen eski Google ve Anthropic girdileri ve özel anahtar kaldırılır. Diğer ayarlar değişmeden kalır ve maskelenmiş yedek yine de geri yüklenebilir.',
+        'Bu bağlantı ve özel anahtarı kaldırılır. Diğer hizmetler, ayarlar ve yedek korunur.',
       'confirm-clear': 'Temizlemeyi onayla',
       'config-viewer-title': 'OpenCode yapılandırması',
       'config-viewer-description': 'Salt okunur yapılandırma önizlemesi',
-      'config-redacted-notice':
-        'Bu önizleme işleme sürecine ulaşmadan önce yorumlar kaldırılır ve hassas alanlar maskelenir.',
-      'config-copied': 'Maskelenmiş yapılandırma kopyalandı',
+      'config-redacted-notice': 'Bu önizlemede özel bilgiler gizlenir.',
+      'config-copied': 'Yapılandırma özel bilgiler gizlenerek kopyalandı',
       'config-copy-failed': 'Yapılandırma kopyalanamadı',
       'config-load-failed': 'Yapılandırma yüklenemedi',
-      'copy-config': 'Maskelenmiş yapılandırmayı kopyala',
+      'copy-config': 'Yapılandırmayı kopyala (özel bilgiler gizli)',
       'success-title': 'OpenCode yapılandırması güncellendi',
       'error-title': 'OpenCode güncellemesi başarısız',
       'unknown-error': 'Bilinmeyen OpenCode yapılandırma hatası',
+
+      'choose-model-hint': 'Devam etmek için en az bir model seçin.',
+      'config-retry-description': 'Tekrar deneyin. Kaydedilmiş ayarlarınız değiştirilmedi.',
     },
     examples: {
       title: 'Kullanım Örnekleri',
@@ -973,39 +1257,40 @@ const tr = {
     persistence: {
       title: 'Request history and reasoning',
       description: 'Inspect bounded local records without slowing model traffic.',
-      'audit-title': 'Traffic audit',
+      'audit-title': 'İstek geçmişi',
       'audit-description':
-        'Stores redacted request, response and upstream-attempt records in a dedicated SQLite database.',
+        'İstekleri, yanıtları ve model hizmetine erişim denemelerini bu bilgisayarda hassas bilgileri gizleyerek kaydeder.',
       rows: '{{count}} requests',
-      queue: '{{count}} queued writes',
+      queue: '{{count}} kayıt kaydedilmeyi bekliyor',
       dropped:
-        '{{count}} audit writes were dropped ({{reason}}). Model requests were not interrupted.',
+        '{{count}} kayıt kaydedilemedi ({{reason}}). Model istekleri normal şekilde devam etti.',
       'disk-gib': 'Disk limit (GiB)',
-      'body-hours': 'Body retention (hours)',
+      'body-hours': 'Tam içeriğin saklanma süresi (saat)',
       'summary-days': 'Summary retention (days)',
       'max-rows': 'Maximum rows',
       'no-audit': 'No traffic records yet.',
-      'audit-metadata': 'Request and attempt metadata',
-      'audit-body-missing': 'The audit body no longer exists.',
-      'audit-body-expired': 'The body expired; its metadata remains available.',
+      'audit-metadata': 'İstek ayrıntıları ve model hizmeti denemeleri',
+      'audit-body-missing': 'İsteğin veya yanıtın tam içeriği artık saklanmıyor.',
+      'audit-body-expired':
+        'Tam içeriğin saklanma süresi doldu ancak istek ayrıntıları hâlâ görülebilir.',
       partial: 'Partial',
-      'logical-size': 'Logical size',
-      'parse-error-offset': 'Parse error offset',
+      'logical-size': 'İçerik boyutu',
+      'parse-error-offset': 'Okunamayan içerik konumu',
       loading: 'Loading…',
       'copy-progress': 'Preparing full copy: {{value}}%',
       'previous-page': 'Previous page',
       'next-page': 'Next page',
       'copy-full': 'Copy complete body',
       'confirm-copy-full': 'Confirm copying {{size}}',
-      'clear-audit': 'Clear traffic audit',
-      'repair-audit': 'Repair audit database',
+      'clear-audit': 'İstek geçmişini temizle',
+      'repair-audit': 'İstek geçmişini onar',
       'thought-title': 'Reasoning history',
       'thought-description': 'Save reasoning so later turns can continue the conversation.',
       sessions: '{{count}} sessions',
-      'hard-limit': 'Hard limit: 200 turns / 64 MiB per session',
+      'hard-limit': 'Her sohbet en fazla 200 tur ve 64 MiB içerik kaydedebilir.',
       'retention-days': 'Retention (days)',
       'max-sessions': 'Maximum sessions',
-      oversized: 'body omitted: over 64 MiB',
+      oversized: 'İçerik 64 MiB sınırını aştığı için tam kaydedilmedi.',
       'no-thought-body': 'No stored thought body.',
       signature: 'Signature',
       'copy-signature': 'Copy signature',
@@ -1016,6 +1301,61 @@ const tr = {
       'confirm-repair': 'Confirm repair',
     },
   },
-};
+  traffic: {
+    'detail-load-failed': 'Bu istek yüklenemedi. Tekrar deneyin.',
+    'detail-not-found': 'Bu kayıt artık mevcut değil. Temizlenmiş olabilir.',
+    fields: {
+      category: 'Kategori',
+      method: 'İstek yöntemi',
+      'requested-model': 'İstenen model',
+      'mapped-model': 'Seçilen model yolu',
+      error: 'Hata ayrıntıları',
+      affected: 'Etkilenen kayıtlar',
+      'request-id': 'İstek numarası',
+      'client-address': 'İstemci adresi',
+      username: 'Kullanıcı',
+      'reasoning-tokens': 'Düşünme tokenları',
+      'cached-tokens': 'Önbellek tokenları',
+      query: 'Ek istek seçenekleri',
+    },
+    outcomes: {
+      in_progress: 'İşleniyor',
+      completed: 'Tamamlandı',
+      client_cancelled: 'İptal edildi',
+      client_disconnected: 'Bağlantı kapandı',
+      timeout: 'Zaman aşımı',
+      upstream_error: 'Model hizmeti hatası',
+      auth_failed: 'Oturum açma başarısız',
+      internal_error: 'Uygulama hatası',
+      partial: 'Kısmi sonuç',
+    },
+    'search-metadata': 'Model, istek numarası veya adres ara',
+    'copy-upstream-curl': 'Model hizmeti isteğini cURL olarak kopyala (özel bilgiler gizli)',
+    'upstream-attempts': 'Model hizmetine gönderilen istekler',
+    'no-attempts': 'Model hizmetine istek gönderilmedi.',
+    upstream: 'Model hizmeti',
+    endpoint: 'Hizmet adresi',
+    protocol: 'API biçimi',
+    'repair-databases': 'Kaydedilen kayıtları onar',
+    'concise-help':
+      'Ana istek bilgilerini gösterir. Açılan bölümler tüm içeriği göstermeye devam eder.',
+    'full-help':
+      'Yüklenen tüm bilgileri gösterir. İçerik düzenlenemiyorsa veya eksikse iki görünüm aynı görünebilir.',
+    'load-next-window': 'Sonraki bölüm',
+    offset: 'İçerik konumu {{offset}}',
+    'parse-error': 'İçerik {{offset}} konumunda okunamadı.',
+    'thought-oversized':
+      'Düşünme içeriği 64 MiB sınırını aştığı için tam kaydedilmedi. Referans: {{hash}}',
 
+    'loading-description': 'İstek kayıtlarınız hazır olduğunda burada görünecek.',
+    'empty-description':
+      'Proxy üzerinden gönderilen istekler burada görünür. Filtreleri de değiştirebilirsiniz.',
+    'empty-category-description':
+      'Bu kategorinin kayıtları burada görünür. Başka bir kategori deneyin veya filtreleri değiştirin.',
+    'load-failed': 'İstek kayıtları okunamadı',
+    'load-failed-description':
+      'Lütfen tekrar deneyin. Bu, kayıtlarınızın silindiği anlamına gelmez.',
+    'refresh-failed': 'Kayıtlar yenilenemedi. Önceden yüklenen kayıtlar gösterilmeye devam ediyor.',
+  },
+};
 export default tr;

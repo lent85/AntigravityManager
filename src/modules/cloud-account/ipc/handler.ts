@@ -68,6 +68,7 @@ import {
 import { withTimingTrace } from '@/shared/observability/timingTrace';
 import { AppError } from '@/shared/errors/appError';
 import { CloudMonitorService } from '@/modules/cloud-account/services/CloudMonitorService';
+import { cloudAccountWeeklyWarmupRunner } from '@/modules/cloud-account/services/cloud-account-weekly-warmup-runner';
 import { AccountEmulationService } from '@/modules/cloud-account/emulation/AccountEmulationService';
 import type {
   AccountEmulationStrategyConfig,
@@ -396,7 +397,12 @@ export async function addGoogleAccount(
 
     // 1. Exchange code for tokens
     logger.info('[OAuth] Exchanging auth code for tokens...');
-    const tokenResp = await GoogleAPIService.exchangeCode(authCode, undefined, oauthClientKey);
+    const tokenResp = await GoogleAPIService.exchangeCode(
+      authCode,
+      undefined,
+      oauthClientKey,
+      'http://127.0.0.1',
+    );
     logger.info(`[OAuth] Token exchange successful for client=${tokenResp.oauth_client_key}`);
 
     // 2. Get User Info
@@ -799,7 +805,7 @@ export async function refreshAccountQuota(accountId: string): Promise<CloudAccou
     await clearValidationHealthAfterSuccessfulProbe(account);
     proxyModelAvailabilityStore.clearCapabilityFailures(account.id);
     notifyTrayUpdate(account);
-    CloudMonitorService.scheduleWeeklyWarmup([account]);
+    cloudAccountWeeklyWarmupRunner.schedule([account]);
     return account;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : '';
@@ -865,7 +871,7 @@ export async function refreshAccountQuota(accountId: string): Promise<CloudAccou
         await clearAccountStatus(account);
         await clearValidationHealthAfterSuccessfulProbe(account);
         proxyModelAvailabilityStore.clearCapabilityFailures(account.id);
-        CloudMonitorService.scheduleWeeklyWarmup([account]);
+        cloudAccountWeeklyWarmupRunner.schedule([account]);
         return account;
       } catch (refreshError) {
         logger.error(
@@ -1380,15 +1386,8 @@ export async function forcePollCloudMonitor(): Promise<void> {
 }
 
 export async function startAuthFlow(oauthClientKey?: string): Promise<void> {
-  if (isString(oauthClientKey) && !isEmpty(oauthClientKey.trim())) {
-    setActiveOAuthClient(oauthClientKey);
-  } else {
-    hydrateActiveOAuthClientFromSettings();
-  }
-  const url = GoogleAPIService.getAuthUrl(oauthClientKey);
-
-  logger.info(`Starting auth flow, opening URL: ${url}`);
-  await shell.openExternal(url);
+  const { getCloudAccountAdapter } = await import('@/modules/cloud-account/ipc/cloud-account-adapter');
+  await getCloudAccountAdapter().startLogin(oauthClientKey);
 }
 
 export function listOAuthClients(): OAuthClientDescriptor[] {
@@ -1667,4 +1666,3 @@ export function linkAccountsToFamily(
 export function unlinkAccountFromFamily(accountId: string): void {
   FamilyGroupStore.unlinkAccount(accountId);
 }
-

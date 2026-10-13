@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import type { CloudAccount } from '@/modules/cloud-account/types';
+import type { CloudAccountView } from '@/modules/cloud-account/services/cloud-account-view';
 import type { AccountFamilyGroup } from '@/modules/cloud-account/persistence/family-group-store';
 import { useAppConfig } from '@/modules/config/hooks/useAppConfig';
 import {
@@ -34,7 +34,7 @@ import {
 interface FamilyGroupDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  accounts: CloudAccount[];
+  accounts: CloudAccountView[];
   initialSelectedAccountIds?: string[];
   targetGroupId?: string;
 }

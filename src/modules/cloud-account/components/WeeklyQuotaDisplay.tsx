@@ -5,6 +5,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { CompactQuotaRow } from '@/modules/cloud-account/components/CompactQuotaRow';
 import type { WeeklyQuotaItem } from '@/modules/cloud-account/utils/quota-groups';
 import {
+  QUOTA_BAR_COLOR_CLASS_BY_STATUS,
+  QUOTA_TEXT_COLOR_CLASS_BY_STATUS,
+} from '@/modules/cloud-account/components/quota-colors';
+import {
   clampQuotaPercentage,
   formatResetTimeLabel,
   formatResetTimeTitle,
@@ -32,12 +36,12 @@ export function WeeklyQuotaDisplay({
 
   if (items.length === 0) {
     return (
-      <div className="text-muted-foreground flex flex-col items-center justify-center gap-1 py-4 text-xs">
+      <div className="text-muted-foreground bg-muted/30 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-2 py-2 text-xs">
         <div className="flex items-center gap-2">
           <CalendarDays className="h-4 w-4 opacity-50" />
           <span>{t('cloud.quota-window.no-weekly-quota')}</span>
         </div>
-        <span className="max-w-64 text-center text-[10px]">
+        <span className="text-xs">
           {t(
             hasQuotaSummary
               ? 'cloud.quota-window.weekly-bucket-unavailable'

@@ -6,11 +6,19 @@ import { AppModule } from './app.module';
 import { logger } from '../shared/logging/logger';
 import { AccountLeaseService } from '../modules/proxy-gateway/server/modules/account-lease/account-lease.service';
 import { OpenAIOperations } from '../modules/proxy-gateway/server/modules/openai/openai-operations.service';
+import { OpenAIService } from '../modules/proxy-gateway/server/modules/openai/openai.service';
 import { DEFAULT_MAX_FILE_BYTES } from '../modules/proxy-gateway/server/modules/files/file-store.types';
 import { attachOpenAIResponsesWebSocketServer } from '../modules/proxy-gateway/server/modules/openai/responses/openai-responses-websocket.server';
-import { parseResponsesRequestBody } from '../modules/proxy-gateway/server/modules/openai/responses/openai-responses-request';
-import { extractApiKeyToken } from '../modules/proxy-gateway/server/guards/api-key-auth.util';
+import { createResponsesWebSocketOperations } from '@/modules/proxy-gateway/server/modules/openai/responses/openai-responses-websocket.operations';
+import {
+  extractApiKeyToken,
+  hasConfiguredApiKey,
+} from '../modules/proxy-gateway/server/guards/api-key-auth.util';
 import { MAX_IMAGE_GENERATION_BODY_BYTES } from '@/modules/proxy-gateway/server/modules/openai/media/image-input-validation';
+import {
+  DEFAULT_PROXY_JSON_BODY_LIMIT_BYTES,
+  isModelPayloadRoute,
+} from '../modules/proxy-gateway/server/proxy.constants';
 import { registerTrafficAuditHttpHooks } from '@/modules/proxy-gateway/audit/traffic-audit-context';
 import { trafficAuditService } from '@/modules/proxy-gateway/audit/traffic-audit.service';
 import { thoughtStoreService } from '@/modules/proxy-gateway/thought-store/thought-store.service';
@@ -76,18 +84,27 @@ interface RawMediaBodyParserHost {
   ) => void;
 }
 
-interface ImageGenerationRouteLimitHost {
+interface RouteLimitHost {
   addHook: (
     name: 'onRoute',
     handler: (options: { bodyLimit?: number; method: string | string[]; url: string }) => void,
   ) => void;
 }
 
-export function registerImageGenerationBodyLimit(instance: ImageGenerationRouteLimitHost): void {
+export function registerImageGenerationBodyLimit(instance: RouteLimitHost): void {
   instance.addHook('onRoute', (options) => {
     const methods = Array.isArray(options.method) ? options.method : [options.method];
     if (methods.includes('POST') && options.url === '/v1/images/generations') {
       options.bodyLimit = MAX_IMAGE_GENERATION_BODY_BYTES;
+    }
+  });
+}
+
+export function registerModelRouteBodyLimits(instance: RouteLimitHost): void {
+  instance.addHook('onRoute', (options) => {
+    const methods = Array.isArray(options.method) ? options.method : [options.method];
+    if (methods.includes('POST') && isModelPayloadRoute(options.url)) {
+      options.bodyLimit = DEFAULT_PROXY_JSON_BODY_LIMIT_BYTES;
     }
   });
 }
@@ -136,6 +153,13 @@ async function cleanupFailedServerStart() {
   }
 }
 
+export function createFastifyAdapter(): FastifyAdapter {
+  const adapter = new FastifyAdapter();
+  registerImageGenerationBodyLimit(adapter.getInstance());
+  registerModelRouteBodyLimits(adapter.getInstance());
+  return adapter;
+}
+
 export async function bootstrapNestServer(config: ProxyConfig): Promise<NestServerStartResult> {
   const port = config.port || 8045;
   if (app) {
@@ -150,8 +174,7 @@ export async function bootstrapNestServer(config: ProxyConfig): Promise<NestServ
   setServerConfig(config);
 
   try {
-    const fastifyAdapter = new FastifyAdapter();
-    registerImageGenerationBodyLimit(fastifyAdapter.getInstance());
+    const fastifyAdapter = createFastifyAdapter();
     registerTrafficAuditHttpHooks(fastifyAdapter.getInstance());
 
     // Register request instrumentation hooks for usage tracking
@@ -261,7 +284,9 @@ export async function bootstrapNestServer(config: ProxyConfig): Promise<NestServ
     const listenHost = hasAnyApiKey ? '0.0.0.0' : '127.0.0.1';
     await app.listen(port, listenHost);
     const openAIOperations = app.get(OpenAIOperations);
+    const openAIService = app.get(OpenAIService);
     detachResponsesWebSocketServer = attachOpenAIResponsesWebSocketServer(app.getHttpServer(), {
+      ...createResponsesWebSocketOperations(openAIOperations, openAIService),
       isAuthorized: (request) => {
         const currentConfig = getServerConfig();
         const keys = resolveConfiguredApiKeys(currentConfig);
@@ -273,19 +298,6 @@ export async function bootstrapNestServer(config: ProxyConfig): Promise<NestServ
           return false;
         }
         return keys.some((k) => k.enabled !== false && k.key.trim() === clientToken.trim());
-      },
-      streamRequest: async (request) => {
-        const body = parseResponsesRequestBody(request);
-        if (!body) {
-          throw new Error('Invalid Responses WebSocket request');
-        }
-        const result = await openAIOperations.createResponsesStream(body);
-        if (!result) {
-          throw new Error(
-            `Unknown or expired previous_response_id: ${String(request.previous_response_id ?? '')}`,
-          );
-        }
-        return result;
       },
     });
     currentPort = port;
@@ -325,7 +337,16 @@ export async function stopNestServer(): Promise<boolean> {
       detachResponsesWebSocketServer?.();
       detachResponsesWebSocketServer = null;
       await app.close();
-      await Promise.allSettled([trafficAuditService.close(), thoughtStoreService.close()]);
+      const storeResults = await Promise.allSettled([
+        trafficAuditService.close(),
+        thoughtStoreService.close(),
+      ]);
+      const failures = storeResults.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      );
+      if (failures.length > 0) {
+        throw new AggregateError(failures, 'Gateway diagnostic stores did not close');
+      }
       app = null;
       currentPort = 0;
       logger.info('NestJS server stopped.');

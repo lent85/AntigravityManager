@@ -37,6 +37,18 @@ const STREAM_ID_PATTERN = /^[A-Za-z0-9_.-]{1,256}$/u;
 export class OpenAIResponsesWebSocketProtocol {
   private readonly responses = new Map<string, CachedWebSocketResponse>();
 
+  constructor(
+    private readonly validateRequest?: (
+      request: Record<string, unknown>,
+      mode: 'prewarm' | 'generate',
+    ) => void,
+  ) {}
+
+  public getPreviousResponseId(): string {
+    const keys = Array.from(this.responses.keys());
+    return keys.length > 0 ? keys[keys.length - 1] : '';
+  }
+
   public accept(payload: unknown): OpenAIResponsesWebSocketAction {
     const event = toRecord(payload);
     if (!event) {
@@ -101,6 +113,7 @@ export class OpenAIResponsesWebSocketProtocol {
     const responseId = `resp_prewarm_${randomUUID()}`;
     const createdAt = Math.floor(Date.now() / 1000);
     const request = stripTransportFields(payload);
+    this.validateRequest?.(request, 'prewarm');
     this.remember(responseId, { output: [], prewarm: true, request });
 
     return [
@@ -175,6 +188,8 @@ export class OpenAIResponsesWebSocketProtocol {
     if (!getString(normalized, 'model') && !getString(normalized, 'previous_response_id')) {
       throw new Error('Missing model in response.create request.');
     }
+
+    this.validateRequest?.(normalized, 'generate');
     return normalized;
   }
 

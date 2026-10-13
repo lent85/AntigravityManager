@@ -71,7 +71,10 @@ function resolvePathPlugin() {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN || env.SENTRY_AUTH_TOKEN;
-  const shouldEnableSentry = mode === 'production' && Boolean(sentryAuthToken);
+  const shouldEnableSentry =
+    mode === 'production' &&
+    Boolean(sentryAuthToken) &&
+    process.env.AGM_DISABLE_SENTRY_UPLOAD !== '1';
 
   return {
     envPrefix: ['VITE_', 'ANTIGRAVITY_ENABLE_PERFORMANCE_RECORDER'],

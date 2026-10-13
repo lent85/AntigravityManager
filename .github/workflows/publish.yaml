@@ -84,6 +84,10 @@ jobs:
           retry_wait_seconds: 30
           command: npm ci
 
+      - name: Check Linux AppImage maker and update downloads
+        if: matrix.platform == 'linux'
+        run: npm run test:appimage-download
+
       - name: Make Artifacts
         if: matrix.platform != 'darwin'
         env:
@@ -105,6 +109,10 @@ jobs:
       - name: Audit Windows x64 package size
         if: matrix.platform == 'win32' && matrix.arch == 'x64'
         run: npm run audit:size:win32:x64
+
+      - name: Make NSIS automatic-update installer
+        if: matrix.platform == 'win32'
+        run: npm run make:nsis -- ${{ matrix.arch }}
 
       # DMG creation may be flaky on GitHub macOS runners, so retry the full darwin make.
       - name: Make Artifacts (darwin with retry)
@@ -185,6 +193,12 @@ jobs:
         with:
           node-version: 22
           cache: 'npm'
+
+      - name: Install publish dependencies
+        run: npm ci --include=dev --ignore-scripts --no-audit --no-fund
+
+      - name: Test Windows update feed generation
+        run: npm run test:acceptance -- installers feed
 
       - name: Resolve release tag
         id: release_tag
@@ -268,6 +282,17 @@ jobs:
             exit 1
           fi
 
+          for arch in x64 arm64; do
+            if ! find release-assets -type f -path "*/nsis/$arch/*" -name "*-windows-$arch-nsis.exe" | grep -q .; then
+              echo "::error::Missing Windows $arch NSIS automatic-update installer."
+              exit 1
+            fi
+            if ! find release-assets -type f -path "*/nsis/$arch/*" -name "latest-nsis-$arch.yml" | grep -q .; then
+              echo "::error::Missing Windows $arch NSIS update metadata."
+              exit 1
+            fi
+          done
+
           printf 'Found %s Windows setup executable(s) and %s .nupkg package(s).\n' \
             "${#windows_setup_exes[@]}" \
             "${#squirrel_packages[@]}"
@@ -275,16 +300,12 @@ jobs:
       - name: Generate updater metadata
         env:
           RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          version="${RELEASE_TAG#v}"
-          cat > release-assets/updater.json <<EOF
-          {
-            "version": "$version",
-            "notes": "See release page for details.",
-            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "url": "https://github.com/Draculabo/AntigravityManager/releases/tag/${RELEASE_TAG}"
-          }
-          EOF
+          gh release view "$RELEASE_TAG" --json tagName,body,publishedAt,url > "$RUNNER_TEMP/updater-release.json"
+          node scripts/generate-updater-metadata.mjs \
+            --release-file "$RUNNER_TEMP/updater-release.json" \
+            --output release-assets/updater.json
 
       - name: Prepare Windows static update feed
         env:

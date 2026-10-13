@@ -1,7 +1,9 @@
+import { UpstreamProxySettings } from '@/modules/config/components/UpstreamProxySettings';
 import { createFileRoute } from '@tanstack/react-router';
 import { useTheme } from '@/components/shared/theme-provider';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { FeedbackState } from '@/components/ui/feedback-state';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { CommitOnBlurNumberInput, Input } from '@/components/ui/input';
@@ -19,7 +21,7 @@ import { useTranslation } from 'react-i18next';
 import { setAppLanguage } from '@/modules/app-shell/actions/language';
 import { useAppConfig } from '@/modules/config/hooks/useAppConfig';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, FolderOpen, RefreshCw, X, Sun, Moon, Laptop } from 'lucide-react';
+import { Loader2, FolderOpen, RefreshCw, X, Sun, Moon, Laptop, Settings, Palette, Users } from 'lucide-react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { ModelVisibilitySettings } from '@/modules/config/components/ModelVisibilitySettings';
 import { AutoSwitchModelSettings } from '@/modules/cloud-account/components/AutoSwitchModelSettings';
@@ -29,7 +31,7 @@ import {
   useSetMetricsSyncDelayConfig,
 } from '@/modules/cloud-account/hooks/useCloudAccounts';
 import { useState } from 'react';
-import { ProxyConfig } from '@/modules/config/types';
+import type { ServiceConfigSnapshot } from '@/modules/config/service-config.schema';
 import {
   detectAgyCliExecutable,
   getAntigravityArgs,
@@ -78,7 +80,14 @@ function parseArgsInput(value: string): string[] {
 function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { t, i18n } = useTranslation();
-  const { config, isLoading, saveConfig } = useAppConfig();
+  const {
+    config,
+    isLoading,
+    saveConfig,
+    serviceAvailable,
+    accountAlertPolicyAvailable,
+    retryService,
+  } = useAppConfig();
   const { toast } = useToast();
 
   // Local draft overrides for executable paths and arguments
@@ -126,10 +135,13 @@ function SettingsPage() {
 
   const handleLanguageChange = (value: string) => {
     setAppLanguage(value, i18n);
+    if (config) {
+      saveConfig({ ...config, language: value });
+    }
   };
 
   // Helper to update proxyConfig and auto-save
-  const updateProxyConfig = async (newProxyConfig: ProxyConfig) => {
+  const updateProxyConfig = async (newProxyConfig: ServiceConfigSnapshot['proxy']) => {
     if (config) {
       await saveConfig({ ...config, proxy: newProxyConfig });
     }
@@ -210,6 +222,7 @@ function SettingsPage() {
       });
     } catch (error) {
       toast({
+        error,
         title: t('settings.account.agy_cli_detect_failed'),
         description: error instanceof Error ? error.message : String(error),
         variant: 'destructive',
@@ -238,6 +251,7 @@ function SettingsPage() {
       });
     } catch (error) {
       toast({
+        error,
         title: t('settings.account.agy_patch_failed'),
         description: error instanceof Error ? error.message : String(error),
         variant: 'destructive',
@@ -312,6 +326,7 @@ function SettingsPage() {
       }
     } catch (error) {
       toast({
+        error,
         title: t('update.checkFailed'),
         description: error instanceof Error ? error.message : t('common.unknown'),
         variant: 'destructive',
@@ -323,21 +338,43 @@ function SettingsPage() {
 
   if (isLoading || !proxyConfig) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="animate-spin" />
-      </div>
+      <FeedbackState
+        kind="loading"
+        title={t('common.loading')}
+        description={t('common.reading-settings')}
+        className="h-full"
+      />
     );
   }
 
   return (
     <div className="container mx-auto max-w-4xl space-y-5 p-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">{t('settings.title')}</h2>
-        <p className="text-muted-foreground mt-1">{t('settings.description')}</p>
+      <div className="flex items-start gap-3">
+        <div className="bg-warning-soft text-warning border-warning-border flex size-11 shrink-0 items-center justify-center rounded-xl border">
+          <Settings className="size-5" aria-hidden="true" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('settings.title')}</h1>
+          <p className="text-muted-foreground mt-1 text-sm">{t('settings.description')}</p>
+        </div>
       </div>
 
+      {(!serviceAvailable || !accountAlertPolicyAvailable) && (
+        <div role="alert" className="space-y-2">
+          <p>
+            {t(
+              'settings.service-unavailable',
+              'Settings are unavailable right now. Please try again.',
+            )}
+          </p>
+          <Button onClick={() => retryService()}>{t('settings.service-retry', 'Retry')}</Button>
+        </div>
+      )}
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList
+          aria-label={t('settings.title')}
+          className="max-w-full justify-start overflow-x-auto"
+        >
           <TabsTrigger value="general">{t('settings.general')}</TabsTrigger>
           <TabsTrigger value="models">{t('settings.models')}</TabsTrigger>
           <TabsTrigger value="proxy">{t('settings.proxy_tab')}</TabsTrigger>
@@ -345,12 +382,15 @@ function SettingsPage() {
 
         {/* --- GENERAL TAB --- */}
         <TabsContent value="general" className="space-y-5">
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('settings.appearance.title')}</CardTitle>
+          <Card className="overflow-hidden shadow-none">
+            <CardHeader className="bg-warning-soft/40 mb-4 border-b p-4">
+              <CardTitle className="flex items-center gap-2">
+                <Palette className="text-warning size-4" aria-hidden="true" />
+                {t('settings.appearance.title')}
+              </CardTitle>
               <CardDescription>{t('settings.appearance.description')}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-4 p-4 pt-0">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <Label htmlFor="theme-selector">{t('settings.theme.title', t('settings.appearance.title'))}</Label>
@@ -463,17 +503,22 @@ function SettingsPage() {
           </Card>
 
           {/* Account Settings Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('settings.account.title')}</CardTitle>
+          <Card className="overflow-hidden shadow-none">
+            <CardHeader className="bg-info-soft/40 mb-4 border-b p-4">
+              <CardTitle className="flex items-center gap-2">
+                <Users className="text-info size-4" aria-hidden="true" />
+                {t('settings.account.title')}
+              </CardTitle>
               <CardDescription>{t('settings.account.description')}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 p-4 pt-0">
               {/* Auto Refresh Quota */}
-              <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="flex items-center justify-between gap-4 py-3">
                 <div className="space-y-1">
                   <Label>{t('settings.account.auto_refresh')}</Label>
-                  <p className="text-xs text-gray-500">{t('settings.account.auto_refresh_desc')}</p>
+                  <p className="text-muted-foreground text-xs">
+                    {t('settings.account.auto_refresh_desc')}
+                  </p>
                 </div>
                 <Switch
                   checked={config?.auto_refresh || false}
@@ -486,10 +531,12 @@ function SettingsPage() {
               </div>
 
               {/* Auto Sync Account */}
-              <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="flex items-center justify-between gap-4 py-3">
                 <div className="space-y-1">
                   <Label>{t('settings.account.auto_sync')}</Label>
-                  <p className="text-xs text-gray-500">{t('settings.account.auto_sync_desc')}</p>
+                  <p className="text-muted-foreground text-xs">
+                    {t('settings.account.auto_sync_desc')}
+                  </p>
                 </div>
                 <Switch
                   checked={config?.auto_sync || false}
@@ -596,233 +643,253 @@ function SettingsPage() {
                 </div>
               </div>
 
-              <div className="space-y-2 rounded-lg border p-4">
-                <div className="space-y-1">
-                  <Label htmlFor="antigravity-ide-executable">
-                    {t('settings.account.antigravity_ide_executable')}
-                  </Label>
-                  <p className="text-xs text-gray-500">
-                    {t('settings.account.antigravity_ide_executable_desc')}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    id="antigravity-ide-executable"
-                    value={antigravityIdeExecutable}
-                    placeholder={t('settings.account.antigravity_ide_executable_placeholder')}
-                    onChange={(event) => setAntigravityIdeExecutable(event.target.value)}
-                    onBlur={() => saveAntigravityIdeExecutable(antigravityIdeExecutable)}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={handleSelectAntigravityIdeExecutable}
-                  >
-                    <FolderOpen className="h-4 w-4" />
-                  </Button>
-                  {antigravityIdeExecutable && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => saveAntigravityIdeExecutable('')}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              </div>
+              <details className="border-t pt-4">
+                <summary className="focus-visible:ring-ring cursor-default rounded-sm text-sm font-medium focus-visible:ring-2 focus-visible:outline-none">
+                  {t('settings.account.client-setup')}
+                </summary>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  {t('settings.account.client-setup-description')}
+                </p>
+                <fieldset disabled={!serviceAvailable} className="mt-4 space-y-4">
+                  <div className="space-y-2 rounded-lg border p-4">
+                    <div className="space-y-1">
+                      <Label htmlFor="antigravity-ide-executable">
+                        {t('settings.account.antigravity_ide_executable')}
+                      </Label>
+                      <p className="text-muted-foreground text-xs">
+                        {t('settings.account.antigravity_ide_executable_desc')}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        id="antigravity-ide-executable"
+                        value={antigravityIdeExecutable}
+                        placeholder={t('settings.account.antigravity_ide_executable_placeholder')}
+                        onChange={(event) => setAntigravityIdeExecutable(event.target.value)}
+                        onBlur={() => saveAntigravityIdeExecutable(antigravityIdeExecutable)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={handleSelectAntigravityIdeExecutable}
+                        aria-label={t('settings.account.choose-file')}
+                      >
+                        <FolderOpen className="h-4 w-4" />
+                      </Button>
+                      {antigravityIdeExecutable && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => saveAntigravityIdeExecutable('')}
+                          aria-label={t('settings.account.clear-field')}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
 
-              <div className="space-y-2 rounded-lg border p-4">
-                <div className="space-y-1">
-                  <Label htmlFor="antigravity-executable">
-                    {t('settings.account.antigravity_executable')}
-                  </Label>
-                  <p className="text-xs text-gray-500">
-                    {t('settings.account.antigravity_executable_desc')}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    id="antigravity-executable"
-                    value={antigravityExecutable}
-                    placeholder={t('settings.account.antigravity_executable_placeholder')}
-                    onChange={(event) => setAntigravityExecutable(event.target.value)}
-                    onBlur={() => saveAntigravityExecutable(antigravityExecutable)}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={handleSelectAntigravityExecutable}
-                  >
-                    <FolderOpen className="h-4 w-4" />
-                  </Button>
-                  {antigravityExecutable && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => saveAntigravityExecutable('')}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              </div>
+                  <div className="space-y-2 rounded-lg border p-4">
+                    <div className="space-y-1">
+                      <Label htmlFor="antigravity-executable">
+                        {t('settings.account.antigravity_executable')}
+                      </Label>
+                      <p className="text-muted-foreground text-xs">
+                        {t('settings.account.antigravity_executable_desc')}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        id="antigravity-executable"
+                        value={antigravityExecutable}
+                        placeholder={t('settings.account.antigravity_executable_placeholder')}
+                        onChange={(event) => setAntigravityExecutable(event.target.value)}
+                        onBlur={() => saveAntigravityExecutable(antigravityExecutable)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={handleSelectAntigravityExecutable}
+                        aria-label={t('settings.account.choose-file')}
+                      >
+                        <FolderOpen className="h-4 w-4" />
+                      </Button>
+                      {antigravityExecutable && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => saveAntigravityExecutable('')}
+                          aria-label={t('settings.account.clear-field')}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
 
-              <div className="space-y-3 rounded-lg border p-4">
-                <div className="space-y-1">
-                  <Label htmlFor="antigravity-cli-executable">
-                    {t('settings.account.antigravity_cli_executable')}
-                  </Label>
-                  <p className="text-xs text-gray-500">
-                    {t('settings.account.antigravity_cli_executable_desc')}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    id="antigravity-cli-executable"
-                    value={antigravityCliExecutable}
-                    placeholder={t('settings.account.antigravity_cli_executable_placeholder')}
-                    onChange={(event) => setAntigravityCliExecutable(event.target.value)}
-                    onBlur={() => saveAntigravityCliExecutable(antigravityCliExecutable)}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={isDetectingAgy}
-                    onClick={handleDetectAntigravityCliExecutable}
-                  >
-                    {isDetectingAgy ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                    )}
-                    {t('settings.account.detect_antigravity_cli')}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={handleSelectAntigravityCliExecutable}
-                  >
-                    <FolderOpen className="h-4 w-4" />
-                  </Button>
-                  {antigravityCliExecutable && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => saveAntigravityCliExecutable('')}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                <div className="bg-muted/50 flex items-center justify-between gap-4 rounded-md p-3">
-                  <p className="text-muted-foreground text-xs">
-                    {t('settings.account.agy_patch_desc')}
-                  </p>
-                  <Button
-                    type="button"
-                    disabled={!antigravityCliExecutable.trim() || isPatchingAgy}
-                    onClick={handlePatchAgyBinary}
-                  >
-                    {isPatchingAgy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {t('settings.account.agy_patch_action')}
-                  </Button>
-                </div>
-              </div>
+                  <div className="space-y-3 rounded-lg border p-4">
+                    <div className="space-y-1">
+                      <Label htmlFor="antigravity-cli-executable">
+                        {t('settings.account.antigravity_cli_executable')}
+                      </Label>
+                      <p className="text-muted-foreground text-xs">
+                        {t('settings.account.antigravity_cli_executable_desc')}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        id="antigravity-cli-executable"
+                        value={antigravityCliExecutable}
+                        placeholder={t('settings.account.antigravity_cli_executable_placeholder')}
+                        onChange={(event) => setAntigravityCliExecutable(event.target.value)}
+                        onBlur={() => saveAntigravityCliExecutable(antigravityCliExecutable)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={isDetectingAgy}
+                        onClick={handleDetectAntigravityCliExecutable}
+                      >
+                        {isDetectingAgy ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                        )}
+                        {t('settings.account.detect_antigravity_cli')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={handleSelectAntigravityCliExecutable}
+                        aria-label={t('settings.account.choose-file')}
+                      >
+                        <FolderOpen className="h-4 w-4" />
+                      </Button>
+                      {antigravityCliExecutable && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => saveAntigravityCliExecutable('')}
+                          aria-label={t('settings.account.clear-field')}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="bg-muted/50 flex items-center justify-between gap-4 rounded-md p-3">
+                      <p className="text-muted-foreground text-xs">
+                        {t('settings.account.agy_patch_desc')}
+                      </p>
+                      <Button
+                        type="button"
+                        disabled={!antigravityCliExecutable.trim() || isPatchingAgy}
+                        onClick={handlePatchAgyBinary}
+                      >
+                        {isPatchingAgy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {t('settings.account.agy_patch_action')}
+                      </Button>
+                    </div>
+                  </div>
 
-              <div className="space-y-2 rounded-lg border p-4">
-                <div className="space-y-1">
-                  <Label htmlFor="antigravity-args">{t('settings.account.antigravity_args')}</Label>
-                  <p className="text-xs text-gray-500">
-                    {t('settings.account.antigravity_args_desc')}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    id="antigravity-args"
-                    value={antigravityArgs}
-                    placeholder={t('settings.account.antigravity_args_placeholder')}
-                    onChange={(event) => setAntigravityArgs(event.target.value)}
-                    onBlur={() => saveAntigravityArgs(antigravityArgs)}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleDetectAntigravityArgs}
-                    className="shrink-0"
-                  >
-                    {t('settings.account.detect_antigravity_args')}
-                  </Button>
-                  {antigravityArgs && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => saveAntigravityArgs('')}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              </div>
+                  <div className="space-y-2 rounded-lg border p-4">
+                    <div className="space-y-1">
+                      <Label htmlFor="antigravity-args">
+                        {t('settings.account.antigravity_args')}
+                      </Label>
+                      <p className="text-muted-foreground text-xs">
+                        {t('settings.account.antigravity_args_desc')}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        id="antigravity-args"
+                        value={antigravityArgs}
+                        placeholder={t('settings.account.antigravity_args_placeholder')}
+                        onChange={(event) => setAntigravityArgs(event.target.value)}
+                        onBlur={() => saveAntigravityArgs(antigravityArgs)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleDetectAntigravityArgs}
+                        className="shrink-0"
+                      >
+                        {t('settings.account.detect_antigravity_args')}
+                      </Button>
+                      {antigravityArgs && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => saveAntigravityArgs('')}
+                          aria-label={t('settings.account.clear-field')}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
 
-              <div className="space-y-2 rounded-lg border p-4">
-                <div className="space-y-1">
-                  <Label htmlFor="antigravity-ide-args">
-                    {t('settings.account.antigravity_ide_args')}
-                  </Label>
-                  <p className="text-xs text-gray-500">
-                    {t('settings.account.antigravity_ide_args_desc')}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    id="antigravity-ide-args"
-                    value={antigravityIdeArgs}
-                    placeholder={t('settings.account.antigravity_ide_args_placeholder')}
-                    onChange={(event) => setAntigravityIdeArgs(event.target.value)}
-                    onBlur={() => saveAntigravityIdeArgs(antigravityIdeArgs)}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleDetectAntigravityIdeArgs}
-                    className="shrink-0"
-                  >
-                    {t('settings.account.detect_antigravity_args')}
-                  </Button>
-                  {antigravityIdeArgs && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => saveAntigravityIdeArgs('')}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              </div>
+                  <div className="space-y-2 rounded-lg border p-4">
+                    <div className="space-y-1">
+                      <Label htmlFor="antigravity-ide-args">
+                        {t('settings.account.antigravity_ide_args')}
+                      </Label>
+                      <p className="text-muted-foreground text-xs">
+                        {t('settings.account.antigravity_ide_args_desc')}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        id="antigravity-ide-args"
+                        value={antigravityIdeArgs}
+                        placeholder={t('settings.account.antigravity_ide_args_placeholder')}
+                        onChange={(event) => setAntigravityIdeArgs(event.target.value)}
+                        onBlur={() => saveAntigravityIdeArgs(antigravityIdeArgs)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleDetectAntigravityIdeArgs}
+                        className="shrink-0"
+                      >
+                        {t('settings.account.detect_antigravity_args')}
+                      </Button>
+                      {antigravityIdeArgs && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => saveAntigravityIdeArgs('')}
+                          aria-label={t('settings.account.clear-field')}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </fieldset>
+              </details>
             </CardContent>
           </Card>
 
           {isAutoStartSupported && (
-            <Card>
-              <CardHeader>
+            <Card className="shadow-none">
+              <CardHeader className="p-4">
                 <CardTitle>{t('settings.startup.title')}</CardTitle>
                 <CardDescription>{t('settings.startup.description')}</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between rounded-lg border p-4">
+              <CardContent className="space-y-4 p-4 pt-0">
+                <div className="flex items-center justify-between gap-4 py-3">
                   <div className="space-y-1">
                     <Label>{t('settings.startup.auto_startup')}</Label>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-muted-foreground text-xs">
                       {t('settings.startup.auto_startup_desc')}
                     </p>
                   </div>
@@ -835,10 +902,10 @@ function SettingsPage() {
                     }}
                   />
                 </div>
-                <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className="flex items-center justify-between gap-4 py-3">
                   <div className="space-y-1">
                     <Label>{t('settings.startup.start_in_tray')}</Label>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-muted-foreground text-xs">
                       {t('settings.startup.start_in_tray_desc')}
                     </p>
                   </div>
@@ -863,12 +930,12 @@ function SettingsPage() {
 
           <AntigravityClientCacheSettings />
 
-          <Card>
-            <CardHeader>
+          <Card className="shadow-none">
+            <CardHeader className="p-4">
               <CardTitle>{t('settings.about.title')}</CardTitle>
               <CardDescription>{t('settings.about.description')}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 p-4 pt-0">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="text-muted-foreground">{t('settings.version')}</div>
                 <div className="font-medium">{appVersion || t('common.unknown')}</div>
@@ -911,16 +978,16 @@ function SettingsPage() {
           </Card>
 
           {/* Privacy & Error Reporting Card */}
-          <Card>
-            <CardHeader>
+          <Card className="shadow-none">
+            <CardHeader className="p-4">
               <CardTitle>{t('settings.privacy.title')}</CardTitle>
               <CardDescription>{t('settings.privacy.description')}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg border p-4">
+            <CardContent className="space-y-4 p-4 pt-0">
+              <div className="flex items-center justify-between gap-4 py-3">
                 <div className="space-y-1">
                   <Label>{t('settings.privacy.error_reporting')}</Label>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-muted-foreground text-xs">
                     {t('settings.privacy.error_reporting_desc')}
                   </p>
                 </div>
@@ -933,10 +1000,12 @@ function SettingsPage() {
                   }}
                 />
               </div>
-              <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="flex items-center justify-between gap-4 py-3">
                 <div className="space-y-1">
                   <Label>{t('settings.privacy.telemetry')}</Label>
-                  <p className="text-xs text-gray-500">{t('settings.privacy.telemetry_desc')}</p>
+                  <p className="text-muted-foreground text-xs">
+                    {t('settings.privacy.telemetry_desc')}
+                  </p>
                 </div>
                 <Switch
                   checked={config?.telemetry_enabled ?? true}
@@ -947,10 +1016,10 @@ function SettingsPage() {
                   }}
                 />
               </div>
-              <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="flex items-center justify-between gap-4 py-3">
                 <div className="space-y-1">
                   <Label>{t('settings.privacy.clarity')}</Label>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-muted-foreground text-xs">
                     {clarityAvailable
                       ? t('settings.privacy.clarity_desc')
                       : t('settings.privacy.clarity_unavailable')}
@@ -971,126 +1040,132 @@ function SettingsPage() {
           </Card>
 
           {/* Notifications Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('settings.notifications.title')}</CardTitle>
-              <CardDescription>{t('settings.notifications.description')}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="space-y-1">
-                  <Label>{t('settings.notifications.quotaAlert')}</Label>
-                  <p className="text-xs text-gray-500">
-                    {t('settings.notifications.quotaAlertDesc')}
-                  </p>
-                </div>
-                <Switch
-                  checked={config?.quota_alert_enabled || false}
-                  onCheckedChange={async (checked) => {
-                    if (config) {
-                      try {
-                        await saveConfig({ ...config, quota_alert_enabled: checked });
-                      } catch {
-                        toast({
-                          title: t('common.error'),
-                          description: t('settings.notifications.saveFailed'),
-                          variant: 'destructive',
-                        });
-                      }
-                    }
-                  }}
-                />
-              </div>
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="space-y-1">
-                  <Label>{t('settings.notifications.quotaThreshold')}</Label>
-                  <p className="text-xs text-gray-500">
-                    {t('settings.notifications.quotaThresholdDesc')}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CommitOnBlurNumberInput
-                    min={0}
-                    max={100}
-                    value={config?.quota_alert_threshold ?? 20}
-                    onCommit={async (rawValue) => {
-                      const parsed = parseInt(rawValue, 10);
-                      if (isNaN(parsed) || parsed < 0 || parsed > 100) return;
-
+          <fieldset disabled={!accountAlertPolicyAvailable}>
+            <Card className="shadow-none">
+              <CardHeader className="p-4">
+                <CardTitle>{t('settings.notifications.title')}</CardTitle>
+                <CardDescription>{t('settings.notifications.description')}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 p-4 pt-0">
+                <div className="flex items-center justify-between gap-4 py-3">
+                  <div className="space-y-1">
+                    <Label>{t('settings.notifications.quotaAlert')}</Label>
+                    <p className="text-muted-foreground text-xs">
+                      {t('settings.notifications.quotaAlertDesc')}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={config?.quota_alert_enabled || false}
+                    onCheckedChange={async (checked) => {
                       if (config) {
                         try {
-                          await saveConfig({ ...config, quota_alert_threshold: parsed });
-                        } catch {
+                          await saveConfig({ ...config, quota_alert_enabled: checked });
+                        } catch (error) {
                           toast({
+                            error,
                             title: t('common.error'),
-                            description: t('settings.notifications.thresholdSaveFailed'),
+                            description: t('settings.notifications.saveFailed'),
                             variant: 'destructive',
                           });
                         }
                       }
                     }}
-                    className="w-16 rounded-md border bg-transparent px-2 py-1 text-center text-sm"
                   />
-                  <span className="text-muted-foreground text-sm">%</span>
                 </div>
-              </div>
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="space-y-1">
-                  <Label>{t('settings.notifications.aiCreditsAlert')}</Label>
-                  <p className="text-xs text-gray-500">
-                    {t('settings.notifications.aiCreditsAlertDesc')}
-                  </p>
-                </div>
-                <Switch
-                  checked={config?.ai_credits_alert_enabled || false}
-                  onCheckedChange={async (checked) => {
-                    if (config) {
-                      try {
-                        await saveConfig({ ...config, ai_credits_alert_enabled: checked });
-                      } catch {
-                        toast({
-                          title: t('common.error'),
-                          description: t('settings.notifications.saveFailed'),
-                          variant: 'destructive',
-                        });
-                      }
-                    }
-                  }}
-                />
-              </div>
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="space-y-1">
-                  <Label>{t('settings.notifications.aiCreditsThreshold')}</Label>
-                  <p className="text-xs text-gray-500">
-                    {t('settings.notifications.aiCreditsThresholdDesc')}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CommitOnBlurNumberInput
-                    min={0}
-                    value={config?.ai_credits_alert_threshold ?? 5000}
-                    onCommit={async (rawValue) => {
-                      const parsed = parseInt(rawValue, 10);
-                      if (isNaN(parsed) || parsed < 0) return;
+                <div className="flex items-center justify-between gap-4 py-3">
+                  <div className="space-y-1">
+                    <Label>{t('settings.notifications.quotaThreshold')}</Label>
+                    <p className="text-muted-foreground text-xs">
+                      {t('settings.notifications.quotaThresholdDesc')}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CommitOnBlurNumberInput
+                      min={0}
+                      max={100}
+                      value={config?.quota_alert_threshold ?? 20}
+                      onCommit={async (rawValue) => {
+                        const parsed = parseInt(rawValue, 10);
+                        if (isNaN(parsed) || parsed < 0 || parsed > 100) return;
 
+                        if (config) {
+                          try {
+                            await saveConfig({ ...config, quota_alert_threshold: parsed });
+                          } catch (error) {
+                            toast({
+                              error,
+                              title: t('common.error'),
+                              description: t('settings.notifications.thresholdSaveFailed'),
+                              variant: 'destructive',
+                            });
+                          }
+                        }
+                      }}
+                      className="w-16 rounded-md border bg-transparent px-2 py-1 text-center text-sm"
+                    />
+                    <span className="text-muted-foreground text-sm">%</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-4 py-3">
+                  <div className="space-y-1">
+                    <Label>{t('settings.notifications.aiCreditsAlert')}</Label>
+                    <p className="text-muted-foreground text-xs">
+                      {t('settings.notifications.aiCreditsAlertDesc')}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={config?.ai_credits_alert_enabled || false}
+                    onCheckedChange={async (checked) => {
                       if (config) {
                         try {
-                          await saveConfig({ ...config, ai_credits_alert_threshold: parsed });
-                        } catch {
+                          await saveConfig({ ...config, ai_credits_alert_enabled: checked });
+                        } catch (error) {
                           toast({
+                            error,
                             title: t('common.error'),
-                            description: t('settings.notifications.aiCreditsThresholdSaveFailed'),
+                            description: t('settings.notifications.saveFailed'),
                             variant: 'destructive',
                           });
                         }
                       }
                     }}
-                    className="w-24 rounded-md border bg-transparent px-2 py-1 text-center text-sm"
                   />
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+                <div className="flex items-center justify-between gap-4 py-3">
+                  <div className="space-y-1">
+                    <Label>{t('settings.notifications.aiCreditsThreshold')}</Label>
+                    <p className="text-muted-foreground text-xs">
+                      {t('settings.notifications.aiCreditsThresholdDesc')}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CommitOnBlurNumberInput
+                      min={0}
+                      value={config?.ai_credits_alert_threshold ?? 5000}
+                      onCommit={async (rawValue) => {
+                        const parsed = parseInt(rawValue, 10);
+                        if (isNaN(parsed) || parsed < 0) return;
+
+                        if (config) {
+                          try {
+                            await saveConfig({ ...config, ai_credits_alert_threshold: parsed });
+                          } catch (error) {
+                            toast({
+                              error,
+                              title: t('common.error'),
+                              description: t('settings.notifications.aiCreditsThresholdSaveFailed'),
+                              variant: 'destructive',
+                            });
+                          }
+                        }
+                      }}
+                      className="w-24 rounded-md border bg-transparent px-2 py-1 text-center text-sm"
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </fieldset>
         </TabsContent>
 
         {/* --- MODELS TAB --- */}
@@ -1102,100 +1177,75 @@ function SettingsPage() {
 
         {/* --- PROXY TAB --- */}
         <TabsContent value="proxy" className="space-y-5">
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('settings.gateway.title')}</CardTitle>
-              <CardDescription>{t('settings.gateway.description')}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-2 sm:grid-cols-[1fr_180px] sm:items-center">
-                <div className="space-y-1">
-                  <Label htmlFor="settings-gateway-port">{t('settings.gateway.port')}</Label>
-                  <p className="text-muted-foreground text-xs">{t('settings.gateway.port_hint')}</p>
+          <fieldset disabled={!serviceAvailable} className="space-y-5">
+            <Card className="shadow-none">
+              <CardHeader className="p-4">
+                <CardTitle>{t('settings.gateway.title')}</CardTitle>
+                <CardDescription>{t('settings.gateway.description')}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 p-4 pt-0">
+                <div className="grid gap-2 sm:grid-cols-[1fr_180px] sm:items-center">
+                  <div className="space-y-1">
+                    <Label htmlFor="settings-gateway-port">{t('settings.gateway.port')}</Label>
+                    <p className="text-muted-foreground text-xs">
+                      {t('settings.gateway.port_hint')}
+                    </p>
+                  </div>
+                  <CommitOnBlurNumberInput
+                    id="settings-gateway-port"
+                    min={1024}
+                    max={65535}
+                    value={proxyConfig.port}
+                    onCommit={updateGatewayPort}
+                  />
                 </div>
-                <CommitOnBlurNumberInput
-                  id="settings-gateway-port"
-                  min={1024}
-                  max={65535}
-                  value={proxyConfig.port}
-                  onCommit={updateGatewayPort}
-                />
-              </div>
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="space-y-1">
-                  <Label>{t('settings.gateway.auto_start')}</Label>
-                  <p className="text-xs text-gray-500">{t('settings.gateway.auto_start_desc')}</p>
+                <div className="flex items-center justify-between gap-4 py-3">
+                  <div className="space-y-1">
+                    <Label>{t('settings.gateway.auto_start')}</Label>
+                    <p className="text-muted-foreground text-xs">
+                      {t('settings.gateway.auto_start_desc')}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={proxyConfig.auto_start}
+                    onCheckedChange={(checked) =>
+                      updateProxyConfig({ ...proxyConfig, auto_start: checked })
+                    }
+                  />
                 </div>
-                <Switch
-                  checked={proxyConfig.auto_start}
-                  onCheckedChange={(checked) =>
-                    updateProxyConfig({ ...proxyConfig, auto_start: checked })
-                  }
-                />
-              </div>
-              <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
-                <div className="space-y-1">
-                  <Label htmlFor="settings-allow-local-video-paths">
-                    {t('proxy.config.allow-local-video-paths')}
-                  </Label>
-                  <p className="text-muted-foreground text-xs">
-                    {t('proxy.config.allow-local-video-paths-desc')}
-                  </p>
+                <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="settings-allow-local-video-paths">
+                      {t('proxy.config.allow-local-video-paths')}
+                    </Label>
+                    <p className="text-muted-foreground text-xs">
+                      {t('proxy.config.allow-local-video-paths-desc')}
+                    </p>
+                  </div>
+                  <Switch
+                    id="settings-allow-local-video-paths"
+                    checked={proxyConfig.experimental.allow_local_video_paths}
+                    onCheckedChange={(checked) =>
+                      updateProxyConfig({
+                        ...proxyConfig,
+                        experimental: {
+                          ...proxyConfig.experimental,
+                          allow_local_video_paths: checked,
+                        },
+                      })
+                    }
+                  />
                 </div>
-                <Switch
-                  id="settings-allow-local-video-paths"
-                  checked={proxyConfig.experimental.allow_local_video_paths}
-                  onCheckedChange={(checked) =>
-                    updateProxyConfig({
-                      ...proxyConfig,
-                      experimental: {
-                        ...proxyConfig.experimental,
-                        allow_local_video_paths: checked,
-                      },
-                    })
-                  }
-                />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('settings.proxy.title')}</CardTitle>
-              <CardDescription>{t('settings.proxy.description')}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between space-x-2">
-                <div className="space-y-1">
-                  <Label htmlFor="upstream-proxy-enabled">{t('settings.proxy.enable')}</Label>
-                </div>
-                <Switch
-                  id="upstream-proxy-enabled"
-                  checked={proxyConfig.upstream_proxy.enabled}
-                  onCheckedChange={(checked) =>
-                    updateProxyConfig({
-                      ...proxyConfig,
-                      upstream_proxy: { ...proxyConfig.upstream_proxy, enabled: checked },
-                    })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="upstream-proxy-url">{t('settings.proxy.url')}</Label>
-                <Input
-                  id="upstream-proxy-url"
-                  placeholder="http://127.0.0.1:7890"
-                  value={proxyConfig.upstream_proxy.url}
-                  onChange={(e) =>
-                    updateProxyConfig({
-                      ...proxyConfig,
-                      upstream_proxy: { ...proxyConfig.upstream_proxy, url: e.target.value },
-                    })
-                  }
-                  disabled={!proxyConfig.upstream_proxy.enabled}
-                />
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+            <UpstreamProxySettings
+              proxy={proxyConfig}
+              available={serviceAvailable}
+              onSaved={async () => {
+                await retryService();
+              }}
+            />
+          </fieldset>
         </TabsContent>
       </Tabs>
     </div>

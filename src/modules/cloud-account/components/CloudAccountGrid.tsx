@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Cloud } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ipc } from '@/ipc/manager';
 import { Button } from '@/components/ui/button';
+import { FeedbackState } from '@/components/ui/feedback-state';
 import {
   CloudAccountCard,
   CompactCloudAccountCard,
@@ -15,20 +15,22 @@ import {
   type GridLayout,
 } from '@/modules/cloud-account/components/CloudAccountList.constants';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
-import type { CloudAccount } from '@/modules/cloud-account/types';
+import type { CloudAccountView } from '@/modules/cloud-account/services/cloud-account-view';
 import type { QuotaWindow } from '@/modules/cloud-account/utils/quota-groups';
+import type { QuotaGroupVisibility } from '@/modules/cloud-account/utils/quota-group-visibility';
 import { useFamilyGroups } from '@/modules/cloud-account/hooks/useFamilyGroups';
 import { useAppConfig } from '@/modules/config/hooks/useAppConfig';
 import type { AccountFamilyGroup } from '@/modules/cloud-account/persistence/family-group-store';
+import { useAccountSelection } from '../stores/AccountSelectionProvider';
 import type { ManualAccountRecommendation } from '@/modules/cloud-account/utils/manual-account-recommendation';
 
 interface CloudAccountGridProps {
-  accounts: CloudAccount[];
+  accounts: CloudAccountView[];
   sourceAccountCount: number;
   gridLayout: GridLayout;
   quotaWindow: QuotaWindow;
+  quotaGroupVisibility: QuotaGroupVisibility;
   manualRecommendation: ManualAccountRecommendation | null;
-  selectedIds: Set<string>;
   hasActiveTierFilter: boolean;
   refreshingAccountId?: string;
   deletingAccountId?: string;
@@ -39,22 +41,21 @@ interface CloudAccountGridProps {
   onSwitch: (id: string, appTarget?: AntigravityAppTarget) => void;
   onMarkActive?: (id: string, appTarget?: AntigravityAppTarget) => void;
   onManageIdentity: (id: string) => void;
-  onToggleSelection: (id: string, selected: boolean) => void;
   onResetTierFilter: () => void;
   onManageFamily?: (groupIdOrAccountId: string) => void;
 }
 
 type GridDisplayItem =
-  | { type: 'family'; group: AccountFamilyGroup; accounts: CloudAccount[] }
-  | { type: 'single'; account: CloudAccount };
+  | { type: 'family'; group: AccountFamilyGroup; accounts: CloudAccountView[] }
+  | { type: 'single'; account: CloudAccountView };
 
 export function CloudAccountGrid({
   accounts,
   sourceAccountCount,
   gridLayout,
   quotaWindow,
+  quotaGroupVisibility,
   manualRecommendation,
-  selectedIds,
   hasActiveTierFilter,
   refreshingAccountId,
   deletingAccountId,
@@ -65,13 +66,14 @@ export function CloudAccountGrid({
   onSwitch,
   onMarkActive,
   onManageIdentity,
-  onToggleSelection,
   onResetTierFilter,
   onManageFamily = () => {},
 }: CloudAccountGridProps) {
   const { t } = useTranslation();
   const { config } = useAppConfig();
   const { data: familyGroups = [] } = useFamilyGroups();
+  const selectedIds = useAccountSelection((state) => state.selectedIds);
+  const onToggleSelection = useAccountSelection((state) => state.setSelected);
 
   const isFamilyGrouped = config?.group_family_accounts_enabled !== false;
   const { data: modelAvailability = [] } = useQuery({
@@ -174,6 +176,7 @@ export function CloudAccountGrid({
               key={account.id}
               account={account}
               quotaWindow={quotaWindow}
+              quotaGroupVisibility={quotaGroupVisibility}
               onRefresh={onRefresh}
               onDelete={onDelete}
               onSwitch={onSwitch}
@@ -200,6 +203,7 @@ export function CloudAccountGrid({
             key={account.id}
             account={account}
             quotaWindow={quotaWindow}
+            quotaGroupVisibility={quotaGroupVisibility}
             modelAvailability={modelAvailability}
             onRefresh={onRefresh}
             onDelete={onDelete}
@@ -212,6 +216,7 @@ export function CloudAccountGrid({
             isRefreshing={refreshingAccountId === account.id}
             isDeleting={deletingAccountId === account.id}
             isSwitching={switchingAccountId === account.id}
+            switchingTarget={switchingAccountId === account.id ? switchingTarget : undefined}
             recommendationContext={
               manualRecommendation?.accountId === account.id
                 ? manualRecommendation.context
@@ -222,20 +227,25 @@ export function CloudAccountGrid({
       })}
 
       {accounts.length === 0 && hasActiveTierFilter && sourceAccountCount > 0 && (
-        <div className="text-muted-foreground bg-muted/20 col-span-full rounded-lg border border-dashed py-14 text-center">
-          <Cloud className="mx-auto mb-3 h-10 w-10 opacity-40" />
-          <div className="text-sm">{t('cloud.list.noFilteredAccounts')}</div>
-          <Button variant="outline" size="sm" className="mt-4" onClick={onResetTierFilter}>
+        <FeedbackState
+          kind="empty"
+          title={t('cloud.list.noFilteredAccounts')}
+          description={t('cloud.feedback.filtered-description')}
+          className="bg-card col-span-full rounded-lg border"
+        >
+          <Button variant="outline" size="sm" onClick={onResetTierFilter}>
             {t('cloud.tierFilter.reset')}
           </Button>
-        </div>
+        </FeedbackState>
       )}
 
       {accounts.length === 0 && (!hasActiveTierFilter || sourceAccountCount === 0) && (
-        <div className="text-muted-foreground bg-muted/20 col-span-full rounded-lg border border-dashed py-14 text-center">
-          <Cloud className="mx-auto mb-3 h-10 w-10 opacity-40" />
-          <div className="text-sm">{t('cloud.list.noAccounts')}</div>
-        </div>
+        <FeedbackState
+          kind="empty"
+          title={t('cloud.list.noAccounts')}
+          description={t('cloud.feedback.empty-description')}
+          className="bg-card col-span-full rounded-lg border"
+        />
       )}
     </div>
   );

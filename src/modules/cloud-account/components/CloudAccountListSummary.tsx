@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { Users, CircleCheck, Clock3, Gauge } from 'lucide-react';
 import {
   GLOBAL_QUOTA_BAR_COLOR_CLASS_BY_STATUS,
   GLOBAL_QUOTA_TEXT_COLOR_CLASS_BY_STATUS,
@@ -46,7 +47,7 @@ function ProviderQuotaMetric({
           </div>
         </>
       ) : (
-        <span className="text-muted-foreground/60 text-xs font-semibold tabular-nums">--</span>
+        <span className="text-muted-foreground text-xs">--</span>
       )}
     </div>
   );
@@ -65,20 +66,22 @@ function ProviderQuotaCard({
 
   return (
     <div
-      className="bg-muted/30 border-border/40 min-w-[170px] rounded-lg border px-3 py-1 shadow-sm"
+      className="bg-card flex items-center justify-between gap-3 rounded-lg border px-4 py-3"
       title={tooltipText}
     >
-      <div className="flex items-center gap-1.5 text-muted-foreground text-[9px] font-bold tracking-wider uppercase">
-        <span
-          className="h-1.5 w-1.5 rounded-full shrink-0"
-          style={{ backgroundColor: accentColor }}
-        />
-        <span className="truncate">{providerName}</span>
-      </div>
-      <div className="mt-0.5 flex items-center gap-2">
-        <ProviderQuotaMetric label="5h" quota={quota.quota5h} status={quota.status5h} />
-        <div className="bg-border/60 h-3 w-px shrink-0" />
-        <ProviderQuotaMetric label="Wk" quota={quota.quotaWeekly} status={quota.statusWeekly} />
+      <div>
+        <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+          <span
+            className="h-2 w-2 rounded-full shrink-0"
+            style={{ backgroundColor: accentColor }}
+          />
+          <dt className="truncate">{providerName}</dt>
+        </div>
+        <dd className="mt-1 flex items-center gap-2">
+          <ProviderQuotaMetric label="5h" quota={quota.quota5h} status={quota.status5h} />
+          <div className="bg-border/60 h-3 w-px shrink-0" />
+          <ProviderQuotaMetric label="Wk" quota={quota.quotaWeekly} status={quota.statusWeekly} />
+        </dd>
       </div>
     </div>
   );
@@ -101,77 +104,76 @@ export function CloudAccountListSummary({
     Boolean(claudeQuota) && (claudeQuota?.quota5h !== null || claudeQuota?.quotaWeekly !== null);
 
   return (
-    <div className="bg-card border-border/80 rounded-xl border px-4 py-2.5 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex shrink-0 flex-col">
-          <h2 className="text-foreground text-lg font-bold tracking-tight">{t('cloud.title')}</h2>
-          <p className="text-muted-foreground max-w-2xl text-xs">{t('cloud.description')}</p>
+    <header className="space-y-5">
+      <div className="flex items-start gap-3">
+        <div className="bg-info-soft text-info border-info-border flex size-11 shrink-0 items-center justify-center rounded-xl border">
+          <Users className="size-5" aria-hidden="true" />
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="bg-muted/30 border-border/40 min-w-[70px] rounded-lg border px-3 py-1">
-            <div className="text-muted-foreground text-[9px] font-bold tracking-wider uppercase">
-              {t('cloud.card.actions')}
-            </div>
-            <div className="text-sm font-bold">{totalAccounts}</div>
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <h1 className="text-foreground text-2xl font-semibold tracking-tight">
+            {t('cloud.title')}
+          </h1>
+          <p className="text-muted-foreground max-w-2xl text-sm">{t('cloud.description')}</p>
+        </div>
+      </div>
+      <dl className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <div className="bg-info-soft border-info-border flex items-center justify-between gap-3 rounded-lg border px-4 py-3">
+          <div>
+            <dt className="text-muted-foreground text-xs">{t('cloud.total-accounts')}</dt>
+            <dd className="text-foreground mt-1 text-2xl font-semibold tabular-nums">
+              {totalAccounts}
+            </dd>
           </div>
-          <div className="bg-muted/30 border-border/40 min-w-[70px] rounded-lg border px-3 py-1">
-            <div className="text-muted-foreground text-[9px] font-bold tracking-wider uppercase">
-              {t('cloud.card.active')}
-            </div>
-            <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+          <Users className="text-info size-5 shrink-0" aria-hidden="true" />
+        </div>
+        <div className="bg-success-soft border-success-border flex items-center justify-between gap-3 rounded-lg border px-4 py-3">
+          <div>
+            <dt className="text-muted-foreground text-xs">{t('cloud.card.active')}</dt>
+            <dd className="text-foreground mt-1 text-2xl font-semibold tabular-nums">
               {activeAccounts}
-            </div>
+            </dd>
           </div>
-          <div className="bg-muted/30 border-border/40 min-w-[70px] rounded-lg border px-3 py-1">
-            <div className="text-muted-foreground text-[9px] font-bold tracking-wider uppercase">
-              {t('cloud.card.rateLimited')}
-            </div>
-            <div className="text-sm font-bold text-rose-600 dark:text-rose-400">
+          <CircleCheck className="text-success size-5 shrink-0" aria-hidden="true" />
+        </div>
+        <div className="bg-warning-soft border-warning-border flex items-center justify-between gap-3 rounded-lg border px-4 py-3">
+          <div>
+            <dt className="text-muted-foreground text-xs">{t('cloud.card.rateLimited')}</dt>
+            <dd className="text-foreground mt-1 text-2xl font-semibold tabular-nums">
               {rateLimitedAccounts}
-            </div>
+            </dd>
           </div>
-
-          {/* Gemini Global Quota (5h + Weekly) */}
-          {hasGemini && geminiQuota && (
-            <ProviderQuotaCard
-              providerName="Gemini"
-              accentColor="#4285F4"
-              quota={geminiQuota}
-            />
-          )}
-
-          {/* Claude Global Quota (5h + Weekly) */}
-          {hasClaude && claudeQuota && (
-            <ProviderQuotaCard
-              providerName="Claude"
-              accentColor="#D97757"
-              quota={claudeQuota}
-            />
-          )}
-
-          {/* Fallback to legacy single overall quota bar if neither provider quota is available */}
-          {!hasGemini && !hasClaude && overallQuotaPercentage !== null && (
-            <div className="bg-muted/30 border-border/40 min-w-[130px] rounded-lg border px-3 py-1">
-              <div className="text-muted-foreground text-[9px] font-bold tracking-wider uppercase">
-                {t('cloud.globalQuota')}
-              </div>
-              <div className="mt-0.5 flex items-center gap-2">
+          <Clock3 className="text-warning size-5 shrink-0" aria-hidden="true" />
+        </div>
+        {overallQuotaPercentage !== null && (
+          <div className="bg-card flex items-center justify-between gap-3 rounded-lg border px-4 py-3">
+            <div>
+              <dt className="text-muted-foreground text-xs">{t('cloud.globalQuota')}</dt>
+              <dd className="mt-1 flex items-center gap-2.5">
                 <span
-                  className={`text-sm font-bold ${GLOBAL_QUOTA_TEXT_COLOR_CLASS_BY_STATUS[effectiveQuotaStatus]}`}
+                  className={`text-2xl font-semibold tabular-nums ${GLOBAL_QUOTA_TEXT_COLOR_CLASS_BY_STATUS[effectiveQuotaStatus]}`}
                 >
                   {overallQuotaPercentage}%
                 </span>
-                <div className="bg-muted/60 border-border/20 h-1.5 w-16 overflow-hidden rounded-full border shadow-inner">
+                <div className="bg-muted h-1.5 w-12 overflow-hidden rounded-full">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${GLOBAL_QUOTA_BAR_COLOR_CLASS_BY_STATUS[effectiveQuotaStatus]}`}
+                    className={`h-full rounded-full ${GLOBAL_QUOTA_BAR_COLOR_CLASS_BY_STATUS[effectiveQuotaStatus]}`}
                     style={{ width: `${clampQuotaPercentage(overallQuotaPercentage)}%` }}
                   />
                 </div>
-              </div>
+              </dd>
             </div>
-          )}
-        </div>
-      </div>
-    </div>
+            <Gauge className="text-muted-foreground size-5 shrink-0" aria-hidden="true" />
+          </div>
+        )}
+
+        {hasGemini && geminiQuota && (
+          <ProviderQuotaCard providerName="Gemini" accentColor="#4285F4" quota={geminiQuota} />
+        )}
+
+        {hasClaude && claudeQuota && (
+          <ProviderQuotaCard providerName="Claude" accentColor="#D97757" quota={claudeQuota} />
+        )}
+      </dl>
+    </header>
   );
 }

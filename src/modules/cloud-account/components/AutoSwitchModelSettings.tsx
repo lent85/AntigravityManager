@@ -28,9 +28,9 @@ import {
   Zap,
 } from 'lucide-react';
 import { filter, flatMap, includes, size, sortBy, uniq } from 'lodash-es';
-import type { CloudAccount } from '@/modules/cloud-account/types';
+import type { CloudAccountView } from '@/modules/cloud-account/services/cloud-account-view';
 
-function collectAvailableModelIds(accounts: CloudAccount[] | undefined): string[] {
+function collectAvailableModelIds(accounts: CloudAccountView[] | undefined): string[] {
   if (!accounts) {
     return [];
   }
@@ -53,7 +53,7 @@ function filterModelIdsByQuery(modelIds: string[], query: string): string[] {
 }
 
 interface InnerProps {
-  accounts: CloudAccount[] | undefined;
+  accounts: CloudAccountView[] | undefined;
   initialConfig: Record<string, { enabled: boolean; priority: boolean }>;
 }
 
@@ -124,10 +124,7 @@ function AutoSwitchModelSettingsInner({ accounts, initialConfig }: InnerProps) {
       });
     } catch (error) {
       console.error('Failed to save auto-switch model config:', error);
-      toast({
-        title: t('settings.autoSwitchModels.saveFailed'),
-        variant: 'destructive',
-      });
+      toast({ error, title: t('settings.autoSwitchModels.saveFailed'), variant: 'destructive' });
     }
   };
 
@@ -329,7 +326,7 @@ function AutoSwitchModelSettingsInner({ accounts, initialConfig }: InnerProps) {
                     {isEnabled && isPriority && (
                       <Badge
                         variant="default"
-                        className="bg-blue-600 text-xs text-white dark:bg-blue-700"
+                        className="bg-primary text-primary-foreground text-xs"
                       >
                         {t('settings.autoSwitchModels.priorityLabel')}
                       </Badge>

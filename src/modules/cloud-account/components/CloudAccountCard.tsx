@@ -1,4 +1,5 @@
-import { CloudAccount, CloudQuotaModelInfo } from '@/modules/cloud-account/types';
+import type { CloudQuotaModelInfo } from '@/modules/cloud-account/types';
+import type { CloudAccountView } from '@/modules/cloud-account/services/cloud-account-view';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -15,7 +16,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/shared/ui/utils';
 import { CardVerticalRefreshProgress } from '@/modules/cloud-account/components/CardVerticalRefreshProgress';
@@ -49,6 +49,7 @@ import {
   useUnlinkAccountFromFamily,
 } from '@/modules/cloud-account/hooks/useFamilyGroups';
 import { formatDistanceToNow } from 'date-fns';
+import { formatAccountLastUsed } from '@/modules/cloud-account/utils/format-last-used';
 import { Badge } from '@/components/ui/badge';
 import { useTranslation } from 'react-i18next';
 import { useAppConfig } from '@/modules/config/hooks/useAppConfig';
@@ -63,20 +64,23 @@ import {
 } from '@/modules/cloud-account/utils/quota-display';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useAccountModelAvailability } from '../hooks/useAccountModelAvailability';
 import { ipc } from '@/ipc/manager';
 import {
   useSetAccountProxy,
   useTogglePauseCloudAccount,
 } from '@/modules/cloud-account/hooks/useCloudAccounts';
 import { isValidProxyUrl } from '@/shared/utils/url';
+import { CloudAccountProxyDialog } from '@/modules/cloud-account/components/CloudAccountProxyDialog';
 import { getCloudAccountBlockedStatusLabel } from '@/modules/cloud-account/utils/accountValidationStatus';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
 import { AccountTierBadge } from '@/modules/cloud-account/components/AccountTierBadge';
-import { getVisibleQuotaModelsForPresentation } from '@/modules/cloud-account/utils/quota-model-families';
 import {
-  selectWeeklyQuotaItems,
-  type QuotaWindow,
-} from '@/modules/cloud-account/utils/quota-groups';
+  DEFAULT_QUOTA_GROUP_VISIBILITY,
+  getVisibleAccountQuota,
+  type QuotaGroupVisibility,
+} from '@/modules/cloud-account/utils/quota-group-visibility';
+import type { QuotaWindow } from '@/modules/cloud-account/utils/quota-groups';
 import { DetailedQuotaDisplay } from '@/modules/cloud-account/components/DetailedQuotaDisplay';
 import { AccountQuotaWindowSections } from '@/modules/cloud-account/components/AccountQuotaWindowSections';
 import { CompactModelQuotaDisplay } from '@/modules/cloud-account/components/CompactModelQuotaDisplay';
@@ -100,6 +104,7 @@ import {
 } from '@/modules/cloud-account/utils/identity-masking';
 import { QuotaIndicatorTooltip } from '@/modules/cloud-account/components/QuotaIndicatorTooltip';
 import { openAccountValidationLink } from '@/modules/cloud-account/actions/cloud';
+import { useOpenAccountValidationLink } from '@/modules/cloud-account/hooks/useOpenAccountValidationLink';
 
 type ModelQuotaEntry = [string, CloudQuotaModelInfo];
 type LiveModelAvailability = Awaited<
@@ -259,8 +264,9 @@ function findModelAvailability(
 }
 
 interface CloudAccountCardProps {
-  account: CloudAccount;
+  account: CloudAccountView;
   quotaWindow?: QuotaWindow;
+  quotaGroupVisibility?: QuotaGroupVisibility;
   modelAvailability?: LiveModelAvailability[];
   onRefresh: (id: string) => void;
   onDelete: (id: string) => void;
@@ -273,12 +279,14 @@ interface CloudAccountCardProps {
   isRefreshing?: boolean;
   isDeleting?: boolean;
   isSwitching?: boolean;
+  switchingTarget?: AntigravityAppTarget;
   recommendationContext?: ManualRecommendationContext;
 }
 
 export function CloudAccountCard({
   account,
   quotaWindow = 'both',
+  quotaGroupVisibility = DEFAULT_QUOTA_GROUP_VISIBILITY,
   modelAvailability: modelAvailabilityProp,
   onRefresh,
   onDelete,
@@ -291,9 +299,11 @@ export function CloudAccountCard({
   isRefreshing,
   isDeleting,
   isSwitching,
+  switchingTarget,
   recommendationContext,
 }: CloudAccountCardProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const validationLink = useOpenAccountValidationLink();
   const { config, saveConfig } = useAppConfig();
   const { data: familyGroups = [] } = useFamilyGroups();
   const unlinkMutation = useUnlinkAccountFromFamily();
@@ -310,7 +320,6 @@ export function CloudAccountCard({
     isProviderCollapsed,
     toggleProviderCollapse,
   } = useProviderGrouping();
-  const setAccountProxy = useSetAccountProxy();
   const togglePauseMutation = useTogglePauseCloudAccount();
   const isPaused = account.status === 'paused';
   const handleTogglePause = () => {
@@ -319,16 +328,9 @@ export function CloudAccountCard({
       paused: !isPaused,
     });
   };
-  const [proxyUrl, setProxyUrl] = useState(account.proxy_url || '');
-  const [proxySaved, setProxySaved] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const { data: fallbackModelAvailability = [] } = useQuery({
-    queryKey: ['gateway', 'modelAvailability'],
-    queryFn: () => ipc.client.gateway.modelAvailability(),
-    refetchInterval: 15_000,
-    enabled: modelAvailabilityProp === undefined,
-  });
-  const modelAvailability = modelAvailabilityProp ?? fallbackModelAvailability;
+  const hookModelAvailability = useAccountModelAvailability(account.id);
+  const modelAvailability = modelAvailabilityProp ?? hookModelAvailability;
   const isActiveAnywhere = !!(
     account.is_active_classic ||
     account.is_active_ide ||
@@ -369,10 +371,14 @@ export function CloudAccountCard({
 
   const allModelEntries = Object.entries(account.quota?.models || {}) as ModelQuotaEntry[];
 
-  const mergedModelQuotas = getVisibleQuotaModelsForPresentation(
-    account.quota?.models || {},
-    config?.model_visibility || {},
-  );
+  const {
+    models: mergedModelQuotas,
+    providerModels,
+    groups: detailedGroups,
+    weeklyItems: weeklyQuotaItems,
+    fiveHourHidden,
+    weeklyHidden,
+  } = getVisibleAccountQuota(account.quota, config?.model_visibility ?? {}, quotaGroupVisibility);
 
   const groupedModelQuotas = useMemo(
     () =>
@@ -383,8 +389,6 @@ export function CloudAccountCard({
   );
 
   const hasVisibleQuotaModels = groupedModelQuotas.length > 0;
-  const weeklyQuotaItems = selectWeeklyQuotaItems(account.quota?.quota_groups);
-  const detailedGroups = account.quota?.quota_groups ?? [];
   const hasDetailedQuota = detailedGroups.some((group) =>
     group.buckets.some((bucket) => !isWeeklyQuotaBucket(bucket)),
   );
@@ -574,7 +578,12 @@ export function CloudAccountCard({
     </div>
   );
 
-  const providerStats = providerGroupingsEnabled ? getAccountStats(account) : null;
+  const providerStats = providerGroupingsEnabled
+    ? getAccountStats({
+        ...account,
+        quota: account.quota ? { ...account.quota, models: providerModels } : undefined,
+      })
+    : null;
   const providerGroupedQuotaSection =
     providerStats && providerStats.visibleModels > 0 ? (
       <>
@@ -640,6 +649,7 @@ export function CloudAccountCard({
           >
             <Checkbox
               checked={isSelected}
+              aria-label={account.email}
               onCheckedChange={(checked) => onToggleSelection(account.id, checked as boolean)}
               className="h-4 w-4 border-2 cursor-pointer"
             />
@@ -736,12 +746,13 @@ export function CloudAccountCard({
                 {validationBlockedStatusLabel}
               </span>
             )}
-            {account.health?.validation?.verification_url && (
+            {account.health?.validation?.has_verification_link && (
               <Button
                 variant="destructive"
                 size="sm"
                 className="h-6 gap-1 px-2 text-[10px]"
-                onClick={() => openAccountValidationLink({ accountId: account.id })}
+                disabled={validationLink.isPending}
+                onClick={() => validationLink.open(account.id)}
               >
                 <ExternalLink className="h-3 w-3" />
                 {t('cloud.card.completeValidation')}
@@ -1007,6 +1018,8 @@ export function CloudAccountCard({
           <AccountQuotaWindowSections
             quotaWindow={quotaWindow}
             weeklyItems={weeklyQuotaItems}
+            fiveHourHidden={fiveHourHidden}
+            weeklyHidden={weeklyHidden}
             hasQuotaSummary={account.quota?.quota_groups !== undefined}
             fiveHourContent={
               <>
@@ -1029,22 +1042,19 @@ export function CloudAccountCard({
         </div>
       </CardContent>
 
-      <CardFooter className="bg-muted/10 relative mt-auto flex h-11 shrink-0 items-center justify-between overflow-hidden border-t p-2 px-4">
-        {/* Idle State / Used Time Indicator */}
-        <div className="flex w-full items-center justify-between transition-all duration-300 group-hover:pointer-events-none group-hover:opacity-0">
+      <CardFooter className="bg-muted/10 mt-auto flex h-11 shrink-0 items-center justify-between gap-3 overflow-hidden border-t p-2 px-4">
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
           <span className="text-muted-foreground truncate text-[11px]">
-            {t('cloud.card.used')}{' '}
-            {formatDistanceToNow(account.last_used * 1000, { addSuffix: true })}
+            {t('cloud.card.used')} {formatAccountLastUsed(account.last_used, i18n.language)}
           </span>
-          {account.proxy_url && (
+          {account.proxy_configured && (
             <span className="text-primary bg-primary/10 border-primary/20 origin-right scale-90 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold">
               Proxy
             </span>
           )}
         </div>
 
-        {/* Hover State Container (fades in, fixed h-11) */}
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-between gap-3 p-2 px-4 opacity-0 transition-all duration-300 ease-in-out group-hover:pointer-events-auto group-hover:opacity-100">
+        <div className="flex shrink-0 items-center gap-2">
           {/* Action Icons group with Tooltips */}
           <div className="flex shrink-0 items-center gap-1">
             <TooltipProvider>
@@ -1187,6 +1197,7 @@ export function CloudAccountCard({
                     size="icon"
                     className="hover:bg-accent border-border/50 h-7 w-7 cursor-pointer rounded-md"
                     onClick={() => onRefresh(account.id)}
+                    aria-label={t('cloud.card.refresh')}
                     disabled={isRefreshing}
                   >
                     <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
@@ -1229,6 +1240,7 @@ export function CloudAccountCard({
                     size="icon"
                     className="hover:bg-accent border-border/50 h-7 w-7 cursor-pointer rounded-md"
                     onClick={() => onManageIdentity(account.id)}
+                    aria-label={t('cloud.card.identityProfile')}
                   >
                     <Fingerprint className="h-3.5 w-3.5" />
                   </Button>
@@ -1287,6 +1299,7 @@ export function CloudAccountCard({
                     size="icon"
                     className="text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 border-border/50 h-7 w-7 cursor-pointer rounded-md"
                     onClick={() => onDelete(account.id)}
+                    aria-label={t('cloud.card.delete')}
                     disabled={isDeleting}
                   >
                     <Trash className="h-3.5 w-3.5" />
@@ -1297,43 +1310,7 @@ export function CloudAccountCard({
             </TooltipProvider>
           </div>
 
-          {/* Proxy Setting Input */}
-          <div className="relative min-w-0 flex-1">
-            <Input
-              value={proxyUrl}
-              onChange={(e) => {
-                setProxyUrl(e.target.value);
-                setProxySaved(false);
-              }}
-              onBlur={() => {
-                const trimmed = proxyUrl.trim();
-                if (trimmed && !isValidProxyUrl(trimmed)) {
-                  setProxyUrl(account.proxy_url || '');
-                  return;
-                }
-                if (trimmed !== (account.proxy_url || '')) {
-                  setAccountProxy.mutate({
-                    accountId: account.id,
-                    proxyUrl: trimmed || null,
-                  });
-                  setProxySaved(true);
-                  setTimeout(() => setProxySaved(false), 2000);
-                }
-              }}
-              placeholder={t('cloud.card.proxyPlaceholder')}
-              className="bg-muted/20 border-border/40 focus-visible:bg-background focus-visible:ring-primary/30 h-7 w-full rounded-md text-[11px] transition-all focus-visible:ring-1"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.currentTarget.blur();
-                }
-              }}
-            />
-            {proxySaved && (
-              <span className="bg-background absolute top-1/2 right-2 -translate-y-1/2 rounded px-1 text-[9px] font-semibold text-green-500">
-                {t('cloud.card.proxySaved')}
-              </span>
-            )}
-          </div>
+          <CloudAccountProxyDialog accountId={account.id} configured={account.proxy_configured} />
         </div>
       </CardFooter>
     </Card>
@@ -1341,8 +1318,9 @@ export function CloudAccountCard({
 }
 
 interface CompactCloudAccountCardProps {
-  account: CloudAccount;
+  account: CloudAccountView;
   quotaWindow?: QuotaWindow;
+  quotaGroupVisibility?: QuotaGroupVisibility;
   onRefresh: (id: string) => void;
   onDelete: (id: string) => void;
   onSwitch: (id: string, appTarget?: AntigravityAppTarget) => void;
@@ -1361,6 +1339,7 @@ interface CompactCloudAccountCardProps {
 export function CompactCloudAccountCard({
   account,
   quotaWindow = 'both',
+  quotaGroupVisibility = DEFAULT_QUOTA_GROUP_VISIBILITY,
   onRefresh,
   onDelete,
   onSwitch,
@@ -1375,6 +1354,7 @@ export function CompactCloudAccountCard({
   recommendationContext,
 }: CompactCloudAccountCardProps) {
   const { t } = useTranslation();
+  const validationLink = useOpenAccountValidationLink();
   const { config } = useAppConfig();
   const { data: familyGroups = [] } = useFamilyGroups();
   const unlinkMutation = useUnlinkAccountFromFamily();
@@ -1400,44 +1380,26 @@ export function CompactCloudAccountCard({
     account.is_active_agy
   );
 
+  const {
+    models: mergedModelQuotas,
+    weeklyItems: weeklyQuotaItems,
+    fiveHourHidden,
+    weeklyHidden,
+  } = getVisibleAccountQuota(account.quota, config?.model_visibility ?? {}, quotaGroupVisibility);
 
-  const mergedModelQuotas = getVisibleQuotaModelsForPresentation(
-    account.quota?.models || {},
-    config?.model_visibility || {},
-  );
-
-  const compactModels = Object.entries(mergedModelQuotas).sort(
-    (a, b) => b[1].percentage - a[1].percentage,
-  );
-  const compactQuotaItems = compactModels.map(([modelName, info]) => ({
-    id: modelName,
-    label: formatModelDisplayName(modelName),
-    percentage: info.percentage,
-  }));
-  const weeklyQuotaItems = selectWeeklyQuotaItems(account.quota?.quota_groups);
+  const compactQuotaItems = Object.entries(mergedModelQuotas)
+    .sort((a, b) => b[1].percentage - a[1].percentage)
+    .map(([modelName, info]) => ({
+      id: modelName,
+      label: formatModelDisplayName(modelName),
+      percentage: info.percentage,
+    }));
 
   const aiCredits = account.quota?.ai_credits;
   const shouldShowAiCredits =
     !!aiCredits && Number.isFinite(aiCredits.credits) && aiCredits.credits >= 0;
 
   const validationBlockedStatusLabel = getCloudAccountBlockedStatusLabel(account, t);
-  const gemini5hModels = compactModels.filter(([name]) => !name.toLowerCase().includes('claude'));
-  const claude5hModels = compactModels.filter(([name]) => name.toLowerCase().includes('claude'));
-
-  const geminiWeeklyItems = weeklyQuotaItems.filter(
-    (item) => !item.groupName.toLowerCase().includes('claude'),
-  );
-  const claudeWeeklyItems = weeklyQuotaItems.filter((item) =>
-    item.groupName.toLowerCase().includes('claude'),
-  );
-
-  const shouldBreakClaude5h =
-    claude5hModels.length > 0 &&
-    (gemini5hModels.length > 2 || gemini5hModels.length + claude5hModels.length > 4);
-
-  const shouldBreakClaudeWeekly =
-    claudeWeeklyItems.length > 0 &&
-    (geminiWeeklyItems.length > 2 || geminiWeeklyItems.length + claudeWeeklyItems.length > 4);
 
   return (
     <div
@@ -1543,7 +1505,7 @@ export function CompactCloudAccountCard({
             </span>
           )}
           {account.is_active_ide && (
-            <span className="rounded border border-indigo-500/20 bg-indigo-500/10 px-1 text-[9px] font-bold text-indigo-600 dark:text-indigo-400">
+            <span className="border-success-border bg-success-soft text-success rounded border px-1 text-[9px] font-bold">
               IDE
             </span>
           )}
@@ -1567,11 +1529,12 @@ export function CompactCloudAccountCard({
               {validationBlockedStatusLabel}
             </span>
           )}
-          {account.health?.validation?.verification_url && (
+          {account.health?.validation?.has_verification_link && (
             <button
               type="button"
               className="text-destructive inline-flex shrink-0 items-center gap-1 text-xs font-semibold"
-              onClick={() => openAccountValidationLink({ accountId: account.id })}
+              disabled={validationLink.isPending}
+              onClick={() => validationLink.open(account.id)}
             >
               <ExternalLink className="h-3 w-3" />
               {t('cloud.card.completeValidation')}
@@ -1599,6 +1562,8 @@ export function CompactCloudAccountCard({
         <AccountQuotaWindowSections
           quotaWindow={quotaWindow}
           weeklyItems={weeklyQuotaItems}
+          fiveHourHidden={fiveHourHidden}
+          weeklyHidden={weeklyHidden}
           hasQuotaSummary={account.quota?.quota_groups !== undefined}
           variant="compact"
           fiveHourContent={<CompactModelQuotaDisplay items={compactQuotaItems} />}
