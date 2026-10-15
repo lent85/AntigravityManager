@@ -1,7 +1,6 @@
 import { Clock3, CalendarDays, AlertTriangle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Badge } from '@/components/ui/badge';
 import {
   clampQuotaPercentage,
   formatModelDisplayName,
@@ -51,6 +50,9 @@ export function QuotaIndicatorTooltip({
   const { t } = useTranslation();
   const clamped = clampQuotaPercentage(percentage);
   const title = displayName || formatModelDisplayName(name);
+  const cleanModelId = name.replace(/^models\//i, '').trim();
+  const showModelId = cleanModelId.toLowerCase() !== title.toLowerCase();
+
   const genKey = detectModelGeneration(name, displayName);
   const genMeta = MODEL_GENERATION_METAS[genKey];
   const barColorClass = getModelQuotaBarColorClass(name, percentage, displayName);
@@ -99,38 +101,37 @@ export function QuotaIndicatorTooltip({
         <TooltipContent
           side="top"
           align="center"
-          className="bg-popover text-popover-foreground w-60 rounded-lg border p-2.5 shadow-lg"
+          className="bg-popover text-popover-foreground w-64 rounded-lg border p-3 shadow-lg space-y-2.5"
         >
-          {/* Header: Title & Period Badge */}
+          {/* Header: Full Model Name (never truncated) + Generation Category Badge */}
           <div className="flex items-start justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-1.5">
-              {genMeta && (
-                <span
-                  className={cn(
-                    'rounded border px-1 py-0 text-[9px] font-bold shrink-0',
-                    genMeta.badgeClass,
-                  )}
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-semibold leading-snug text-foreground break-words">
+                {title}
+              </div>
+              {showModelId && (
+                <div
+                  className="font-mono text-[9px] text-muted-foreground/75 truncate mt-0.5"
+                  title={cleanModelId}
                 >
-                  {genMeta.badgeLabel}
-                </span>
+                  {cleanModelId}
+                </div>
               )}
-              <span className="truncate text-xs font-semibold text-foreground">{title}</span>
             </div>
-            <Badge
-              variant="outline"
-              className="flex shrink-0 items-center gap-1 px-1.5 py-0 text-[9px] font-medium"
-            >
-              {periodType === 'weekly' ? (
-                <CalendarDays className="h-2.5 w-2.5 opacity-70" />
-              ) : (
-                <Clock3 className="h-2.5 w-2.5 opacity-70" />
-              )}
-              <span>{defaultPeriodLabel}</span>
-            </Badge>
+            {genMeta && (
+              <span
+                className={cn(
+                  'rounded border px-1.5 py-0.5 text-[9px] font-bold shrink-0 tracking-tight',
+                  genMeta.badgeClass,
+                )}
+              >
+                {genMeta.badgeLabel}
+              </span>
+            )}
           </div>
 
           {/* Percentage and Mini Bar */}
-          <div className="mt-2 space-y-1">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground text-[11px]">
                 {t('cloud.card.quotaStatus', 'Quota Remaining')}
@@ -147,25 +148,34 @@ export function QuotaIndicatorTooltip({
             </div>
           </div>
 
-          {/* Reset / Countdown Information */}
-          {resetTime && (
-            <div className="mt-2 flex items-center justify-between border-t pt-1.5 text-[10px]">
-              <span className="text-muted-foreground flex items-center gap-1">
-                <Clock3 className="h-3 w-3 opacity-60" />
-                <span>{t('cloud.card.resetPrefix', 'Resets in')}:</span>
-              </span>
-              <span
-                className="font-mono font-medium text-foreground"
+          {/* Footer: Quota Window & Reset Countdown (unified, no duplicated 5h badges) */}
+          <div className="flex items-center justify-between border-t border-border/50 pt-2 text-[10px] text-muted-foreground">
+            <div className="flex items-center gap-1 font-medium">
+              {periodType === 'weekly' ? (
+                <CalendarDays className="h-3 w-3 opacity-70" />
+              ) : (
+                <Clock3 className="h-3 w-3 opacity-70" />
+              )}
+              <span>{defaultPeriodLabel}</span>
+            </div>
+
+            {resetTime ? (
+              <div
+                className="font-mono font-medium text-foreground flex items-center gap-1"
                 title={formattedResetTitle}
               >
-                {formattedResetLabel.replace(/^[^:]*:\s*/, '')}
+                <span>{formattedResetLabel.replace(/^[^:]*:\s*/, '')}</span>
+              </div>
+            ) : (
+              <span className="text-[9px] italic opacity-60">
+                100%
               </span>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Live limit notice if available */}
           {liveLimitStatus && (
-            <div className="mt-2 flex items-start gap-1.5 rounded bg-amber-500/10 p-1.5 text-[10px] text-amber-700 dark:text-amber-300">
+            <div className="flex items-start gap-1.5 rounded bg-amber-500/10 p-1.5 text-[10px] text-amber-700 dark:text-amber-300">
               <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
               <div className="min-w-0">
                 <div className="font-semibold">

@@ -42,7 +42,7 @@ export const MODEL_GENERATION_METAS: Record<ModelGenerationKey, ModelGenerationM
   'gemini-4.0': {
     key: 'gemini-4.0',
     label: 'Gemini 4.0',
-    badgeLabel: 'Gemini 4.0',
+    badgeLabel: '4.0',
     badgeClass: 'border-purple-500/40 bg-purple-500/15 text-purple-600 dark:text-purple-300',
     headerBorderClass: 'border-purple-500/30',
     sortOrder: 1,
@@ -50,7 +50,7 @@ export const MODEL_GENERATION_METAS: Record<ModelGenerationKey, ModelGenerationM
   'gemini-3.8': {
     key: 'gemini-3.8',
     label: 'Gemini 3.8',
-    badgeLabel: 'Gemini 3.8',
+    badgeLabel: '3.8',
     badgeClass: 'border-blue-500/40 bg-blue-500/15 text-blue-600 dark:text-blue-300',
     headerBorderClass: 'border-blue-500/30',
     sortOrder: 2,
@@ -58,7 +58,7 @@ export const MODEL_GENERATION_METAS: Record<ModelGenerationKey, ModelGenerationM
   'gemini-3.7': {
     key: 'gemini-3.7',
     label: 'Gemini 3.7',
-    badgeLabel: 'Gemini 3.7',
+    badgeLabel: '3.7',
     badgeClass: 'border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300',
     headerBorderClass: 'border-emerald-500/30',
     sortOrder: 3,
@@ -66,7 +66,7 @@ export const MODEL_GENERATION_METAS: Record<ModelGenerationKey, ModelGenerationM
   'gemini-3.6': {
     key: 'gemini-3.6',
     label: 'Gemini 3.6',
-    badgeLabel: 'Gemini 3.6',
+    badgeLabel: '3.6',
     badgeClass: 'border-cyan-500/40 bg-cyan-500/15 text-cyan-600 dark:text-cyan-300',
     headerBorderClass: 'border-cyan-500/30',
     sortOrder: 4,
@@ -74,7 +74,7 @@ export const MODEL_GENERATION_METAS: Record<ModelGenerationKey, ModelGenerationM
   'gemini-3.1-pro': {
     key: 'gemini-3.1-pro',
     label: 'Gemini 3.1 Pro',
-    badgeLabel: 'Gemini Pro',
+    badgeLabel: 'Pro',
     badgeClass: 'border-indigo-500/40 bg-indigo-500/15 text-indigo-600 dark:text-indigo-300',
     headerBorderClass: 'border-indigo-500/30',
     sortOrder: 5,
@@ -82,7 +82,7 @@ export const MODEL_GENERATION_METAS: Record<ModelGenerationKey, ModelGenerationM
   'gemini-3.5-flash': {
     key: 'gemini-3.5-flash',
     label: 'Gemini 3.5 & Flash',
-    badgeLabel: 'Gemini Flash',
+    badgeLabel: 'Flash',
     badgeClass: 'border-sky-500/40 bg-sky-500/15 text-sky-600 dark:text-sky-300',
     headerBorderClass: 'border-sky-500/30',
     sortOrder: 6,
@@ -98,7 +98,7 @@ export const MODEL_GENERATION_METAS: Record<ModelGenerationKey, ModelGenerationM
   'gemini-image': {
     key: 'gemini-image',
     label: 'Gemini Image',
-    badgeLabel: 'Gemini Image',
+    badgeLabel: 'Image',
     badgeClass: 'border-pink-500/40 bg-pink-500/15 text-pink-600 dark:text-pink-300',
     headerBorderClass: 'border-pink-500/30',
     sortOrder: 8,
