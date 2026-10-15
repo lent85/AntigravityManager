@@ -30,6 +30,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { ipc } from '@/ipc/manager';
 import { getLocalizedErrorMessage } from '@/shared/utils/errorMessages';
+import { readFinalizedOperationDiagnostic } from '@/shared/observability/operationDiagnostic';
 import { useAppConfig } from '@/modules/config/hooks/useAppConfig';
 import { isNumber } from 'lodash-es';
 import {
@@ -58,6 +59,10 @@ import {
   saveQuotaWindowPreference,
 } from '@/modules/cloud-account/utils/quota-window-preference';
 import { getSelectedVisibleAccountIds } from '../stores/account-selection';
+import {
+  readMinimalModePreference,
+  saveMinimalModePreference,
+} from '@/modules/cloud-account/utils/minimal-mode-preference';
 
 export function CloudAccountList() {
   return (
@@ -110,6 +115,13 @@ function CloudAccountListContent() {
   useEffect(() => {
     saveQuotaGroupVisibility(() => window.localStorage, quotaGroupVisibility);
   }, [quotaGroupVisibility]);
+
+  const [isMinimalMode, setIsMinimalMode] = useState<boolean>(() =>
+    readMinimalModePreference(() => window.localStorage),
+  );
+  useEffect(() => {
+    saveMinimalModePreference(() => window.localStorage, isMinimalMode);
+  }, [isMinimalMode]);
 
   const updateGridLayout = async (layout: GridLayout) => {
     if (config) {
@@ -337,7 +349,9 @@ function CloudAccountListContent() {
           toast({
             error: err,
             title: t('cloud.toast.switchFailed'),
-            description: t(`cloud.toast.switchFailureCodes.${switchCode}`),
+            description: readFinalizedOperationDiagnostic(err)
+              ? getLocalizedErrorMessage(err, t)
+              : t(`cloud.toast.switchFailureCodes.${switchCode}`),
             variant: 'destructive',
           });
         },
@@ -523,6 +537,7 @@ function CloudAccountListContent() {
           }
         }}
         onOpenFamilyDialog={() => handleOpenFamilyDialog()}
+        isMinimalMode={isMinimalMode}
         getTierOptionLabel={getTierOptionLabel}
         onToggleAutoSwitch={handleToggleAutoSwitch}
         onForcePoll={handleForcePoll}
@@ -540,6 +555,7 @@ function CloudAccountListContent() {
         }}
         onQuotaWindowChange={setQuotaWindow}
         onQuotaGroupVisibilityChange={setQuotaGroupVisibility}
+        onToggleMinimalMode={setIsMinimalMode}
       />
 
       <CloudAccountGrid
@@ -548,6 +564,7 @@ function CloudAccountListContent() {
         gridLayout={gridLayout}
         quotaWindow={quotaWindow}
         quotaGroupVisibility={quotaGroupVisibility}
+        isMinimalMode={isMinimalMode}
         manualRecommendation={manualRecommendation}
         hasActiveTierFilter={hasActiveTierFilter}
         refreshingAccountId={refreshingAccountId}

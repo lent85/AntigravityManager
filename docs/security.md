@@ -2,6 +2,8 @@
 
 This document defines the security-sensitive boundaries that repository changes must preserve. Read it before changing preload exposure, IPC, credentials, logging, persistence, proxy authentication, updates or external process execution.
 
+For partial writes, uncertain outcomes and failed recovery, follow [failure ownership](error-handling.md). The affected feature remains responsible for establishing safe state; diagnostics alone do not establish recovery.
+
 ## Schema diagnostics and Node reporting
 
 Schema diagnostic logs contain fixed issue categories, protocol, recovery flags, ordinal tool
@@ -32,6 +34,49 @@ The replay command reads the audit database without migrations or repairs. Priva
 stays in memory, while output contains aggregate counters. Audit sanitization may change a Schema
 named `password` or `access_token`; modified data cannot establish an original production defect.
 
+## Correlated operation reports
+
+Google-login and cloud-switch public diagnostics are strict closed variants limited to 2 KiB
+of UTF-8 JSON. They contain a random operation UUID, stage/category, observed allowlisted native
+or upstream codes, optional HTTP status and an SDK reporting receipt. Rejected Google HTTP
+responses can also retain the native Node route (HTTPS CONNECT/forward proxy/origin/unknown), literal destination
+class (loopback/non-loopback/unknown), TLS/plain/unknown transport and response media class.
+The CONNECT destination describes the proxy host; a hostname has unknown destination class; no DNS or response origin is inferred. These closed
+observations do not prove which intermediary generated a response. Addresses, proxy URLs,
+headers and response bodies are excluded. Login tracks persistence
+as not attempted, confirmed or uncertain. Switch readback retains Boolean matches, never stored
+or expected credentials. At most four classified causes survive; raw causes stay in the owner.
+The UUID is a support reference, not a capability or account identifier.
+
+The logger serializes only fully validated terminal diagnostics without generic token-key masking,
+so safe readback booleans and repeated cause evidence retain their exact types. Other log arguments
+still use generic sanitization, which masks secrets and replaces actual ancestor cycles while
+preserving repeated sanitized sibling values.
+
+Operation SDK capture requires the existing reporting consent and DSN. `captured` means only
+that capture returned an event ID; it does not establish delivery or storage. Disabled,
+unconfigured, unavailable and expected outcomes retain local references. Dispatch throws do
+not fail or retry business execution. Cancellation, authorization denial and duplicate-account
+outcomes are not unexpected-error events. Ordinary forwarding of a finalized diagnostic does
+not capture it again. A lost private response can still produce a distinct coordinator-side
+transport report for an uncertain remote outcome.
+
+Each capture uses a temporary SDK scope and a synthetic classified exception. The operation
+projection replaces the normalized event with allowlisted content: up to twelve safe step
+observations, at most four allowlisted repository source coordinates, closed OS/runtime metadata,
+release/environment and non-identifying trace IDs. Diagnostic contexts remain below 16 KiB;
+overflow drops observations while preserving the primary failure. User data, request data,
+surrounding log prose, automatic breadcrumbs, arbitrary extras and absolute paths are excluded.
+The empty geo override prevents IP-derived user geography. Safe repository coordinates are
+optional when the runtime stack lacks a recognized source suffix; no synthetic caller stack is
+sent to public IPC. The owner tag is `operation_runtime`, since Sentry can derive and replace
+the reserved `runtime` tag from runtime context. UUIDs/event IDs do not enter fingerprints.
+
+The SDK capture does not wait for HTTP or flush. Event receipt is established separately by
+a read-only Sentry query; no Sentry read token is shipped or exposed through IPC. Existing
+account storage, native credential effects, retries and owner lifecycle remain authoritative.
+Diagnostics add no durable queue, account scan, automatic OAuth replay or switch retry.
+
 ## Trust model
 
 - Electron main, preload and renderer are separate trust zones.
@@ -61,10 +106,11 @@ failure preserves the copied report and provides the form URL for manual continu
 Notification callers pass the caught exception to the renderer's toast boundary, which immediately
 extracts the available stack and diagnostic fields and applies the existing redactor. Notification
 state retains this text snapshot, never the raw exception or arbitrary provider/account properties.
-Cloud-account switch errors retain only their validated closed switch category across the public IPC
-boundary and expose the same value as a generic diagnostic code in copied bug-report details.
+Google-login and cloud-switch errors retain their validated feature category and
+[correlated diagnostic](#correlated-operation-reports) across public IPC. These details use the
+safe summary instead of raw backend or renderer transport stacks.
 The details dialog renders that same snapshot as selectable plain text and remains closable during
-report preparation. Public IPC sanitization stays unchanged; a backend stack removed by its owner
+report preparation. A backend stack removed by its owner
 cannot be reconstructed from the renderer's transport stack. Missing exceptions use the available
 notification text without creating a synthetic stack. Viewing details does not copy or send a report.
 
@@ -79,7 +125,9 @@ Missing sources and truncation appear in both preview and attachment.
 Uncertain records lose their entire free-text content, including prompts, tool arguments,
 request/response bodies, stacks, identities, paths and credentials. Only timestamps, levels,
 closed error codes, bounded HTTP statuses/timing/retry fields and specific Boolean diagnostics
-survive. A small set of exact fixed diagnostic messages can survive unchanged. Removed records
+survive. Versioned `Operation diagnostic v1` and `Operation step v1` records also retain their
+validated closed fields and UUID; unknown fields and continuations invalidate the complete record.
+A UUID in an arbitrary message does not authorize its contents. A small set of exact fixed diagnostic messages can survive unchanged. Removed records
 are marked `Content removed`; arbitrary message prefixes, nested objects and string values are
 never preserved. This intentionally favors privacy over completeness.
 
@@ -218,6 +266,33 @@ The renderer receives only a stable failure category, never the provider or stor
 shutdown drains admitted switches before releasing persistence. Desktop shutdown rejects new
 switches and waits for admitted work within its bounded forced-exit window; a switch exceeding
 that window can be interrupted by process exit and must be retried after restart.
+
+On macOS, official-client credential reads and writes invoke `security` through PATH with
+the `gemini` service and `antigravity` account. Installation attempts deletion first, then
+creation with the complete `go-keyring-base64:` value after `-w` and `-A` last. The encoded
+payload contains a nested token and optional root-level ID token. There is no update-in-place,
+existence probe or subprocess deadline. The value is briefly visible to processes permitted
+to inspect command arguments. Command failures discard the original subprocess error and
+sanitize native stderr; credential values are never logged. `-A` permits application access
+without a per-application access list. Deletion followed by failed creation can remove the
+previous item; this installation path is an explicit exception to migration preservation below.
+
+Successful creation mirrors the CLI token, flat OAuth token and active Google account files
+under `.gemini`. Writes are direct; POSIX permission changes to `0600` are best effort.
+CLI mirror failure is nonfatal, OAuth mirror failure stops the remaining mirror writes, and
+the account file replaces its old-account list with an empty list. Classic installation has
+no readback gate. Agy verifies only the system item's refresh token, with no file fallback
+for confirmation. Ordinary reads can fall back to CLI then OAuth files on a failed Keychain
+lookup; malformed successful output and process execution errors do not fall back.
+
+Mac client SQLite injection uses the shared `ItemTable` Drizzle schema, a best-effort
+`.backup` copy and sequential upserts and deletions,
+without transaction rollback or full-field readback. Native installation failure can fall
+back to an existing client database and remain nonfatal even if that injection fails.
+Identity-profile updates and optional service-machine-ID writes are also best effort.
+Official-client identity and AI request acceptance must therefore be checked independently
+of the Manager's success notification. See the
+[macOS credential decision](../.agents/notes/implemented/security/2026-10-14-macos-client-credential-chain.md).
 
 Cloud identity-profile account operations use strict account, revision and profile schemas at
 the renderer and private core RPC boundaries. The selected account owner reads and writes bindings,
@@ -381,7 +456,7 @@ supported; Windows access follows the containing profile's ACL. Do not share, lo
 these files. Backups and arbitrary client settings never cross the control transport; previews
 project only model/address fields and a hidden credential marker. The user confirms complete
 restore in the UI or supplies CLI `--yes`. See
-[coding-tool-configuration.md](coding-tool-configuration.md) for the difference between removal
+[agent-tools reference](./modules/proxy-gateway/agent-tools.md) for the difference between removal
 and restoration.
 
 Installer, updater, shell, subprocess and binary-patching changes are high risk. Validate exact targets and arguments, preserve platform quoting rules, and avoid command construction from untrusted strings. Update sources and artifacts must retain the repository's existing integrity and signing expectations.
@@ -438,3 +513,27 @@ Use [testing.md](testing.md) to select focused tests. Security-sensitive changes
 - platform-specific evidence when behavior depends on the OS keyring, native modules, Electron packaging or installers.
 
 If platform evidence cannot run locally, report it as unverified rather than replacing it with a mock-only claim.
+
+## Classic terms state
+
+Windows Classic retention reads the official app_storage.json only in the captured profile.
+It observes the last accepted username and string standard/GCP flag, without accepting terms or
+synthesizing an account's first acceptance. Its Manager-owned history lives under
+.antigravity-agent/classic-terms/<profile-digest>.json, with format version 1 and at most 256
+account digest/type pairs. It contains no plaintext email, token or provider response. Digests are
+local pseudonymous identifiers, not encryption. Entries belong to the exact canonical profile,
+executable identity and product/build version; changed revisions or malformed history require
+manual confirmation again. Unavailable client version leaves retention disabled for that switch.
+The first baseline cannot establish which earlier client version originally accepted an existing
+record. Exact legal terms revisions are not exposed by this storage contract; the official
+standard/GCP check remains authoritative and no version-independent consent is inferred.
+
+Writes require a stopped captured client and merge only the two consent fields into validated,
+bounded official JSON. The owner rechecks process state and file contents before replacement,
+uses a synchronized sibling temporary file and verifies readback. Links and oversized files are
+rejected. Unrelated settings are retained. History is saved before replacing a valid baseline;
+invalidation clears stale official fields before committing the new revision, so failed writes
+cannot silently import stale consent on retry. Prelaunch recovery restores only this invocation's
+consent fields and refuses to overwrite later acceptance. These are local filesystem checks,
+not a lock enforced by the official client; independently started external writers can still race.
+No raw file contents, paths or identities enter the new diagnostic messages.

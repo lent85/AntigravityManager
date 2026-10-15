@@ -1,5 +1,6 @@
 import en from './en';
 const fr = {
+  'operation-diagnostics': en['operation-diagnostics'],
   'agent-tools': {
     title: 'Connecter vos outils de programmation',
     description: 'Choisissez un outil pour utiliser vos modèles via Antigravity Manager.',
@@ -850,6 +851,9 @@ const fr = {
     'auto-switch-client': 'Changer automatiquement de compte dans les clients',
     'auto-switch-description':
       'Change les comptes dans Antigravity, IDE et CLI. Les comptes utilisés pour les requêtes API se règlent sur la page Proxy API.',
+    'minimal-mode': 'Mode minimal',
+    'minimal-mode-description':
+      'Afficher uniquement les quotas et temps de réinitialisation clés de Gemini',
     'quota-display': {
       title: 'Affichage des quotas',
       description:

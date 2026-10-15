@@ -15,7 +15,9 @@ Give each fact one authoritative location and link to it elsewhere:
 - `testing.md`: test strategy and change-to-evidence selection.
 - `security.md`: trust zones, sensitive data and high-risk boundaries.
 - `.agents/notes/`: decision rationale, alternatives and consequences.
-- Feature documentation: feature behavior and user-facing operation owned by that feature.
+- `modules/<feature>/`: current behavior, operation and acceptance guides owned by a code module;
+  use `modules/README.md` as the module-to-documentation index.
+- Upgrade guides: required user actions, recovery and downgrade limits for incompatible changes; follow [the guide rules](upgrade-guides/README.md).
 
 Do not copy complete command lists from `package.json`, restate source types, or reproduce another document's detailed explanation. Link to the owner and add only the context required by the current document.
 
@@ -41,4 +43,4 @@ Do not present an unimplemented plan as current behavior. When a plan ships, upd
 
 ## Validation
 
-Run `npm run check:agent-contracts` after changing agent instructions, governance documents, Agent Notes or the project validation Skill. Run `npm run format` for all documentation changes.
+Run `npm run check:agent-contracts` after changing agent instructions, governance documents, Agent Notes or project Skills. Format only changed documentation paths. The repository ignores `.agents/` in Prettier, so pass an empty temporary `--ignore-path` when checking explicitly named files there. `npm run format` recursively scans the repository root, including unrelated untracked trees, so use it only when the full workspace is in scope.

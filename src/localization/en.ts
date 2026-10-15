@@ -1,4 +1,14 @@
 const en = {
+  'operation-diagnostics': {
+    'check-account-list':
+      'The account may already be saved. Refresh the account list before signing in again.',
+    'check-proxy': 'Check the upstream proxy settings, then retry.',
+    'check-connection':
+      'Check your network, proxy and system time, then retry. Details include the observed failure.',
+    'close-client': 'Save your work and close the client, then retry the switch.',
+    reauthorize: 'Sign in to this account again to renew its authorization.',
+    retry: 'The operation failed. Check the diagnostic details and retry.',
+  },
   'agent-tools': {
     title: 'Connect your coding tools',
     description: 'Choose a tool and use your available models through Antigravity Manager.',
@@ -935,6 +945,8 @@ const en = {
     'auto-switch-client': 'Auto-switch client account',
     'auto-switch-description':
       'Switches accounts in Antigravity, IDE, and CLI. Choose which accounts API requests use on the API Proxy page.',
+    'minimal-mode': 'Minimal mode',
+    'minimal-mode-description': 'Only show key Gemini quota and reset times',
     'quota-display': {
       title: 'Quota display',
       description:

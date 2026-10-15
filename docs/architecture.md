@@ -10,6 +10,32 @@ private RPC. The renderer receives only the preview and a temporary save capabil
 process holds that exact snapshot and owns the save dialog and atomic export. No log upload
 service or general filesystem API is exposed. See [the privacy and export policy](security.md#sensitive-data).
 
+## Correlated account-operation diagnostics
+
+Google login and cloud-account switching create a UUID in the trusted coordinator before
+dispatch. The selected owner records stages, classifies terminal failures and finalizes a
+reporting receipt once. Feature services own the login/switch variants; shared observability
+owns invocation-local correlation and SDK dispatch. Async log scopes end with their invocation
+and do not supply credentials, provider bodies or arbitrary metadata to reporting.
+
+The desktop public envelope preserves validated `loginCode`/`switchCode` and the safe diagnostic.
+Standalone management and RPC carry the coordinator's identity; consumers reject mismatched
+identities. Management response version and owner compatibility are `2`; the handshake envelope
+format and diagnostic schema remain `1`. An incompatible owner fails startup verification before
+account mutations, with no local owner fallback.
+
+The renderer retains a text snapshot for details and explicit reporting. The CLI prints the
+same safe reference on failure. Account persistence certainty is independent of presentation:
+view/finalization failures after a completed write require checking the account list, and lost
+remote outcomes remain uncertain. Reporting receipt semantics, privacy bounds and attachment
+records are defined in [the security reference](security.md#correlated-operation-reports).
+
+Google API HTTPS requests tunnel through HTTP(S) proxies with a per-request CONNECT agent.
+Explicit account/configuration settings retain precedence over environment routing, which honors
+NO_PROXY. The same abort signal covers the request and proxy handshake; the owner destroys
+the agent after the buffered response or failure. Rejected responses contribute only closed
+connection evidence to diagnostics. There is no automatic direct fallback or added retry.
+
 ## Gateway Schema admission
 
 OpenAI Chat, effective Responses requests and Anthropic Messages prepare tool parameter schemas
@@ -18,7 +44,7 @@ fallbacks. Structured-output schemas reject conversion failures; eligible tool c
 a fixed string fallback while retaining the tool, sibling parameters and required relationship.
 Native Gemini dialect conversion remains separate. Responses WebSocket validates effective
 configuration before publishing prewarm events or replacing socket request state, and reuses
-its prepared schemas during generation. See the [Schema reference](proxy-schema-conversion.md)
+its prepared schemas during generation. See the [Schema reference](./modules/proxy-gateway/schema-conversion.md)
 for supported references, bounds and error contracts.
 
 Error reporting uses runtime-specific Electron and Node SDK adapters. The logger submits one
@@ -29,6 +55,14 @@ shutdown bounds reporting flush independently from ownership release. Reporting 
 account selection, quota policy or persisted Responses formats.
 
 ## Thought signature ownership
+
+Provider thought signatures are opaque strings. Response adapters preserve their exact encoding
+through client output, scoped caches and continuation requests; they never decode Base64 as UTF-8.
+ASCII-compatible protobuf bytes are still binary data. Empty signatures are omitted, while
+provider-specific opaque values and the existing validation placeholder remain unchanged.
+Previously corrupted client histories or persisted records are not rewritten. The existing
+targeted invalid-signature recovery remains available where supported. See the
+[encoding decision](../.agents/notes/implemented/bug-fix/2026-10-13-opaque-thought-signatures.md).
 
 OpenAI Chat and Anthropic Messages derive an in-memory signature scope from the proxy
 credential digest, a client session hint and a conversation content anchor. Session hints
@@ -93,6 +127,25 @@ components. Statistics polling and queued notifications do not update the reques
 The existing list polling, detail refresh, category filtering and manual refresh policy remain
 in effect; these UI states are not copied into a global store.
 
+## Classic terms retention
+
+The antigravity-runtime module owns Windows Classic terms retention. Cloud accounts and local
+snapshots pass the target email into the shared switch flow. For credential-store Classic
+clients, the flow captures the official last-accepted record before closing the captured client,
+then saves and restores the selected account's observed record after confirmed exit and credential
+write, before launch. The history is scoped to the canonical profile and installation revision.
+The first observation adopts the existing official record as its baseline; later installation
+changes invalidate that baseline. Standard/GCP type is the observed official value, and the
+client remains responsible for checking its current required type.
+
+The bounded Manager-owned history file contains account digests and closed terms-type values.
+The official file keeps its existing format; only the two consent fields are merged by atomic
+replacement. Invalid official JSON aborts without replacing it. History and official writes must
+succeed before launch. A prelaunch failure rolls back only consent fields when they still match
+this invocation's write. An attempted or uncertain launch prevents file rollback against a possibly
+running client. Credential injection retains its existing failure semantics; consent rollback does
+not imply credential rollback. See [the storage and privacy rules](security.md#classic-terms-state).
+
 ## Runtime topology
 
 ```plaintext
@@ -114,7 +167,7 @@ Electron Main
 
 The Electron main process is the trusted application host. The renderer is treated as an untrusted UI process and receives only the APIs exposed by [src/preload.ts](../src/preload.ts). The preload creates the MessagePort transport used by the renderer-side ORPC client in [src/ipc/manager.ts](../src/ipc/manager.ts). Main-process RPC handling is installed by [src/ipc/handler.ts](../src/ipc/handler.ts).
 
-An explicitly launched standalone Node core is also available through `npm run build:core` and `npm run start:core`. [src/core/main.ts](../src/core/main.ts) initializes the existing account persistence and local database, then starts the existing NestJS gateway when the saved proxy configuration enables auto start. It exposes status and shutdown through a Fastify HTTP server bound only to a Unix socket in a private runtime directory or a Windows named pipe. Before either runtime loads profile configuration or opens account/database storage, it claims the same process-lifetime profile ownership endpoint. An existing owner makes the other runtime fail closed with the owner kind and PID. Stale Unix socket recovery uses an exclusive guard so competing starters cannot both claim the endpoint. Desktop-embedded ownership remains the default. The desktop can instead attach to a verified standalone core through the startup composition described below.
+An explicitly launched standalone Node core is also available through `npm run build:core` and `npm run start:core`. [src/core/main.ts](../src/core/main.ts) initializes the existing account persistence and local database, then starts the existing NestJS gateway when the saved proxy configuration enables auto start. It exposes status and shutdown through a Fastify HTTP server bound only to a Unix socket in a private runtime directory or a Windows named pipe. Before either runtime loads profile configuration or opens account/database storage, it claims the same process-lifetime profile ownership endpoint. An existing owner makes the other runtime fail closed with the owner kind and PID. Stale Unix socket recovery uses an exclusive guard so competing starters cannot both claim the endpoint. Desktop-embedded ownership remains the default. The desktop can instead attach to a verified standalone core through the startup composition described below. The service launcher allows a bounded 90-second readiness budget for cold bundled/native module loading; a successful start still requires a running management response and the desktop verifies the same profile, epoch, PID and live lease before selecting the owner. It launches at most one child per invocation while waiting.
 
 The same private endpoint hosts a separate [core application RPC router](../src/core/rpc/router.ts) under `/rpc`. Its oRPC client uses the existing local pipe/socket and offers ping, gateway status, context-cache counters, gateway start/stop, credential-free cloud-account summaries, strict cloud-account views, manual quota refresh, proxy replacement/removal and account deletion. Application calls are accepted only while the core is running; shutdown closes admission, cancels and drains warmups, and drains the management server before stopping persistence or releasing profile ownership. Long-running account mutations have a separate bounded client and server timeout because they can call several upstream endpoints. Electron's existing MessagePort router delegates gateway status, context-cache reads, start and stop to an explicitly selected [gateway adapter](../src/modules/proxy-gateway/ipc/gateway-adapter.ts). Default desktop startup selects the desktop-embedded implementation; the standalone-core implementation calls the core RPC client and propagates transport failures without falling back to desktop-embedded state. Both runtimes use the same [gateway lifecycle service](../src/modules/proxy-gateway/services/gateway-lifecycle.service.ts) to serialize start and stop. Core management status follows completed standalone-core lifecycle mutations. The cloud-account list, manual quota refresh, IDE sync, proxy writes, deletion and OAuth-client preference follow the same pattern through a feature-owned [account adapter](../src/modules/cloud-account/ipc/cloud-account-adapter.ts). Its desktop-embedded and core RPC list paths share the [list service](../src/modules/cloud-account/services/cloud-account-list.service.ts), including active-target resolution and the legacy OAuth-client-key backfill. Default Electron startup selects the desktop-embedded account adapter; standalone-core failures do not fall back to local persistence. Legacy local-account operations also follow the selected owner described below; desktop ownership composition follows the startup mode. Configuration key generation uses the selected service adapter. The cloud-account list and account-returning mutations project an explicit [renderer view](../src/modules/cloud-account/services/cloud-account-view.ts) before crossing MessagePort; internal account services retain the full account model.
 
@@ -174,7 +227,9 @@ Each `BoundedSqliteWorker` instance closes terminally: new reads/writes and lazy
 
 Audit and Thought Store services distinguish reusable `close()` from terminal `shutdown()`. Process shutdown rejects new reads, capture, repair and configuration work, stops maintenance and gives accepted body/SSE writes, hydration and repair up to two seconds to drain. Accepted repair may finish replacing its worker during drain; once drain finishes or times out, worker access and recreation are sealed. Both stores are attempted even when the gateway was never started or is already stopped, and failed closure propagates. Core shutdown drains standalone-core IPC capabilities before terminal diagnostics and retains the profile lease on failure. Desktop exit uses the same store teardown under its existing three-second forced-exit bound, which can interrupt cleanup.
 
-The [ownership cutover audit](ownership-cutover-audit.md) records migrated owner boundaries and remaining release gates. Desktop bootstrap selects all migrated feature owners together; native delivery and platform acceptance determine release readiness.
+The [ownership cutover audit](ownership-cutover-audit.md) is a historical snapshot and is not a
+current readiness report. Desktop bootstrap selects all migrated feature owners together; native
+delivery and platform acceptance determine release readiness.
 
 ### Desktop owner bootstrap
 
@@ -190,6 +245,12 @@ through the existing service launcher, and verifies the private handshake twice 
 owner probe. Compatibility version, ready state, PID, epoch and profile fingerprint must agree.
 No raw profile path or credential crosses this handshake. A failed standalone-core startup exits with a
 fixed error and cannot open the profile locally.
+
+The app-shell `standaloneCoreConnection` owns profile-scoped management, owner observation and
+verified terminal drain without Electron or owner-local storage. The desktop connection facade
+supplies Electron launch context, persisted reporting consent and feature-owner selection. Native
+Node composition can exercise the same connection/drain boundary while rejecting Electron imports
+and presentation-side SQLite, worker and keyring access.
 
 Only a verified standalone-core owner selects the complete account/configuration/legacy/OpenCode/gateway/
 audit/Thought/capture composition, synchronously before MessagePort admission and window creation.
@@ -307,9 +368,23 @@ Feature-specific components, hooks, IPC routers, services, persistence and types
 - `identity-profile`: identity profile behavior and dialog UI.
 - `proxy-gateway`: local HTTP gateway, protocol mapping, model routing and gateway administration.
 
+See the [module documentation index](modules/README.md) for current feature guides and acceptance
+procedures grouped by these owners.
+
 Generic UI primitives belong in `src/components/ui`; application-wide composition belongs in `src/components/layout` or `src/components/shared`. A component stays in its feature when its language or behavior depends on that feature, even if it is visually reusable.
 
 ## Antigravity process operations
+
+On macOS, the `antigravity-runtime/credentials` module owns the complete client credential
+installation sequence: root-level ID-token encoding, Keychain deletion and creation, three
+local mirrors, refresh-token-only Agy confirmation and sequential client SQLite injection.
+The Mac implementation is shared by the Electron and standalone-core owners. Its native
+fallback and mirror failures are best effort as detailed in [the security reference](security.md).
+Native identity-profile application follows credential installation and cannot make a
+successful installation fail. Cloud switching allows twenty seconds for normal close.
+For supervised IDE services, post-stop credential reassertion is best effort; failed
+replacement confirmation selects one restart without a third credential write. The shared
+process adapter still captures and validates the selected installation and running instances.
 
 The `antigravity-runtime` module owns executable discovery, bounded process observation, context capture and operation coordination. Windows and Linux start the selected executable directly with array arguments and detached, ignored stdio; macOS opens the selected application bundle. Windows GUI launches leave `windowsHide` disabled so the application's initial window can appear. WSL selects native Linux observation for an explicitly configured Linux executable, or Windows observation for a mounted Windows executable; absent explicit configuration, existing Windows discovery remains the default. Ordinary startup does not send an OAuth URI. Process observation requires the application name or a configured executable match; mentioning Antigravity in an unrelated editor's arguments does not identify an application process.
 
@@ -323,7 +398,7 @@ confirmed reports `process-close-failed`, with guidance to save work, resolve co
 and close the client before retrying. Client credential writes and active-account updates wait for
 confirmed exit on the restart path.
 
-Running native IDE instances with supervised workspace AI services use hot switching for cloud accounts and local authentication snapshots. An IDE with a machine AI service launched directly by its main process (the IDE subclient without LSP enabled) uses a full restart: that service has no automatic exit recovery, and restarting a workspace service with the same executable cannot restore its endpoint. Preflight selects the normal close/write/start flow before account writes or service termination. No extension, version blacklist or operating-system blacklist is used. The captured IDE is closed, the account is written, and one launch is confirmed without retrying an uncertain launch. The runtime revalidates the captured main processes, writes the identity profile and credentials, terminates only dedicated AI `language_server` descendants through Node's native process API, and reasserts credentials after termination. It allows five seconds for service exit and fifteen seconds for replacements. Confirmation requires every captured service to disappear, a replacement of each executable to appear, and the original main-process identities and profile context to remain unchanged. Idle services can retire without restoring the previous instance count. A query reaching the recovery deadline reports unconfirmed recovery; an earlier query failure aborts. Successful hot switching leaves the main window, terminals and other language services running. AI requests already in progress may be interrupted by the service restart. Service recovery failure uses one full restart after revalidating the main window; an observed user-closed or replaced main process aborts without reopening it. Failed writes or uncertain process queries report partial completion without updating success metadata. Process replacement confirms service lifecycle, not the account displayed in the official UI or readiness of an AI request. Classic, stopped IDE instances, and WSL observation of Windows applications retain the restart path. The operation remains `switching` throughout hot switching and any fallback.
+Running native IDE instances with supervised workspace AI services use hot switching for cloud accounts and local authentication snapshots. The strict write and recovery failure rules below apply to Windows and Linux; macOS uses the best-effort credential rules described above. An IDE with a machine AI service launched directly by its main process (the IDE subclient without LSP enabled) uses a full restart: that service has no automatic exit recovery, and restarting a workspace service with the same executable cannot restore its endpoint. Preflight selects the normal close/write/start flow before account writes or service termination. No extension, version blacklist or operating-system blacklist is used. The captured IDE is closed, the account is written, and one launch is confirmed without retrying an uncertain launch. The runtime revalidates the captured main processes, writes the identity profile and credentials, terminates only dedicated AI `language_server` descendants through Node's native process API, and reasserts credentials after termination. It allows five seconds for service exit and fifteen seconds for replacements. Confirmation requires every captured service to disappear, a replacement of each executable to appear, and the original main-process identities and profile context to remain unchanged. Idle services can retire without restoring the previous instance count. A query reaching the recovery deadline reports unconfirmed recovery; an earlier query failure aborts. Successful hot switching leaves the main window, terminals and other language services running. AI requests already in progress may be interrupted by the service restart. Service recovery failure uses one full restart after revalidating the main window; an observed user-closed or replaced main process aborts without reopening it. Failed writes or uncertain process queries report partial completion without updating success metadata. Process replacement confirms service lifecycle, not the account displayed in the official UI or readiness of an AI request. Classic, stopped IDE instances, and WSL observation of Windows applications retain the restart path. The operation remains `switching` throughout hot switching and any fallback.
 
 One launch command is followed by process confirmation with a six-second deadline. A matching main-process identity must remain present across successful observations for at least one second; disappearing processes, replacement identities and inconclusive probes reset confirmation. This establishes sustained process presence, not window visibility or signed-in account identity. Native process queries use the published read-only `@draculabo/sysinfo-process-enhanced` dependency. Its worker snapshots preserve argv boundaries on Windows, Linux and macOS. The library owns independent caller deadlines and merges overlapping native scans; the Manager adapter validates returned metadata and its consumers select application processes. npm installs the matching prebuilt platform package, and Forge's AutoUnpackNatives plugin unpacks its `.node` binary. Ordinary native status observation is capped at one second; startup confirmation and native shutdown observation use the remaining operation budget. Expired results are discarded, including startup snapshots delivered after the six-second deadline; the OS refresh itself cannot be forcibly interrupted. Only WSL observation of Windows applications retains a bounded PowerShell/CIM bridge. Ordinary WSL Windows status probes allow 4.5 seconds; startup probes receive the remaining confirmation budget. The deadline starts after dispatch; preflight discovery and the renderer's next status refresh add to the visible operation time. Failure reports startup as unconfirmed and never dispatches a second launch. When account data has already been updated, the error explicitly reports partial completion; it does not roll back or report a successful account switch.
 
@@ -429,7 +504,7 @@ kept for diagnosis.
 
 Protocol-facing behavior is a compatibility surface. Changes to request mapping, streaming event order, tool calls, usage accounting, error responses, model selection or durable response state require the focused tests listed in [testing.md](testing.md) and may require an Agent Note.
 
-The [proxy compatibility reference](proxy-compatibility.md) describes current Responses history, reasoning, tool configuration and explicit-cache contracts.
+The [proxy compatibility reference](./modules/proxy-gateway/compatibility.md) describes current Responses history, reasoning, tool configuration and explicit-cache contracts.
 
 ## Persistence and credentials
 
@@ -439,7 +514,7 @@ OpenCode in desktop-embedded or standalone-core mode. Typed RPC exposes bounded 
 connection-only previews and recovery operations; only the selected owner reads files and
 connection keys. CLI commands live under `src/cli`. Both shutdown paths close tool admission and
 drain admitted work before closing configuration mutation admission, since Codex setup can add
-a review route. See [coding-tool-configuration.md](coding-tool-configuration.md) for file ownership
+a review route. See the [agent-tools reference](./modules/proxy-gateway/agent-tools.md) for file ownership
 and recovery behavior.
 
 Shared SQLite connection and schema utilities live under `src/shared/persistence/database`. Feature-specific repositories and codecs remain with their feature. Persisted rows are untrusted when read and must be narrowed through the owning schema or codec.

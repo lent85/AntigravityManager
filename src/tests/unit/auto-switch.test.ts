@@ -16,9 +16,8 @@ vi.mock('@/modules/cloud-account/persistence/cloud-account-settings-store', () =
   },
 }));
 
-vi.mock('@/modules/cloud-account/ipc/handler', () => ({
-  switchCloudAccount: vi.fn(),
-  markActiveAccount: vi.fn(),
+vi.mock('@/modules/cloud-account/services/cloud-account-switch.service', () => ({
+  switchCloudAccountCore: vi.fn(),
 }));
 
 vi.mock('@/shared/logging/logger', () => ({
@@ -100,7 +99,6 @@ describe('AutoSwitchService', () => {
   });
 
   it('respects enabled model configuration when checking depletion', async () => {
-    // eslint-disable-next-line unused-imports/no-unused-vars
     const { CloudAccountRepo } = await import('@/modules/cloud-account/persistence/cloudHandler');
     const { CloudAccountSettingsStore } =
       await import('@/modules/cloud-account/persistence/cloud-account-settings-store');
@@ -261,10 +259,16 @@ describe('AutoSwitchService', () => {
     const { CloudAccountRepo } = await import('@/modules/cloud-account/persistence/cloudHandler');
     const { CloudAccountSettingsStore } =
       await import('@/modules/cloud-account/persistence/cloud-account-settings-store');
-    const { markActiveAccount, switchCloudAccount } =
-      await import('@/modules/cloud-account/ipc/handler');
     const { AutoSwitchService } =
       await import('@/modules/cloud-account/services/AutoSwitchService');
+
+    const markActiveAccount = vi.fn().mockResolvedValue(undefined);
+    const switchAccount = vi.fn().mockResolvedValue(undefined);
+    AutoSwitchService.configureEffects({
+      markActiveAccount,
+      switchAccount,
+      onSwitched: vi.fn(),
+    });
 
     vi.mocked(CloudAccountSettingsStore.getAutoSwitchEnabledForTarget).mockReturnValue(true);
     vi.mocked(CloudAccountSettingsStore.isNoRestartEnabled).mockReturnValue(true);
@@ -282,7 +286,7 @@ describe('AutoSwitchService', () => {
     const switched = await AutoSwitchService.checkAndSwitchIfNeeded('ide');
     expect(switched).toBe(true);
     expect(markActiveAccount).toHaveBeenCalledWith('acc-healthy', 'ide');
-    expect(switchCloudAccount).not.toHaveBeenCalled();
+    expect(switchAccount).not.toHaveBeenCalled();
   });
 
 });

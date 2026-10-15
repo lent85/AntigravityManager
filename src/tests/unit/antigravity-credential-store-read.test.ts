@@ -6,6 +6,11 @@ const mocks = vi.hoisted(() => ({
   spawnSync: vi.fn(),
   withTarget: vi.fn(),
   readWindowsCredential: vi.fn(),
+  readMacOSCredentialStore: vi.fn(),
+}));
+vi.mock('@/modules/antigravity-runtime/credentials/macosCredentialStore', () => ({
+  readMacOSCredentialStore: mocks.readMacOSCredentialStore,
+  writeMacOSCredentialStore: vi.fn(),
 }));
 vi.mock('@/modules/antigravity-runtime/credentials/windowsCredentialStore', () => ({
   readWindowsCredential: mocks.readWindowsCredential,
@@ -51,6 +56,7 @@ describe('readAntigravityCredentialStoreToken', () => {
     mocks.createEntry.mockReset();
     mocks.spawnSync.mockReset();
     mocks.withTarget.mockReset();
+    mocks.readMacOSCredentialStore.mockReset();
     mocks.withTarget.mockReturnValue({
       getSecret: mocks.getSecret,
     });
@@ -111,23 +117,17 @@ describe('readAntigravityCredentialStoreToken', () => {
     });
   });
 
-  it('decodes a macOS go-keyring-base64 payload', async () => {
+  it('delegates macOS reads to the system-and-file lookup', async () => {
     setPlatform('darwin');
-    const payload = JSON.stringify({
-      token: {
-        refresh_token: 'refresh-macos',
-      },
-    });
-    mocks.getSecret.mockReturnValue(
-      Array.from(
-        Buffer.from(`go-keyring-base64:${Buffer.from(payload, 'utf-8').toString('base64')}`),
-      ),
-    );
+    mocks.readMacOSCredentialStore.mockReturnValue({ refreshToken: 'refresh-macos' });
     const { readAntigravityCredentialStoreToken } =
       await import('@/modules/antigravity-runtime/credentials/antigravityCredentialStore');
     expect(await readAntigravityCredentialStoreToken()).toEqual({
       refreshToken: 'refresh-macos',
     });
+    expect(mocks.readMacOSCredentialStore).toHaveBeenCalledExactlyOnceWith(true);
+    expect(mocks.createEntry).not.toHaveBeenCalled();
+    expect(mocks.withTarget).not.toHaveBeenCalled();
   });
 
   it('uses the bounded Linux secret-tool fallback after native keyring failure', async () => {

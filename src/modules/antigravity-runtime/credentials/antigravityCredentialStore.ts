@@ -1,15 +1,17 @@
 import { Entry } from '@napi-rs/keyring';
-import { execFileSync, spawnSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import os from 'node:os';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
+import { hasErrorCode, isErrorWithCode } from '@/shared/errors/error-guards';
 import { logger } from '@/shared/logging/logger';
 import type { CredentialStoreTokenInput } from '@/shared/auth/credentialStoreToken';
 import { writePrivateFileAtomically } from '@/shared/persistence/privateFile';
 import { readWindowsCredential, writeWindowsCredential } from './windowsCredentialStore';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
 import { buildAntigravityCredentialPayload } from './antigravityCredentialPayload';
+import { readMacOSCredentialStore, writeMacOSCredentialStore } from './macosCredentialStore';
 
 export interface CredentialStoreToken {
   accessToken?: string;
@@ -126,6 +128,9 @@ export function parseCredentialStorePayload(payload: string): CredentialStoreTok
 export async function readClientAccountToken(
   target?: AntigravityAppTarget | null,
 ): Promise<CredentialStoreToken | null> {
+  if (process.platform === 'darwin') {
+    return readMacOSCredentialStore(true);
+  }
   if (target !== 'agy') {
     return readAntigravityCredentialStoreToken();
   }
@@ -136,7 +141,7 @@ export async function readClientAccountToken(
     );
     return parseCredentialStorePayload(payload);
   } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+    if (hasErrorCode(error, 'ENOENT')) {
       return null;
     }
     throw classifyCredentialStoreReadError(error);
@@ -148,10 +153,7 @@ function classifyCredentialStoreReadError(error: unknown): CredentialStoreReadEr
     return error;
   }
   const message = error instanceof Error ? error.message.toLowerCase() : '';
-  const code =
-    error instanceof Error && 'code' in error && typeof error.code === 'string'
-      ? error.code.toLowerCase()
-      : '';
+  const code = isErrorWithCode(error) ? error.code.toLowerCase() : '';
 
   if (code === 'etimedout' || message.includes('timed out')) {
     return new CredentialStoreReadError('timed-out');
@@ -212,6 +214,9 @@ function readViaSecretTool(): Uint8Array | null {
 }
 
 export async function readAntigravityCredentialStoreToken(): Promise<CredentialStoreToken | null> {
+  if (process.platform === 'darwin') {
+    return readMacOSCredentialStore(true);
+  }
   if (process.platform === 'win32') {
     try {
       const payload = await readWindowsCredential('gemini:antigravity');
@@ -301,6 +306,10 @@ export async function writeAntigravityCredentialStoreToken(
   token: CredentialStoreTokenInput,
   options: CredentialStoreWriteOptions = {},
 ): Promise<void> {
+  if (process.platform === 'darwin') {
+    writeMacOSCredentialStore(token);
+    return;
+  }
   const payload = buildAntigravityCredentialPayload(token);
   logger.info('Writing Antigravity token to system credential store');
 
@@ -320,42 +329,11 @@ export async function writeAntigravityCredentialStoreToken(
   }
 }
 
-function credentialStoreItemExists(): boolean {
-  // `find-generic-password` reads only the item's attributes, not its secret, so it does not prompt
-  // even when the ACL is restrictive. Exit status 0 means the item is present.
-  const result = spawnSync(
-    'security',
-    ['find-generic-password', '-s', 'gemini', '-a', 'antigravity'],
-    { stdio: 'ignore' },
-  );
-  return result?.status === 0;
-}
-
 async function writeToSystemCredentialStore(payload: string): Promise<void> {
   if (process.platform === 'win32') {
     await writeWindowsCredential('gemini:antigravity', 'antigravity', payload);
     return;
   }
-  if (process.platform === 'darwin') {
-    const value = `go-keyring-base64:${Buffer.from(payload, 'utf-8').toString('base64')}`;
-    // `-A` sets the item's access-control list to "all applications". macOS treats writing the ACL
-    // as a change that needs the login-keychain password, and `-U` reapplies it on every update, so
-    // each account switch pops a password prompt. Only pass `-A` when the item does not exist yet;
-    // afterwards update the stored value without touching the ACL, which does not prompt.
-    const alreadyExists = credentialStoreItemExists();
-    const args = alreadyExists
-      ? ['add-generic-password', '-s', 'gemini', '-a', 'antigravity', '-U', '-w']
-      : ['add-generic-password', '-s', 'gemini', '-a', 'antigravity', '-A', '-U', '-w'];
-    execFileSync('security', args, {
-      // Without an argv value, security reads the password and its confirmation.
-      // Keep both on stdin so the credential never appears in process arguments.
-      input: `${value}\n${value}\n`,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'ignore', 'ignore'],
-    });
-    return;
-  }
-
   if (process.platform === 'linux' && isSecretToolAvailable()) {
     const loginWritten = tryWriteLinuxSecretServiceCollection(payload, 'login');
     const defaultWritten = tryWriteLinuxSecretServiceCollection(payload, 'default');

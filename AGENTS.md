@@ -15,6 +15,7 @@ Instructions in a deeper `AGENTS.md` supplement this file for that subtree. Keep
 
 - Use Node.js `>=22.14.0`, npm `>=10` and the checked-in `package-lock.json`. Do not use pnpm, Yarn or Bun.
 - Prefer project scripts from `package.json`; do not invent a parallel command when an owning script exists.
+- Before running or changing repository scripts, read [scripts/AGENTS.md](scripts/AGENTS.md) and use [scripts/README.md](scripts/README.md) to locate existing verification and preparation tools.
 - The primary development shell is PowerShell on Windows. Keep scripts portable when CI or packaged behavior is cross-platform.
 - When `.codegraph/` exists, use CodeGraph before text search to understand symbols and call paths. Use `ast-grep` for syntax-aware structural search, bulk refactoring, custom lint checks, vulnerability patterns and framework/API migrations.
 - Use configured MCP tools (CodeGraph, Codanna, SQLite inspection) to explore symbols and verify schemas before broad grepping. See [docs/mcp-setup.md](docs/mcp-setup.md).
@@ -48,6 +49,7 @@ See [src/modules/AGENTS.md](src/modules/AGENTS.md), [src/modules/proxy-gateway/A
 - Make the smallest complete change. Do not add dependencies, abstractions, compatibility paths or defensive states without a current owner and demonstrated need.
 - Always use braces for control flow. Keep `return`, `throw` and similar statements on their own lines.
 - Comments and JSDoc explain non-obvious contracts, invariants, trade-offs and safe use. Do not restate visible control flow or keep changelog commentary in source.
+- For failure, recovery, cancellation or background-task changes, follow [failure ownership](docs/error-handling.md) to define partial effects, safe continuation and final reporting.
 - Prefer Radix primitives and Tailwind utilities for UI. Put user-visible strings in `react-i18next` resources using kebab-case keys.
 - Avoid growing large modules. Prefer a new owned module for new behavior when a source file is already near 800 lines; target cohesive production modules below roughly 500 lines where practical.
 
@@ -61,12 +63,23 @@ See [src/modules/AGENTS.md](src/modules/AGENTS.md), [src/modules/proxy-gateway/A
 
 ## Change workflow
 
-1. Identify the owning module and every runtime boundary the change crosses.
-2. Read the nearest instructions, current architecture reference and owning tests.
+Route the task before editing:
+
+- Do not automatically invoke OpenSpec prompts or skills for project work; use this workflow unless the user explicitly requests OpenSpec.
+- Read-only investigation ends with findings and evidence; do not create implementation files.
+- Bug fixes begin by reproducing or isolating the reported behavior and defining the observable regression check.
+- When work follows a regression, repeated CI failure, reopened issue, rollback or failed live acceptance, use [Agent lessons](.agents/lessons.md) to assess whether the confirmed gap warrants a reusable prevention candidate.
+- Routine feature work names the user-visible outcome, owning module and acceptance behavior before implementation.
+- Multi-module, cross-boundary or high-risk work starts with a concise plan covering scope, owners, contracts, acceptance evidence and recovery. Record durable or difficult-to-reverse decisions in an Agent Note.
+
+For implementation work:
+
+1. Record the repository, branch and starting worktree state so pre-existing user changes remain untouched.
+2. Identify the owning module and every runtime boundary the change crosses; read the nearest instructions, current architecture reference and owning tests.
 3. Inspect relevant consumers before changing a shared or public contract.
 4. Implement the smallest complete slice and update its tests and current documentation together.
-5. Select focused evidence from [docs/testing.md](docs/testing.md); widen only when the affected surface requires it.
-6. Review the final diff for unrelated work, generated output, secrets and documentation drift.
+5. Use [agm-validate-change](.agents/skills/agm-validate-change/SKILL.md) to establish change scope and select focused evidence from [docs/testing.md](docs/testing.md); widen only when the affected surface requires it.
+6. Complete the final semantic review with [agm-code-review](.agents/skills/agm-code-review/SKILL.md), then report findings, evidence and remaining risks.
 
 For high-risk or difficult-to-reverse decisions, add or update an [Agent Note](.agents/notes/README.md) in the same change.
 
@@ -74,9 +87,11 @@ For high-risk or difficult-to-reverse decisions, add or update an [Agent Note](.
 
 - Focused tests are the local default. Do not run the full E2E, packaging or platform matrix for an unrelated local change.
 - A behavior change needs a test or runnable check that would fail for its regression. Do not weaken assertions, skip failures or use a narrower scope merely to get green.
+- For asynchronous, resource-owning or intermittent tests and acceptance scripts, follow [test reliability](docs/test-reliability.md) for isolation, observable completion and diagnosis.
 - Prefer equality of complete result objects or event sequences when the whole result is the behavior under test.
 - Do not add tests for removed behavior, statically fixed values or impossible hostile inputs at typed same-process boundaries.
 - Run `npm run check:agent-contracts` for changes to agent instructions, governance documentation, Agent Notes or project Skills.
+- Install the project Git hooks with `npm run hooks:install` after an install that skipped lifecycle scripts. [Local Git checks](docs/development.md#local-git-checks) defines the automatic commit/push gates and their scope.
 - Run `npm run type-check` when shared types, public exports, IPC contracts or module boundaries change.
 - Report environment-dependent evidence such as native keyring, Electron packaging, installer and live-provider checks as unverified when it cannot run.
 
@@ -85,6 +100,7 @@ For high-risk or difficult-to-reverse decisions, add or update an [Agent Note](.
 - Follow [docs/AGENTS.md](docs/AGENTS.md) for documentation placement and writing rules.
 - Current behavior belongs in architecture, testing, security, development or feature references. Rationale and rejected alternatives belong in Agent Notes.
 - Update README/JSDoc and affected reference docs in the same change as their behavior. Do not rely on a future plan document as authority for shipped behavior.
+- For user-observable incompatibilities, follow [upgrade instructions](docs/upgrade-guides/README.md) in the introducing change. When replacing a decision, follow [note retention](.agents/notes/README.md#supersession-and-retention) and preserve still-active obligations.
 - Keep Markdown links relative and specify a language for every fenced code block.
 
 ## Worktree and Git safety

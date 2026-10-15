@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { validateDocumentLifecycle } from './agent-document-lifecycle.mjs';
 
 export const ROOT_AGENT_LINE_LIMIT = 180;
 
@@ -11,10 +12,18 @@ const REQUIRED_FILES = [
   'docs/development.md',
   'docs/security.md',
   'docs/testing.md',
+  'docs/error-handling.md',
+  'docs/test-reliability.md',
+  'docs/upgrade-guides/README.md',
+  'scripts/AGENTS.md',
+  'scripts/README.md',
+  'lefthook.yml',
   'src/modules/AGENTS.md',
   'src/modules/proxy-gateway/AGENTS.md',
   'src/shared/persistence/AGENTS.md',
   '.agents/notes/README.md',
+  '.agents/lessons.md',
+  '.agents/skills/agm-code-review/SKILL.md',
   '.agents/skills/agm-validate-change/SKILL.md',
 ];
 
@@ -23,6 +32,14 @@ const NOTE_REQUIRED_SECTIONS = {
   implemented: ['Problem', 'Decision', 'Alternatives considered', 'Consequences', 'Verification'],
   rejected: ['Problem', 'Proposal', 'Alternatives considered'],
 };
+
+const LESSON_REQUIRED_SECTIONS = [
+  'When to capture',
+  'Candidate format',
+  'Promotion',
+  'Active candidates',
+];
+const LESSON_REQUIRED_FIELDS = ['Rule', 'Evidence', 'Cause', 'Prevention', 'Occurrences', 'Owner'];
 
 function toPosixPath(value) {
   return value.split(path.sep).join('/');
@@ -55,8 +72,9 @@ function collectMarkdownFiles(directory) {
 function governanceFiles(rootDir) {
   const explicitFiles = REQUIRED_FILES.map((file) => path.join(rootDir, file)).filter(existsSync);
   const noteFiles = collectMarkdownFiles(path.join(rootDir, '.agents', 'notes'));
+  const guideFiles = collectMarkdownFiles(path.join(rootDir, 'docs', 'upgrade-guides'));
 
-  return [...new Set([...explicitFiles, ...noteFiles])].sort();
+  return [...new Set([...explicitFiles, ...noteFiles, ...guideFiles])].sort();
 }
 
 function validateMarkdownLinks(rootDir, filePath, content, errors) {
@@ -121,10 +139,13 @@ function validateAgentNote(rootDir, filePath, errors) {
     return;
   }
 
-  const [lifecycle] = relativeToNotes.split('/');
+  const [directory] = relativeToNotes.split('/');
+  const lifecycle = directory === 'archived' ? 'implemented' : directory;
 
   if (!(lifecycle in NOTE_REQUIRED_SECTIONS)) {
-    errors.push(`${relativeToNotes}: Agent Note must be under proposed, implemented or rejected`);
+    errors.push(
+      `${relativeToNotes}: Agent Note must be under proposed, implemented, rejected or archived`,
+    );
     return;
   }
 
@@ -153,6 +174,62 @@ function validateAgentNote(rootDir, filePath, errors) {
   for (const section of NOTE_REQUIRED_SECTIONS[lifecycle]) {
     if (!headings.has(section)) {
       errors.push(`${relativeToNotes}: missing required section "## ${section}"`);
+    }
+  }
+}
+
+function validateAgentLessons(rootDir, errors) {
+  const relativeFile = '.agents/lessons.md';
+  const filePath = path.join(rootDir, relativeFile);
+  if (!existsSync(filePath)) {
+    return;
+  }
+
+  const content = readText(filePath);
+  const headings = new Set([...content.matchAll(/^##\s+(.+)$/gm)].map((match) => match[1]));
+  for (const section of LESSON_REQUIRED_SECTIONS) {
+    if (!headings.has(section)) {
+      errors.push(`${relativeFile}: missing required section "## ${section}"`);
+    }
+  }
+
+  const rootAgentPath = path.join(rootDir, 'AGENTS.md');
+  if (existsSync(rootAgentPath) && !readText(rootAgentPath).includes('(.agents/lessons.md)')) {
+    errors.push('AGENTS.md must link triggered failure reviews to .agents/lessons.md');
+  }
+
+  const sectionStart = content.indexOf('## Active candidates');
+  if (sectionStart < 0) {
+    return;
+  }
+  const bodyStart = content.indexOf('\n', sectionStart) + 1;
+  const nextSection = content.indexOf('\n## ', bodyStart);
+  const activeBody = content.slice(bodyStart, nextSection < 0 ? content.length : nextSection);
+  const entries = [...activeBody.matchAll(/^### Candidate: ([a-z0-9]+(?:-[a-z0-9]+)*)\s*$/gm)];
+  const seen = new Set();
+
+  if (entries.length === 0 && !/^No active candidates\.$/m.test(activeBody)) {
+    errors.push(`${relativeFile}: empty candidate section must state "No active candidates."`);
+  }
+  if (entries.length > 0 && /^No active candidates\.$/m.test(activeBody)) {
+    errors.push(`${relativeFile}: remove "No active candidates." when entries are present`);
+  }
+
+  for (const [index, entry] of entries.entries()) {
+    const slug = entry[1];
+    if (seen.has(slug)) {
+      errors.push(`${relativeFile}: duplicate candidate slug "${slug}"`);
+    }
+    seen.add(slug);
+
+    const entryStart = entry.index + entry[0].length;
+    const entryEnd = entries[index + 1]?.index ?? activeBody.length;
+    const candidate = activeBody.slice(entryStart, entryEnd);
+    for (const field of LESSON_REQUIRED_FIELDS) {
+      const fieldPattern = new RegExp(`^- \\*\\*${field}:\\*\\*\\s*\\S`, 'm');
+      if (!fieldPattern.test(candidate)) {
+        errors.push(`${relativeFile}: candidate "${slug}" needs a non-empty ${field} field`);
+      }
     }
   }
 }
@@ -199,13 +276,28 @@ export function validateAgentContracts(rootDir) {
 
   for (const filePath of governanceFiles(resolvedRoot)) {
     const content = readText(filePath);
-    validateMarkdownLinks(resolvedRoot, filePath, content, errors);
-    validateReferencedScripts(resolvedRoot, filePath, content, packageScripts, errors);
+    const archived =
+      path.relative(path.join(resolvedRoot, '.agents', 'notes'), filePath).split(path.sep)[0] ===
+      'archived';
+    if (!archived) {
+      validateMarkdownLinks(resolvedRoot, filePath, content, errors);
+      validateReferencedScripts(resolvedRoot, filePath, content, packageScripts, errors);
+    }
 
     if (filePath.startsWith(path.join(resolvedRoot, '.agents', 'notes'))) {
       validateAgentNote(resolvedRoot, filePath, errors);
     }
   }
+
+  validateAgentLessons(resolvedRoot, errors);
+
+  errors.push(
+    ...validateDocumentLifecycle(
+      resolvedRoot,
+      collectMarkdownFiles(path.join(resolvedRoot, '.agents', 'notes')),
+      collectMarkdownFiles(path.join(resolvedRoot, 'docs', 'upgrade-guides')),
+    ),
+  );
 
   return { errors };
 }

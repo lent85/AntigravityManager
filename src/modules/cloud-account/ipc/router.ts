@@ -1,7 +1,6 @@
 import { CloudAccountSwitchStatusSchema } from '../services/cloud-account-switch-status.schema';
 import { toCloudAccountSwitchStatusError } from '../services/cloud-account-switch-status.error';
 import {
-  CloudMonitorEnabledInputSchema,
   CloudMonitorModelsSchema,
   CloudMonitorModelsInputSchema,
   CloudMonitorWarmupSchema,
@@ -18,6 +17,10 @@ import {
   CloudAccountExportResultSchema,
 } from '../services/cloud-account-file.schema';
 import { z } from 'zod';
+export {
+  parseDesktopOAuthLoginErrorData,
+  type DesktopOAuthLoginErrorData,
+} from '../services/desktop-oauth-login.schema';
 import { os } from '@orpc/server';
 import {
   openCloudIdentityStorageFolder,

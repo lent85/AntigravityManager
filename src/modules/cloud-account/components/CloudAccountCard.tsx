@@ -32,8 +32,6 @@ import {
   Repeat2,
   Terminal,
   TriangleAlert,
-  CalendarDays,
-  Clock3,
   FlaskConical,
   CheckCircle2,
   Crown,
@@ -48,7 +46,6 @@ import {
   useFamilyGroups,
   useUnlinkAccountFromFamily,
 } from '@/modules/cloud-account/hooks/useFamilyGroups';
-import { formatDistanceToNow } from 'date-fns';
 import { formatAccountLastUsed } from '@/modules/cloud-account/utils/format-last-used';
 import { Badge } from '@/components/ui/badge';
 import { useTranslation } from 'react-i18next';
@@ -60,17 +57,13 @@ import {
   formatAiCreditsAmount,
   formatResetTimeLabel,
   formatResetTimeTitle,
-  getQuotaStatus,
 } from '@/modules/cloud-account/utils/quota-display';
-import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { useAccountModelAvailability } from '../hooks/useAccountModelAvailability';
 import { ipc } from '@/ipc/manager';
 import {
-  useSetAccountProxy,
   useTogglePauseCloudAccount,
 } from '@/modules/cloud-account/hooks/useCloudAccounts';
-import { isValidProxyUrl } from '@/shared/utils/url';
 import { CloudAccountProxyDialog } from '@/modules/cloud-account/components/CloudAccountProxyDialog';
 import { getCloudAccountBlockedStatusLabel } from '@/modules/cloud-account/utils/accountValidationStatus';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
@@ -87,8 +80,6 @@ import { CompactModelQuotaDisplay } from '@/modules/cloud-account/components/Com
 import { ManualRecommendationBadge } from '@/modules/cloud-account/components/ManualRecommendationBadge';
 import type { ManualRecommendationContext } from '@/modules/cloud-account/utils/manual-account-recommendation';
 import {
-  QUOTA_TEXT_COLOR_CLASS_BY_STATUS,
-  QUOTA_BAR_COLOR_CLASS_BY_STATUS,
   getModelQuotaBarColorClass,
   getModelQuotaTextColorClass,
   getQuotaBarColorClassByPercentage,
@@ -102,9 +93,11 @@ import {
   maskInitial,
   maskName,
 } from '@/modules/cloud-account/utils/identity-masking';
-import { QuotaIndicatorTooltip } from '@/modules/cloud-account/components/QuotaIndicatorTooltip';
-import { openAccountValidationLink } from '@/modules/cloud-account/actions/cloud';
 import { useOpenAccountValidationLink } from '@/modules/cloud-account/hooks/useOpenAccountValidationLink';
+import {
+  isGeminiWeeklyQuotaItem,
+  isGeminiQuotaGroup,
+} from '@/modules/cloud-account/utils/minimal-mode-preference';
 
 type ModelQuotaEntry = [string, CloudQuotaModelInfo];
 type LiveModelAvailability = Awaited<
@@ -268,6 +261,7 @@ interface CloudAccountCardProps {
   quotaWindow?: QuotaWindow;
   quotaGroupVisibility?: QuotaGroupVisibility;
   modelAvailability?: LiveModelAvailability[];
+  isMinimalMode?: boolean;
   onRefresh: (id: string) => void;
   onDelete: (id: string) => void;
   onSwitch: (id: string, appTarget?: AntigravityAppTarget) => void;
@@ -288,6 +282,7 @@ export function CloudAccountCard({
   quotaWindow = 'both',
   quotaGroupVisibility = DEFAULT_QUOTA_GROUP_VISIBILITY,
   modelAvailability: modelAvailabilityProp,
+  isMinimalMode = false,
   onRefresh,
   onDelete,
   onSwitch,
@@ -299,7 +294,7 @@ export function CloudAccountCard({
   isRefreshing,
   isDeleting,
   isSwitching,
-  switchingTarget,
+  switchingTarget: _switchingTarget,
   recommendationContext,
 }: CloudAccountCardProps) {
   const { t, i18n } = useTranslation();
@@ -380,13 +375,9 @@ export function CloudAccountCard({
     weeklyHidden,
   } = getVisibleAccountQuota(account.quota, config?.model_visibility ?? {}, quotaGroupVisibility);
 
-  const groupedModelQuotas = useMemo(
-    () =>
-      groupModelsByGeneration(mergedModelQuotas, {
-        claude: t('cloud.card.groupAnthropicClaude', 'Anthropic Claude'),
-      }),
-    [mergedModelQuotas, t],
-  );
+  const groupedModelQuotas = groupModelsByGeneration(mergedModelQuotas, {
+    claude: t('cloud.card.groupAnthropicClaude', 'Anthropic Claude'),
+  });
 
   const hasVisibleQuotaModels = groupedModelQuotas.length > 0;
   const hasDetailedQuota = detailedGroups.some((group) =>
@@ -584,27 +575,32 @@ export function CloudAccountCard({
         quota: account.quota ? { ...account.quota, models: providerModels } : undefined,
       })
     : null;
+  const overallQuotaBar =
+    providerStats && providerStats.visibleModels > 0 ? (
+      <div className="bg-muted/40 flex items-center justify-between rounded-lg px-3 py-1.5 text-xs">
+        <span className="font-medium">{t('settings.providerGroupings.overall')}</span>
+        <div className="flex items-center gap-2">
+          <span
+            className={`font-mono font-bold ${getQuotaTextColorClass(providerStats.overallPercentage)}`}
+          >
+            {formatQuotaLabel(providerStats.overallPercentage)}
+          </span>
+          <div className="bg-muted h-1.5 w-16 overflow-hidden rounded-full">
+            <div
+              className={`h-full rounded-full transition-all duration-300 ${getQuotaBarColorClass(providerStats.overallPercentage)}`}
+              style={{
+                width: `${clampQuotaPercentage(providerStats.overallPercentage)}%`,
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    ) : null;
+
   const providerGroupedQuotaSection =
     providerStats && providerStats.visibleModels > 0 ? (
       <>
-        <div className="bg-muted/40 flex items-center justify-between rounded-lg px-3 py-1.5 text-xs">
-          <span className="font-medium">{t('settings.providerGroupings.overall')}</span>
-          <div className="flex items-center gap-2">
-            <span
-              className={`font-mono font-bold ${getQuotaTextColorClass(providerStats.overallPercentage)}`}
-            >
-              {formatQuotaLabel(providerStats.overallPercentage)}
-            </span>
-            <div className="bg-muted h-1.5 w-16 overflow-hidden rounded-full">
-              <div
-                className={`h-full rounded-full transition-all duration-300 ${getQuotaBarColorClass(providerStats.overallPercentage)}`}
-                style={{
-                  width: `${clampQuotaPercentage(providerStats.overallPercentage)}%`,
-                }}
-              />
-            </div>
-          </div>
-        </div>
+        {overallQuotaBar}
 
         <div className="mt-3 space-y-2">
           {providerStats.providers.map((group) => (
@@ -1017,26 +1013,41 @@ export function CloudAccountCard({
         <div className="space-y-2">
           <AccountQuotaWindowSections
             quotaWindow={quotaWindow}
-            weeklyItems={weeklyQuotaItems}
-            fiveHourHidden={fiveHourHidden}
-            weeklyHidden={weeklyHidden}
+            weeklyItems={
+              isMinimalMode ? weeklyQuotaItems.filter(isGeminiWeeklyQuotaItem) : weeklyQuotaItems
+            }
+            fiveHourHidden={isMinimalMode ? false : fiveHourHidden}
+            weeklyHidden={isMinimalMode ? false : weeklyHidden}
             hasQuotaSummary={account.quota?.quota_groups !== undefined}
             fiveHourContent={
-              <>
-                {providerGroupingsEnabled ? (
-                  <>
-                    {providerGroupedQuotaSection}
-                    {!providerGroupedQuotaSection && !hasDetailedQuota ? emptyQuotaState : null}
-                  </>
-                ) : hasVisibleQuotaModels ? (
-                  <div className="space-y-3">
-                    {groupedModelQuotas.map((group) => renderQuotaModelGroup(group))}
-                  </div>
-                ) : hasDetailedQuota ? null : (
-                  emptyQuotaState
-                )}
-                <DetailedQuotaDisplay groups={detailedGroups} quotaWindow={quotaWindow} />
-              </>
+              isMinimalMode ? (
+                <>
+                  {overallQuotaBar}
+                  <DetailedQuotaDisplay
+                    groups={detailedGroups.filter(isGeminiQuotaGroup)}
+                    quotaWindow={quotaWindow}
+                  />
+                  {!overallQuotaBar && detailedGroups.filter(isGeminiQuotaGroup).length === 0
+                    ? emptyQuotaState
+                    : null}
+                </>
+              ) : (
+                <>
+                  {providerGroupingsEnabled ? (
+                    <>
+                      {providerGroupedQuotaSection}
+                      {!providerGroupedQuotaSection && !hasDetailedQuota ? emptyQuotaState : null}
+                    </>
+                  ) : hasVisibleQuotaModels ? (
+                    <div className="space-y-3">
+                      {groupedModelQuotas.map((group) => renderQuotaModelGroup(group))}
+                    </div>
+                  ) : hasDetailedQuota ? null : (
+                    emptyQuotaState
+                  )}
+                  <DetailedQuotaDisplay groups={detailedGroups} quotaWindow={quotaWindow} />
+                </>
+              )
             }
           />
         </div>
@@ -1045,7 +1056,8 @@ export function CloudAccountCard({
       <CardFooter className="bg-muted/10 mt-auto flex h-11 shrink-0 items-center justify-between gap-3 overflow-hidden border-t p-2 px-4">
         <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
           <span className="text-muted-foreground truncate text-[11px]">
-            {t('cloud.card.used')} {formatAccountLastUsed(account.last_used, i18n.language)}
+            {t('cloud.card.used')}{' '}
+            {formatAccountLastUsed(account.last_used, i18n?.language ?? 'en')}
           </span>
           {account.proxy_configured && (
             <span className="text-primary bg-primary/10 border-primary/20 origin-right scale-90 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold">
@@ -1321,6 +1333,7 @@ interface CompactCloudAccountCardProps {
   account: CloudAccountView;
   quotaWindow?: QuotaWindow;
   quotaGroupVisibility?: QuotaGroupVisibility;
+  isMinimalMode?: boolean;
   onRefresh: (id: string) => void;
   onDelete: (id: string) => void;
   onSwitch: (id: string, appTarget?: AntigravityAppTarget) => void;
@@ -1340,6 +1353,7 @@ export function CompactCloudAccountCard({
   account,
   quotaWindow = 'both',
   quotaGroupVisibility = DEFAULT_QUOTA_GROUP_VISIBILITY,
+  isMinimalMode = false,
   onRefresh,
   onDelete,
   onSwitch,
@@ -1388,6 +1402,11 @@ export function CompactCloudAccountCard({
   } = getVisibleAccountQuota(account.quota, config?.model_visibility ?? {}, quotaGroupVisibility);
 
   const compactQuotaItems = Object.entries(mergedModelQuotas)
+    .filter(
+      ([modelName]) =>
+        !isMinimalMode ||
+        (modelName.includes('gemini') && !GEMINI_LEGACY_MODEL_PATTERN.test(modelName)),
+    )
     .sort((a, b) => b[1].percentage - a[1].percentage)
     .map(([modelName, info]) => ({
       id: modelName,
@@ -1561,9 +1580,11 @@ export function CompactCloudAccountCard({
 
         <AccountQuotaWindowSections
           quotaWindow={quotaWindow}
-          weeklyItems={weeklyQuotaItems}
-          fiveHourHidden={fiveHourHidden}
-          weeklyHidden={weeklyHidden}
+          weeklyItems={
+            isMinimalMode ? weeklyQuotaItems.filter(isGeminiWeeklyQuotaItem) : weeklyQuotaItems
+          }
+          fiveHourHidden={isMinimalMode ? false : fiveHourHidden}
+          weeklyHidden={isMinimalMode ? false : weeklyHidden}
           hasQuotaSummary={account.quota?.quota_groups !== undefined}
           variant="compact"
           fiveHourContent={<CompactModelQuotaDisplay items={compactQuotaItems} />}

@@ -79,6 +79,7 @@ interface CloudAccountToolbarProps {
   isFamilyGrouped?: boolean;
   onToggleFamilyGrouped?: () => void;
   onOpenFamilyDialog?: () => void;
+  isMinimalMode: boolean;
   getTierOptionLabel: (key: string, label: string) => string;
   onToggleAutoSwitch: (checked: boolean) => void;
   onForcePoll: () => void;
@@ -88,6 +89,7 @@ interface CloudAccountToolbarProps {
   onUpdateGridLayout: (layout: GridLayout) => void;
   onQuotaWindowChange: (quotaWindow: QuotaWindow) => void;
   onQuotaGroupVisibilityChange: (value: QuotaGroupVisibility) => void;
+  onToggleMinimalMode: (enabled: boolean) => void;
 }
 
 export function CloudAccountToolbar({
@@ -109,9 +111,10 @@ export function CloudAccountToolbar({
   showEmulationUi = false,
   originFilter = 'all',
   onOriginFilterChange,
-  isFamilyGrouped = false,
-  onToggleFamilyGrouped,
+  isFamilyGrouped: _isFamilyGrouped = false,
+  onToggleFamilyGrouped: _onToggleFamilyGrouped,
   onOpenFamilyDialog,
+  isMinimalMode = false,
   getTierOptionLabel,
   onToggleAutoSwitch,
   onForcePoll,
@@ -121,6 +124,7 @@ export function CloudAccountToolbar({
   onUpdateGridLayout,
   onQuotaWindowChange,
   onQuotaGroupVisibilityChange,
+  onToggleMinimalMode,
 }: CloudAccountToolbarProps) {
   const { t } = useTranslation();
   const { data: emulationState } = useEmulationState(3000);
@@ -387,6 +391,22 @@ export function CloudAccountToolbar({
             </Tooltip>
           </TooltipProvider>
         )}
+
+        <div className="flex items-center gap-2 rounded-md border px-2.5 py-1">
+          <Label
+            htmlFor="minimal-mode"
+            className="cursor-pointer text-xs font-medium select-none"
+            title={t('cloud.minimal-mode-description')}
+          >
+            {t('cloud.minimal-mode')}
+          </Label>
+          <Switch
+            id="minimal-mode"
+            checked={isMinimalMode}
+            onCheckedChange={onToggleMinimalMode}
+            aria-label={t('cloud.minimal-mode')}
+          />
+        </div>
 
         <div
           className="ml-auto flex items-center gap-1 rounded-md border p-1"

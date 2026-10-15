@@ -19,10 +19,15 @@ import {
   recordSwitchFailure,
   recordSwitchSuccess,
 } from '@/modules/antigravity-runtime/switch/switchMetrics';
+import { prepareClassicTermsSwitch, type ClassicTermsSwitch } from '../terms/classicTermsSwitch';
 import { withTimingTrace } from '@/shared/observability/timingTrace';
 
 export interface SwitchFlowOptions {
+  onDiagnosticStage?(
+    stage: 'identity-preparation' | 'target-write' | 'process-close' | 'process-start',
+  ): void;
   scope: 'local' | 'cloud';
+  accountEmail?: string;
   targetProfile: DeviceProfile | null;
   appTarget?: AntigravityAppTarget;
   applyFingerprint: boolean;
@@ -129,10 +134,13 @@ export async function executeSwitchFlow(options: SwitchFlowOptions): Promise<voi
       processExitTimeoutMs,
     },
     async (trace) => {
+      let terms: ClassicTermsSwitch | null = null;
+      let startAttempted = false;
       try {
         if (isCliTarget) {
           logger.info('Skipping GUI process steps for agy CLI switch');
           stage = 'switch';
+          options.onDiagnosticStage?.('target-write');
           await trace.phase('performSwitchMs', () => performSwitch());
           if (applyFingerprint) {
             stage = 'apply';
@@ -152,23 +160,49 @@ export async function executeSwitchFlow(options: SwitchFlowOptions): Promise<voi
         const context =
           launchContext || (await prepareLaunchContext(appTarget === 'ide' ? 'ide' : 'classic'));
         const hotSession = !useCredentialStore ? await prepareIdeHotSwitch(context) : null;
+        if (useCredentialStore && options.accountEmail) {
+          terms = await prepareClassicTermsSwitch(context, options.accountEmail);
+        }
         if (applyFingerprint) {
-          if (!targetProfile) {
+          if (!targetProfile && !(process.platform === 'darwin' && useCredentialStore)) {
             stage = 'missing_profile';
             throw new Error('Account has no bound identity profile');
           }
           stage = 'apply';
-          ensureIdentityProfileStorage(appTarget, context.pathOptions);
+          if (!(process.platform === 'darwin' && useCredentialStore)) {
+            ensureIdentityProfileStorage(appTarget, context.pathOptions);
+          }
         }
         const writeSwitchState = async (applyProfile = true) => {
-          if (applyProfile && applyFingerprint && targetProfile) {
+          if (
+            applyProfile &&
+            applyFingerprint &&
+            targetProfile &&
+            !(process.platform === 'darwin' && useCredentialStore)
+          ) {
             stage = 'apply';
             trace.phaseSync('applyProfileMs', () => {
               applyDeviceProfile(targetProfile, appTarget, context.pathOptions);
             });
           }
+          stage = 'switch';
+          options.onDiagnosticStage?.('target-write');
           await trace.phase('performSwitchMs', () => performSwitch(context.pathOptions));
-          if (applyFingerprint && !useCredentialStore) {
+          if (
+            applyProfile &&
+            applyFingerprint &&
+            targetProfile &&
+            process.platform === 'darwin' &&
+            useCredentialStore
+          ) {
+            stage = 'apply';
+            try {
+              applyDeviceProfile(targetProfile, appTarget, context.pathOptions);
+            } catch {
+              // Native targets can have no storage.json after the credential write succeeds.
+            }
+          }
+          if (applyFingerprint && !useCredentialStore && process.platform !== 'darwin') {
             trace.phaseSync('syncTelemetryServiceMachineIdMs', () => {
               syncTelemetryServiceMachineIdBestEffort(
                 targetProfile,
@@ -181,42 +215,72 @@ export async function executeSwitchFlow(options: SwitchFlowOptions): Promise<voi
 
         stage = 'preflight';
         let hotConfirmed = false;
+        let macOSCredentialsApplied = false;
         if (hotSession) {
           switchMode = 'hot';
           await writeSwitchState();
-          try {
-            stage = 'hot_stop';
-            const stopped = await trace.phase('hotServiceStopMs', hotSession.stopServices);
-            // The retiring service may flush cached credentials on exit. Reassert the selected
-            // account before confirming its replacement; a failed rewrite is a partial switch.
-            await writeSwitchState(false);
+          macOSCredentialsApplied = process.platform === 'darwin';
+          if (process.platform === 'darwin') {
+            let stopped = false;
+            try {
+              stage = 'hot_stop';
+              options.onDiagnosticStage?.('process-close');
+              stopped = await trace.phase('hotServiceStopMs', hotSession.stopServices);
+            } catch {
+              logger.warn('IDE service stop failed; using a full restart');
+            }
             if (stopped) {
+              try {
+                await writeSwitchState(false);
+              } catch {
+                logger.warn('IDE credential reassertion failed after the initial write');
+              }
               stage = 'hot_confirm';
-              hotConfirmed = await trace.phase(
-                'hotServiceConfirmMs',
-                hotSession.confirmReplacement,
-              );
+              try {
+                hotConfirmed = await trace.phase(
+                  'hotServiceConfirmMs',
+                  hotSession.confirmReplacement,
+                );
+              } catch {
+                logger.warn('IDE services did not respawn; using a full restart');
+              }
             }
-            if (!hotConfirmed) {
-              await hotSession.assertCanRestart();
+          } else {
+            try {
+              stage = 'hot_stop';
+              options.onDiagnosticStage?.('process-close');
+              const stopped = await trace.phase('hotServiceStopMs', hotSession.stopServices);
+              // The retiring service may flush cached credentials on exit. Reassert the selected
+              // account before confirming its replacement; a failed rewrite is a partial switch.
+              await writeSwitchState(false);
+              if (stopped) {
+                stage = 'hot_confirm';
+                hotConfirmed = await trace.phase(
+                  'hotServiceConfirmMs',
+                  hotSession.confirmReplacement,
+                );
+              }
+              if (!hotConfirmed) {
+                await hotSession.assertCanRestart();
+              }
+            } catch (error) {
+              logger.warn('IDE hot switch could not be confirmed', {
+                stage,
+                reason:
+                  error instanceof AppError
+                    ? error.messageKey
+                    : error instanceof Error
+                      ? error.name
+                      : 'unknown',
+              });
+              if (
+                error instanceof AppError &&
+                error.messageKey === 'process-runtime.switched-hot-unconfirmed'
+              ) {
+                throw error;
+              }
+              throw processError('switched-hot-unconfirmed');
             }
-          } catch (error) {
-            logger.warn('IDE hot switch could not be confirmed', {
-              stage,
-              reason:
-                error instanceof AppError
-                  ? error.messageKey
-                  : error instanceof Error
-                    ? error.name
-                    : 'unknown',
-            });
-            if (
-              error instanceof AppError &&
-              error.messageKey === 'process-runtime.switched-hot-unconfirmed'
-            ) {
-              throw error;
-            }
-            throw processError('switched-hot-unconfirmed');
           }
           if (!hotConfirmed) {
             switchMode = 'hot-fallback';
@@ -228,6 +292,7 @@ export async function executeSwitchFlow(options: SwitchFlowOptions): Promise<voi
 
         if (!hotConfirmed) {
           stage = 'close';
+          options.onDiagnosticStage?.('process-close');
           await trace.phase('closeMs', async () => {
             try {
               await stopFromContext(context, processExitTimeoutMs);
@@ -242,9 +307,15 @@ export async function executeSwitchFlow(options: SwitchFlowOptions): Promise<voi
             }
           });
 
-          await writeSwitchState();
+          if (!macOSCredentialsApplied) {
+            await writeSwitchState();
+          }
 
+          stage = 'switch';
+          await terms?.apply();
           stage = 'start';
+          startAttempted = true;
+          options.onDiagnosticStage?.('process-start');
           await trace.phase('startMs', async () => {
             try {
               await startFromContext(context);
@@ -259,6 +330,15 @@ export async function executeSwitchFlow(options: SwitchFlowOptions): Promise<voi
         }
         recordSwitchSuccess(scope);
       } catch (error) {
+        if (!startAttempted && terms) {
+          try {
+            await terms.rollback();
+          } catch (rollbackError) {
+            onFailure?.('perform_switch_failed');
+            recordSwitchFailure(scope, 'perform_switch_failed', 'Classic terms recovery failed');
+            throw new AggregateError([error, rollbackError], 'Classic terms recovery failed');
+          }
+        }
         const reason = toSwitchFailureReason(stage, error);
         const message = getErrorMessage(error);
         failureReason = reason;
