@@ -499,6 +499,7 @@ function CloudAccountListContent() {
         effectiveQuotaStatus={effectiveQuotaStatus}
         geminiQuota={geminiQuota}
         claudeQuota={claudeQuota}
+        isMinimalMode={isMinimalMode}
       />
 
       <CloudAccountToolbar

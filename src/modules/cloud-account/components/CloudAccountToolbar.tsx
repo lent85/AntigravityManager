@@ -140,129 +140,135 @@ export function CloudAccountToolbar({
 
   return (
     <div className="bg-card flex flex-col rounded-lg border shadow-xs">
-      <div className="flex flex-wrap items-center gap-2 p-3">
-        <div className="flex items-center gap-2 px-1 py-1">
-          <div className="flex items-center gap-2">
-            <Zap
-              className={`h-4 w-4 ${autoSwitchEnabled ? 'text-primary' : 'text-muted-foreground'}`}
+      {!isMinimalMode && (
+        <div className="flex flex-wrap items-center gap-2 p-3">
+          <div className="flex items-center gap-2 px-1 py-1">
+            <div className="flex items-center gap-2">
+              <Zap
+                className={`h-4 w-4 ${autoSwitchEnabled ? 'text-primary' : 'text-muted-foreground'}`}
+              />
+              <Label
+                htmlFor="auto-switch"
+                className="cursor-default text-sm font-medium"
+                title={t('cloud.auto-switch-description')}
+              >
+                {t('cloud.auto-switch-client')}
+              </Label>
+            </div>
+            <Switch
+              id="auto-switch"
+              checked={!!autoSwitchEnabled}
+              onCheckedChange={onToggleAutoSwitch}
+              disabled={isSettingsLoading || isSetAutoSwitchPending}
             />
-            <Label
-              htmlFor="auto-switch"
-              className="cursor-default text-sm font-medium"
-              title={t('cloud.auto-switch-description')}
-            >
-              {t('cloud.auto-switch-client')}
-            </Label>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer flex items-center gap-1"
+                  title={t('cloud.autoSwitch.targetsTooltip', 'Target Applications')}
+                >
+                  <ChevronDown className="h-3 w-3" />
+                  <span className="text-[10px] bg-muted px-1 rounded font-mono">
+                    {activeTargetsCount}/3
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56 text-xs">
+                <DropdownMenuLabel className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-2 py-1">
+                  {t('cloud.autoSwitch.targetsHeader', 'Auto-switch Targets')}
+                </DropdownMenuLabel>
+                <DropdownMenuCheckboxItem
+                  checked={classicEnabled}
+                  onCheckedChange={(checked) => {
+                    setTargetAutoSwitchMutation.mutate({ enabled: checked, appTarget: 'classic' });
+                  }}
+                  className="cursor-pointer py-1.5 text-xs"
+                >
+                  <AppWindow className="h-3.5 w-3.5 mr-2 text-green-500" />
+                  <span>Antigravity App</span>
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={ideEnabled}
+                  onCheckedChange={(checked) => {
+                    setTargetAutoSwitchMutation.mutate({ enabled: checked, appTarget: 'ide' });
+                  }}
+                  className="cursor-pointer py-1.5 text-xs"
+                >
+                  <Laptop className="h-3.5 w-3.5 mr-2 text-indigo-500" />
+                  <span>Antigravity IDE</span>
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={agyEnabled}
+                  onCheckedChange={(checked) => {
+                    setTargetAutoSwitchMutation.mutate({ enabled: checked, appTarget: 'agy' });
+                  }}
+                  className="cursor-pointer py-1.5 text-xs"
+                >
+                  <Terminal className="h-3.5 w-3.5 mr-2 text-emerald-500" />
+                  <span>Antigravity CLI</span>
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuCheckboxItem
+                  checked={noRestartEnabled}
+                  onCheckedChange={(checked) => {
+                    setNoRestartMutation.mutate({ enabled: checked });
+                  }}
+                  className="cursor-pointer py-1.5 text-xs"
+                >
+                  <Zap className="h-3.5 w-3.5 mr-2 text-amber-500" />
+                  <span>{t('cloud.autoSwitch.noRestart', 'Switch without Restart')}</span>
+                </DropdownMenuCheckboxItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-          <Switch
-            id="auto-switch"
-            checked={!!autoSwitchEnabled}
-            onCheckedChange={onToggleAutoSwitch}
-            disabled={isSettingsLoading || isSetAutoSwitchPending}
-          />
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer flex items-center gap-1"
-                title={t('cloud.autoSwitch.targetsTooltip', 'Target Applications')}
-              >
-                <ChevronDown className="h-3 w-3" />
-                <span className="text-[10px] bg-muted px-1 rounded font-mono">
-                  {activeTargetsCount}/3
-                </span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56 text-xs">
-              <DropdownMenuLabel className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-2 py-1">
-                {t('cloud.autoSwitch.targetsHeader', 'Auto-switch Targets')}
-              </DropdownMenuLabel>
-              <DropdownMenuCheckboxItem
-                checked={classicEnabled}
-                onCheckedChange={(checked) => {
-                  setTargetAutoSwitchMutation.mutate({ enabled: checked, appTarget: 'classic' });
-                }}
-                className="cursor-pointer py-1.5 text-xs"
-              >
-                <AppWindow className="h-3.5 w-3.5 mr-2 text-green-500" />
-                <span>Antigravity App</span>
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={ideEnabled}
-                onCheckedChange={(checked) => {
-                  setTargetAutoSwitchMutation.mutate({ enabled: checked, appTarget: 'ide' });
-                }}
-                className="cursor-pointer py-1.5 text-xs"
-              >
-                <Laptop className="h-3.5 w-3.5 mr-2 text-indigo-500" />
-                <span>Antigravity IDE</span>
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={agyEnabled}
-                onCheckedChange={(checked) => {
-                  setTargetAutoSwitchMutation.mutate({ enabled: checked, appTarget: 'agy' });
-                }}
-                className="cursor-pointer py-1.5 text-xs"
-              >
-                <Terminal className="h-3.5 w-3.5 mr-2 text-emerald-500" />
-                <span>Antigravity CLI</span>
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem
-                checked={noRestartEnabled}
-                onCheckedChange={(checked) => {
-                  setNoRestartMutation.mutate({ enabled: checked });
-                }}
-                className="cursor-pointer py-1.5 text-xs"
-              >
-                <Zap className="h-3.5 w-3.5 mr-2 text-amber-500" />
-                <span>{t('cloud.autoSwitch.noRestart', 'Switch without Restart')}</span>
-              </DropdownMenuCheckboxItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={onForcePoll}
+            title={t('cloud.checkQuota')}
+            aria-label={t('cloud.checkQuota')}
+            disabled={isForcePollPending}
+            className="cursor-default"
+          >
+            <RefreshCcw className={`h-4 w-4 ${isForcePollPending ? 'animate-spin' : ''}`} />
+          </Button>
+
+          {showEmulationUi && (
+            <EmulationManagementDialog
+              trigger={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2 text-xs cursor-pointer border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
+                >
+                  <FlaskConical className="h-3.5 w-3.5 mr-1 text-purple-400" />
+                  {t('cloud.emulation.titleShort', 'Emulation')}
+                  {emulationState?.enabled && (
+                    <span className="ml-1.5 flex h-1.5 w-1.5 rounded-full bg-purple-400 animate-pulse" />
+                  )}
+                </Button>
+              }
+            />
+          )}
+
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <LocalAccountImportDialog />
+
+            <CloudAccountFileDialogs />
+            <CloudAccountLoginDialog />
+          </div>
         </div>
+      )}
 
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={onForcePoll}
-          title={t('cloud.checkQuota')}
-          aria-label={t('cloud.checkQuota')}
-          disabled={isForcePollPending}
-          className="cursor-default"
-        >
-          <RefreshCcw className={`h-4 w-4 ${isForcePollPending ? 'animate-spin' : ''}`} />
-        </Button>
-
-        {showEmulationUi && (
-          <EmulationManagementDialog
-            trigger={
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 px-2 text-xs cursor-pointer border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
-              >
-                <FlaskConical className="h-3.5 w-3.5 mr-1 text-purple-400" />
-                {t('cloud.emulation.titleShort', 'Emulation')}
-                {emulationState?.enabled && (
-                  <span className="ml-1.5 flex h-1.5 w-1.5 rounded-full bg-purple-400 animate-pulse" />
-                )}
-              </Button>
-            }
-          />
-        )}
-
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <LocalAccountImportDialog />
-
-          <CloudAccountFileDialogs />
-          <CloudAccountLoginDialog />
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2">
+      <div
+        className={`flex flex-wrap items-center gap-2 px-3 py-2 ${
+          !isMinimalMode ? 'border-t' : ''
+        }`}
+      >
         <CloudAccountSelectAllButton visibleAccountIds={visibleAccountIds} />
         <AccountTierFilterDropdown
           options={tierOptions}

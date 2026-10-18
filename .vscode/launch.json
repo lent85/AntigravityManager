@@ -13,11 +13,11 @@
           "-ExecutionPolicy",
           "Bypass",
           "-Command",
-          "if (!(Get-PSDrive -Name Y -ErrorAction SilentlyContinue)) { subst Y: '${workspaceFolder}' }; Set-Location Y:; npm.cmd run start"
+          "if (!(Get-PSDrive -Name Y -ErrorAction SilentlyContinue)) { subst Y: '${workspaceFolder}' }; Set-Location Y:; if (Get-Command pnpm -ErrorAction SilentlyContinue) { pnpm run start } else { npm.cmd run start }"
         ]
       },
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "start"],
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": ["/c", "pnpm", "run", "start"],
       "sourceMaps": true,
       "outFiles": ["${workspaceFolder}/.vite/build/**/*.js", "Y:/.vite/build/**/*.js"],
       "console": "integratedTerminal",
@@ -35,11 +35,11 @@
           "-ExecutionPolicy",
           "Bypass",
           "-Command",
-          "if (!(Get-PSDrive -Name Y -ErrorAction SilentlyContinue)) { subst Y: '${workspaceFolder}' }; Set-Location Y:; npm.cmd run start"
+          "if (!(Get-PSDrive -Name Y -ErrorAction SilentlyContinue)) { subst Y: '${workspaceFolder}' }; Set-Location Y:; if (Get-Command pnpm -ErrorAction SilentlyContinue) { pnpm run start } else { npm.cmd run start }"
         ]
       },
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "start"],
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": ["/c", "pnpm", "run", "start"],
       "sourceMaps": true,
       "outFiles": ["${workspaceFolder}/.vite/build/**/*.js", "Y:/.vite/build/**/*.js"],
       "console": "integratedTerminal",
