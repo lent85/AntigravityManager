@@ -7,8 +7,10 @@ import {
   UpstreamProxyConfigurationError,
 } from '@/modules/config/upstream-proxy.schema';
 import {
+  buildHubUserAgent,
   buildUserAgent,
   FALLBACK_VERSION,
+  resolveHubClientVersion,
   resolveLocalInstalledVersion,
 } from '@/modules/proxy-gateway/server/common/utils/request-user-agent';
 import { isEmpty, isNumber, isString } from 'lodash-es';
@@ -50,10 +52,11 @@ const QUOTA_API_ENDPOINTS = [
   'https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels',
 ];
 
+// Daily is the host the Antigravity app queries and the only one observed to return every group.
 const QUOTA_SUMMARY_ENDPOINTS = [
-  'https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:retrieveUserQuotaSummary',
   'https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary',
   'https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary',
+  'https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:retrieveUserQuotaSummary',
 ];
 
 // Request timeout in milliseconds (30 seconds)
@@ -483,11 +486,13 @@ function parseQuotaSummaryResponse(payload: unknown): QuotaSummaryResponse {
   return parsed.data;
 }
 
-function buildInternalApiHeaders(accessToken: string): Record<string, string> {
-  const discoveryVersion = resolveLocalInstalledVersion() ?? FALLBACK_VERSION;
+function buildInternalApiHeaders(
+  accessToken: string,
+  userAgent = buildUserAgent(resolveLocalInstalledVersion() ?? FALLBACK_VERSION),
+): Record<string, string> {
   return {
     Authorization: `Bearer ${accessToken}`,
-    'User-Agent': buildUserAgent(discoveryVersion),
+    'User-Agent': userAgent,
     'Content-Type': 'application/json',
   };
 }
@@ -1247,6 +1252,13 @@ export class GoogleAPIService {
     axiosOptions: GoogleApiProxyOptions,
   ): Promise<{ quotaGroups?: QuotaGroup[]; isForbidden?: boolean } | undefined> {
     const payload: { project?: string } = projectId ? { project: projectId } : {};
+    // Model-specific groups such as Gemini 4 Argon are not returned to the bare client identity.
+    const headers = buildInternalApiHeaders(
+      accessToken,
+      buildHubUserAgent(resolveHubClientVersion()),
+    );
+
+    let hadForbidden = false;
 
     for (const endpoint of QUOTA_SUMMARY_ENDPOINTS) {
       let currentPayload = { ...payload };
@@ -1256,7 +1268,7 @@ export class GoogleAPIService {
         try {
           const response = await requestGoogleApi(endpoint, {
             data: JSON.stringify(currentPayload),
-            headers: buildInternalApiHeaders(accessToken),
+            headers,
             method: 'POST',
             signal: createGoogleApiRequestSignal(REQUEST_TIMEOUT_MS).signal,
             ...axiosOptions,
@@ -1275,9 +1287,11 @@ export class GoogleAPIService {
               continue;
             }
             if (response.status === 403) {
-              return { isForbidden: true };
+              hadForbidden = true;
             }
-            if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+            // Hosts reject the summary independently (sandbox returns 403 for some accounts), so
+            // only a rejected credential ends this optional lookup before every host is tried.
+            if (response.status === 401) {
               return undefined;
             }
             break;
@@ -1289,6 +1303,10 @@ export class GoogleAPIService {
           break;
         }
       }
+    }
+
+    if (hadForbidden) {
+      return { isForbidden: true };
     }
 
     return undefined;

@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import { CloudAccountRepo } from '@/modules/cloud-account/persistence/cloudHandler';
 import { CloudAccountSettingsStore } from '@/modules/cloud-account/persistence/cloud-account-settings-store';
 import {
@@ -12,9 +11,11 @@ import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarge
 import {
   applyQuotaLowerBound,
   collectQuotaGroupBucketPercentages,
+  getDedicatedQuotaGroupFamilyId,
   getMinimumQuotaPercentage,
   selectWeeklyQuotaItems,
 } from '@/modules/cloud-account/utils/quota-groups';
+import { getQuotaModelFamilyId } from '@/modules/cloud-account/utils/quota-model-families';
 
 interface AccountSelectionScore {
   priorityScore: number | null;
@@ -26,7 +27,6 @@ interface AccountSelectionScore {
 
 type QuotaModelEntry = [string, NonNullable<CloudAccount['quota']>['models'][string]];
 
-const BooleanSettingSchema = z.boolean();
 const AUTO_SWITCH_DEPLETION_THRESHOLD_PERCENT = 5;
 
 export class AutoSwitchService {
@@ -331,9 +331,6 @@ export class AutoSwitchService {
           `AutoSwitch: Switching target ${appTarget ?? 'default'} to ${nextAccount.email} (no-restart: ${isNoRestart})...`,
         );
 
-        const targetLabel =
-          appTarget === 'agy' ? 'CLI' : appTarget === 'ide' ? 'IDE' : 'App (Classic)';
-
         if (isNoRestart && appTarget !== 'agy') {
           // Perform live sync without restarting GUI process
           await this.effects.markActiveAccount(nextAccount.id, appTarget);
@@ -430,6 +427,13 @@ export class AutoSwitchService {
 
     if (depletedGroups.length > 0) {
       const anyAffected = depletedGroups.some((group) => {
+        const dedicatedFamilyId = getDedicatedQuotaGroupFamilyId(group);
+        if (dedicatedFamilyId !== undefined) {
+          return enabledModels.some(
+            ([modelId]) => getQuotaModelFamilyId(modelId) === dedicatedFamilyId,
+          );
+        }
+
         const groupText = [group.display_name, group.description]
           .filter(Boolean)
           .join(' ')

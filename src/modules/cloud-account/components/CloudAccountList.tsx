@@ -146,6 +146,8 @@ function CloudAccountListContent() {
     effectiveQuotaStatus,
     geminiQuota,
     claudeQuota,
+    overallWeeklyQuotaPercentage,
+    effectiveWeeklyQuotaStatus,
   } = useCloudAccountListView(accounts, config, currentSort);
 
   const [originFilter, setOriginFilter] = useState<'all' | 'real' | 'emulated'>('all');
@@ -497,6 +499,8 @@ function CloudAccountListContent() {
         rateLimitedAccounts={rateLimitedAccounts}
         overallQuotaPercentage={overallQuotaPercentage}
         effectiveQuotaStatus={effectiveQuotaStatus}
+        overallWeeklyQuotaPercentage={overallWeeklyQuotaPercentage}
+        effectiveWeeklyQuotaStatus={effectiveWeeklyQuotaStatus}
         geminiQuota={geminiQuota}
         claudeQuota={claudeQuota}
         isMinimalMode={isMinimalMode}

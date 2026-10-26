@@ -1,6 +1,8 @@
+import { findKey } from 'lodash-es';
 import type { CloudQuotaModelInfo } from '@/modules/cloud-account/types';
 
 const FAMILY_DISPLAY_NAMES: Record<string, string> = {
+  'gemini-4-argon': 'Gemini 4 Argon',
   'gemini-4.0-pro': 'Gemini 4.0 Pro',
   'gemini-4.0-flash': 'Gemini 4.0 Flash',
   'gemini-4.0': 'Gemini 4.0',
@@ -21,6 +23,7 @@ const FAMILY_DISPLAY_NAMES: Record<string, string> = {
 };
 
 const EXACT_PRESENTATION_FAMILIES = new Set([
+  'gemini-4-argon',
   'gemini-4.0-pro',
   'gemini-4.0-flash',
   'gemini-4.0',
@@ -38,6 +41,12 @@ function normalizeModelId(modelId: string): string {
     .replace(/^models\//i, '')
     .trim()
     .toLowerCase();
+}
+
+/** Resolves a registered family from its exact product name, ignoring case and outer spaces. */
+export function getQuotaModelFamilyIdByDisplayName(displayName: string): string | undefined {
+  const normalized = displayName.trim().toLowerCase();
+  return findKey(FAMILY_DISPLAY_NAMES, (familyName) => familyName.toLowerCase() === normalized);
 }
 
 export function getQuotaModelFamilyId(modelId: string): string {
@@ -59,6 +68,10 @@ export function getQuotaModelFamilyId(modelId: string): string {
     normalized === 'gemini-2.5-flash-thinking'
   ) {
     return 'gemini-flash-lite';
+  }
+
+  if (normalized.startsWith('gemini-4-argon')) {
+    return 'gemini-4-argon';
   }
 
   if (

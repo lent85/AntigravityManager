@@ -629,6 +629,7 @@ const tr = {
     checkQuota: 'Kotayı Şimdi Kontrol Et',
     polling: 'Sorgulama tetiklendi',
     globalQuota: 'Genel Kota',
+    weeklyQuota: 'Haftalık Kota',
     layout: {
       auto: 'Otomatik',
       twoCol: '2 Sütun',
@@ -682,6 +683,12 @@ const tr = {
       verify: 'Doğrula ve Ekle',
     },
     card: {
+      'client-app': 'App',
+      'client-ide': 'IDE',
+      'client-cli': 'CLI',
+      'client-usage': 'İstemci kullanımı',
+      'client-in-use': '{{client}} tarafından kullanılıyor',
+      'not-in-use': 'Kullanılmıyor',
       active: 'Aktif',
       use: 'Kullan',
       rateLimited: 'Hız Sınırına Takıldı',

@@ -5,21 +5,19 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { CompactQuotaRow } from '@/modules/cloud-account/components/CompactQuotaRow';
 import type { WeeklyQuotaItem } from '@/modules/cloud-account/utils/quota-groups';
 import {
-  QUOTA_BAR_COLOR_CLASS_BY_STATUS,
   QUOTA_TEXT_COLOR_CLASS_BY_STATUS,
 } from '@/modules/cloud-account/components/quota-colors';
 import {
   clampQuotaPercentage,
   formatResetTimeLabel,
   formatResetTimeTitle,
+  formatTimeRemaining,
   getQuotaStatus,
 } from '@/modules/cloud-account/utils/quota-display';
 
 import {
   getModelQuotaBarColorClass,
   getModelQuotaTextColorClass,
-  getQuotaBarColorClassByPercentage,
-  getQuotaTextColorClassByPercentage,
 } from '@/modules/cloud-account/components/quota-colors';
 import { cn } from '@/shared/ui/utils';
 
@@ -63,11 +61,33 @@ export function WeeklyQuotaDisplay({
           const label = items.some((other) => other !== item && other.groupName === item.groupName)
             ? `${groupName} · ${item.bucketLabel}`
             : groupName;
+          const resetRemaining = item.resetTime ? formatTimeRemaining(item.resetTime) : null;
+          const resetLabel = resetRemaining
+            ? `${t('cloud.card.resetPrefix')}: ${resetRemaining}`
+            : null;
+
           return (
             <div key={item.id} className="flex min-w-0 flex-col gap-1">
-              <span className="text-muted-foreground block truncate text-[10px]" title={label}>
-                {label}
-              </span>
+              <div className="flex items-center justify-between gap-1.5 text-[10px] leading-tight">
+                <div className="flex min-w-0 items-center gap-1.5 truncate">
+                  <span className="text-muted-foreground truncate" title={label}>
+                    {label}
+                  </span>
+                  {resetLabel && (
+                    <span
+                      className="text-muted-foreground/70 shrink-0 text-[9px]"
+                      title={formatResetTimeTitle(item.resetTime, t('cloud.card.resetTime'))}
+                    >
+                      {resetLabel}
+                    </span>
+                  )}
+                </div>
+                <span
+                  className={`shrink-0 font-mono text-[10px] ${QUOTA_TEXT_COLOR_CLASS_BY_STATUS[status]}`}
+                >
+                  {item.percentage}%
+                </span>
+              </div>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>

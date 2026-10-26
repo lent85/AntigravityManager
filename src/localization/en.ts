@@ -829,6 +829,7 @@ const en = {
     checkQuota: 'Check Quota Now',
     polling: 'Polling triggered',
     globalQuota: 'Global Quota',
+    weeklyQuota: 'Weekly Quota',
     layout: {
       auto: 'Auto',
       twoCol: '2 Columns',
@@ -1067,6 +1068,12 @@ const en = {
       },
     },
     card: {
+      'client-app': 'App',
+      'client-ide': 'IDE',
+      'client-cli': 'CLI',
+      'client-usage': 'Client usage',
+      'client-in-use': 'In use by {{client}}',
+      'not-in-use': 'Not in use',
       active: 'Active',
       use: 'Use',
       rateLimited: 'Rate Limited',
