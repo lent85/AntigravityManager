@@ -454,7 +454,18 @@ const config: ForgeConfig = {
       iconUrl:
         'https://raw.githubusercontent.com/Draculabo/AntigravityManager/main/images/icon.ico',
     }),
-    ...(process.platform === 'win32' && process.arch === 'x64'
+    ...(process.platform === 'win32' &&
+    process.arch === 'x64' &&
+    Boolean(
+      process.env.WIX ||
+        process.env.PATH?.split(path.delimiter).some((dir) => {
+          try {
+            return fs.existsSync(path.join(dir, 'candle.exe'));
+          } catch {
+            return false;
+          }
+        }),
+    )
       ? [
           new MakerWix({
             arch: 'x64',

@@ -144,6 +144,13 @@ try {
     npm_config_platform: platform,
     npm_config_cache: path.join(stage, 'package-cache'),
     npm_config_devdir: path.join(stage, 'node-gyp-cache'),
+    npm_config_store_dir:
+      process.env.npm_config_store_dir ??
+      (platform === 'win32'
+        ? path.join(process.env.USERPROFILE || 'C:\\Users\\Admin', '.pnpm-store')
+        : undefined),
+    npm_config_package_import_method: platform === 'win32' ? 'copy' : undefined,
+    npm_config_node_linker: 'hoisted',
   };
   delete environment.NODE_PATH;
   delete environment.NODE_OPTIONS;

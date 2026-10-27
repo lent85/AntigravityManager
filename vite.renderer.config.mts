@@ -47,7 +47,6 @@ const requireResolver = enhancedResolve.ResolverFactory.createResolver({
 // Providing globalThis.__tw_resolve strips the '\0' escape characters.
 if (typeof (globalThis as any).__tw_resolve !== 'function') {
   try {
-
     (globalThis as any).__tw_resolve = (id: string, base: string) => {
       try {
         const dir = fs.existsSync(base) && fs.statSync(base).isDirectory() ? base : path.dirname(base);
@@ -56,23 +55,33 @@ if (typeof (globalThis as any).__tw_resolve !== 'function') {
           if (res) {
             return (res as string).replace(/\0/g, '');
           }
-        } catch {}
+        } catch {
+          // ignore
+        }
         try {
           const res = jsResolver.resolveSync({}, dir, id);
           if (res) {
             return (res as string).replace(/\0/g, '');
           }
-        } catch {}
+        } catch {
+          // ignore
+        }
         try {
           const res = requireResolver.resolveSync({}, dir, id);
           if (res) {
             return (res as string).replace(/\0/g, '');
           }
-        } catch {}
-      } catch {}
+        } catch {
+          // ignore
+        }
+      } catch {
+        // ignore
+      }
       return null;
     };
-  } catch {}
+  } catch {
+    // ignore
+  }
 }
 
 if (typeof (globalThis as any).__tw_readFile !== 'function') {
@@ -80,7 +89,9 @@ if (typeof (globalThis as any).__tw_readFile !== 'function') {
     try {
       const cleanPath = filePath.replace(/\0/g, '');
       return fs.promises.readFile(cleanPath, (encoding as BufferEncoding) || 'utf-8');
-    } catch {}
+    } catch {
+      // ignore
+    }
     return null;
   };
 }
@@ -124,7 +135,7 @@ function resolvePathPlugin() {
       const query = queryParts.length > 0 ? `?${queryParts.join('?')}` : '';
 
       let cleanImporter = importer.split('?')[0];
-      const match = cleanImporter.match(/([a-zA-Z]:[\\\/].*)/);
+      const match = cleanImporter.match(/([a-zA-Z]:[\\/].*)/);
       if (match) {
         cleanImporter = match[1];
       }
@@ -167,16 +178,35 @@ function resolvePathPlugin() {
               return normalizeTarget(clean) + query;
             }
           }
-        } catch {}
+        } catch {
+          // ignore
+        }
       }
 
       return null;
     },
     load(id: string) {
+      if (
+        id.startsWith('\0') ||
+        id.includes('commonjs') ||
+        id.includes('virtual:') ||
+        id.startsWith('node:')
+      ) {
+        return null;
+      }
+
+      const rawPath = id.split('?')[0];
+      const match = rawPath.match(/([a-zA-Z]:[\\/].*)/);
+      const cleanPath = match ? match[1] : rawPath;
+
+      if (id.includes('?raw')) {
+        if (fs.existsSync(cleanPath) && fs.statSync(cleanPath).isFile()) {
+          return `export default ${JSON.stringify(fs.readFileSync(cleanPath, 'utf-8'))};`;
+        }
+      }
       if (id.includes('?')) {
-        const [filePath] = id.split('?');
-        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-          return fs.readFileSync(filePath, 'utf-8');
+        if (fs.existsSync(cleanPath) && fs.statSync(cleanPath).isFile()) {
+          return fs.readFileSync(cleanPath, 'utf-8');
         }
       }
       if (/(\.(?:[cm]?[jt]sx?|json))#/.test(id)) {

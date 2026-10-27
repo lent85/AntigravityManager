@@ -99,10 +99,10 @@ if ($SkipBuild) {
 
             if ($NewVersion) {
                 Write-Step "2/5" "Setting release version to $NewVersion..."
-                & npm.cmd --no-git-tag-version version $NewVersion
+                & pnpm.cmd version --no-git-tag-version $NewVersion
             } else {
                 Write-Step "2/5" "Bumping build version ($Bump) from $oldVersion..."
-                & npm.cmd --no-git-tag-version version $Bump
+                & pnpm.cmd version --no-git-tag-version $Bump
             }
 
             if ($LASTEXITCODE -eq 0) {
@@ -119,10 +119,10 @@ if ($SkipBuild) {
     $hasWix = (Get-Command candle.exe -ErrorAction SilentlyContinue) -and (Get-Command light.exe -ErrorAction SilentlyContinue)
     if ($hasWix) {
         Write-Info "WiX toolset detected. Building all Windows targets (Squirrel + WiX MSI)..."
-        & npm.cmd run make -- --platform=win32 --arch=x64
+        & pnpm.cmd exec electron-forge make --platform=win32 --arch=x64
     } else {
         Write-Info "WiX toolset not detected. Building Squirrel setup package..."
-        & npm.cmd run make -- --platform=win32 --arch=x64 --targets @electron-forge/maker-squirrel
+        & pnpm.cmd exec electron-forge make --platform=win32 --arch=x64 --targets @electron-forge/maker-squirrel
     }
 
     if ($LASTEXITCODE -ne 0) {
