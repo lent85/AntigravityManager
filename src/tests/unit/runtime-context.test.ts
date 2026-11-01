@@ -15,6 +15,10 @@ const mocks = vi.hoisted(() => ({
   args: vi.fn(),
   observe: vi.fn(),
   updateGuard: vi.fn(),
+  windowsCandidates: vi.fn(() => [] as string[]),
+}));
+vi.mock('@/shared/platform/windowsClientExecutable', () => ({
+  findWindowsClientExecutables: mocks.windowsCandidates,
 }));
 vi.mock('@/shared/platform/paths', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/shared/platform/paths')>()),
@@ -43,10 +47,13 @@ fs.writeFileSync(otherExecutable, 'fixture');
 fs.chmodSync(executable, 0o755);
 fs.chmodSync(otherExecutable, 0o755);
 fs.mkdirSync(userData);
+const realUserData = fs.realpathSync.native(userData);
+const canonicalUserData = process.platform === 'win32' ? realUserData.toLowerCase() : realUserData;
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.configured.mockReturnValue(null);
+  mocks.windowsCandidates.mockReturnValue([]);
   mocks.discovered.mockReturnValue(executable);
   mocks.args.mockReturnValue([]);
   mocks.observe.mockResolvedValue([]);
@@ -75,17 +82,17 @@ describe('immutable launch context', () => {
     ]);
     expect(context.args).toEqual([`--user-data-dir=${userData}`]);
     expect(getAntigravityDbPaths('classic', context.pathOptions)).toEqual([
-      path.join(userData, 'User', 'globalStorage', 'state.vscdb'),
-      path.join(userData, 'User', 'state.vscdb'),
-      path.join(userData, 'state.vscdb'),
+      path.join(canonicalUserData, 'User', 'globalStorage', 'state.vscdb'),
+      path.join(canonicalUserData, 'User', 'state.vscdb'),
+      path.join(canonicalUserData, 'state.vscdb'),
     ]);
     expect(getAntigravityStoragePaths('classic', context.pathOptions)).toEqual([
-      path.join(userData, 'User', 'globalStorage', 'storage.json'),
-      path.join(userData, 'User', 'storage.json'),
-      path.join(userData, 'storage.json'),
+      path.join(canonicalUserData, 'User', 'globalStorage', 'storage.json'),
+      path.join(canonicalUserData, 'User', 'storage.json'),
+      path.join(canonicalUserData, 'storage.json'),
     ]);
     mocks.args.mockReturnValue(['--user-data-dir', path.join(root, 'changed')]);
-    expect(context.pathOptions.userDataDir).toBe(userData);
+    expect(context.pathOptions.userDataDir).toBe(canonicalUserData);
     expect(Object.isFrozen(context.args)).toBe(true);
     expect(Object.isFrozen(context.pathOptions)).toBe(true);
   });
@@ -111,6 +118,36 @@ describe('immutable launch context', () => {
       messageKey: 'process-runtime.missing-executable',
     });
     expect(mocks.discovered).not.toHaveBeenCalled();
+  });
+
+  it('recovers a missing configured binary from the same running installation', () => {
+    mocks.configured.mockReturnValue(path.join(root, 'old-name.exe'));
+    const context = resolveLaunchContext('classic', [
+      { pid: 42, executablePath: executable, args: ['--user-data-dir', userData] },
+    ]);
+    expect({
+      executablePath: context.executablePath,
+      userDataDir: context.pathOptions.userDataDir,
+    }).toEqual({ executablePath: executable, userDataDir: canonicalUserData });
+    expect(mocks.discovered).not.toHaveBeenCalled();
+  });
+
+  it('does not recover a stale configuration from a different installation', () => {
+    mocks.configured.mockReturnValue(path.join(root, 'old-install', 'app.exe'));
+    expect(() =>
+      resolveLaunchContext('classic', [{ pid: 42, executablePath: executable, args: [] }]),
+    ).toThrow('missing-executable');
+  });
+
+  it('does not select the first of competing discovered Windows installations', () => {
+    const platform = process.platform;
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
+    try {
+      mocks.windowsCandidates.mockReturnValue([executable, otherExecutable]);
+      expect(() => resolveLaunchContext('classic', [])).toThrow('target-conflict');
+    } finally {
+      Object.defineProperty(process, 'platform', { configurable: true, value: platform });
+    }
   });
 
   it('fails when configured and observed installations disagree', () => {

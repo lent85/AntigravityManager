@@ -25,6 +25,7 @@ import { ProxyWebPortalTab } from '@/modules/proxy-gateway/components/ProxyWebPo
 import { GlobalSystemPromptCard } from '@/modules/proxy-gateway/components/GlobalSystemPromptCard';
 import { AuditAndThoughtStoreCard } from '@/modules/proxy-gateway/components/AuditAndThoughtStoreCard';
 import { OpenCodeSyncCard } from '@/modules/proxy-gateway/components/OpenCodeSyncCard';
+import { AgentToolSyncCard } from '@/modules/proxy-gateway/components/AgentToolSyncCard';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
@@ -227,7 +228,11 @@ function ProxyPage() {
             config={proxyConfig}
             onChange={(patch) => updateProxyConfig({ ...proxyConfig, ...patch })}
           />
-          <OpenCodeSyncCard baseUrl={baseUrl} models={exampleModels} />
+          <div data-slot="agent-tool-grid" className="grid items-stretch gap-3 xl:grid-cols-3">
+            <AgentToolSyncCard tool="claude" baseUrl={baseUrl} models={exampleModels} />
+            <AgentToolSyncCard tool="codex" baseUrl={baseUrl} models={exampleModels} />
+            <OpenCodeSyncCard baseUrl={baseUrl} models={exampleModels} />
+          </div>
 
           {/* Experimental Features Card */}
           <div className="rounded-lg border bg-card p-4 space-y-3">

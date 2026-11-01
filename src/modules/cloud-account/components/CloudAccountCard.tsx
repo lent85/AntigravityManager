@@ -18,6 +18,8 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/shared/ui/utils';
+import { useToast } from '@/components/ui/use-toast';
+import { getLocalizedErrorMessage } from '@/shared/utils/errorMessages';
 import { CardVerticalRefreshProgress } from '@/modules/cloud-account/components/CardVerticalRefreshProgress';
 
 import {
@@ -25,6 +27,7 @@ import {
   Trash,
   RefreshCw,
   Box,
+  Boxes,
   Power,
   Fingerprint,
   Eye,
@@ -59,9 +62,10 @@ import {
   formatResetTimeLabel,
   formatResetTimeTitle,
 } from '@/modules/cloud-account/utils/quota-display';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useAccountModelAvailability } from '../hooks/useAccountModelAvailability';
 import { ipc } from '@/ipc/manager';
+import { launchWorkspaceForAccount } from '@/modules/workspace/actions/workspace';
 import {
   useTogglePauseCloudAccount,
 } from '@/modules/cloud-account/hooks/useCloudAccounts';
@@ -287,6 +291,9 @@ interface CloudAccountCardProps {
   onMarkActive?: (id: string, appTarget?: AntigravityAppTarget) => void;
   onManageIdentity: (id: string) => void;
   onManageFamily?: (id: string) => void;
+  onLaunchIsolatedIde?: (id: string) => Promise<void> | void;
+  launchWorkspaceAction?: (accountId: string) => Promise<{ pid: number }>;
+  toast?: ReturnType<typeof useToast>['toast'];
   isSelected?: boolean;
   onToggleSelection?: (id: string, selected: boolean) => void;
   isRefreshing?: boolean;
@@ -308,6 +315,9 @@ export function CloudAccountCard({
   onMarkActive,
   onManageIdentity,
   onManageFamily,
+  onLaunchIsolatedIde,
+  launchWorkspaceAction,
+  toast: customToast,
   isSelected = false,
   onToggleSelection,
   isRefreshing,
@@ -317,6 +327,42 @@ export function CloudAccountCard({
   recommendationContext,
 }: CloudAccountCardProps) {
   const { t, i18n } = useTranslation();
+  const { toast: defaultToast } = useToast();
+  const toast = customToast ?? defaultToast;
+  const isLaunchingRef = useRef(false);
+  const [isLaunchingWorkspace, setIsLaunchingWorkspace] = useState(false);
+
+  const handleLaunchIsolatedIde = async () => {
+    if (isLaunchingRef.current || isLaunchingWorkspace || isDeleting || isSwitching) return;
+    isLaunchingRef.current = true;
+    setIsLaunchingWorkspace(true);
+    try {
+      if (onLaunchIsolatedIde) {
+        await onLaunchIsolatedIde(account.id);
+      } else {
+        await (launchWorkspaceAction ?? launchWorkspaceForAccount)(account.id);
+      }
+      toast({
+        title: t('account.launchIsolatedIdeSuccess', 'Isolated IDE Launched'),
+        description: t(
+          'account.launchIsolatedIdeSuccessDesc',
+          'Launched isolated IDE instance for {{name}}',
+          { name: account.name || account.email || 'Workspace' },
+        ),
+      });
+    } catch (error) {
+      toast({
+        error,
+        title: t('account.launchIsolatedIdeError', 'Launch Failed'),
+        description: getLocalizedErrorMessage(error, t),
+        variant: 'destructive',
+      });
+    } finally {
+      isLaunchingRef.current = false;
+      setIsLaunchingWorkspace(false);
+    }
+  };
+
   const validationLink = useOpenAccountValidationLink();
   const { config, saveConfig } = useAppConfig();
   const { data: familyGroups = [] } = useFamilyGroups();
@@ -1252,6 +1298,31 @@ export function CloudAccountCard({
                 </TooltipContent>
               </Tooltip>
 
+              {/* Launch Isolated IDE Button */}
+              <Tooltip delayDuration={300}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="hover:bg-muted text-muted-foreground hover:text-foreground h-8 w-8 cursor-pointer"
+                    onClick={handleLaunchIsolatedIde}
+                    disabled={isLaunchingWorkspace || isDeleting || isSwitching}
+                    title={t('account.launchIsolatedIde', 'Launch Isolated IDE')}
+                    aria-label={t('account.launchIsolatedIde', 'Launch Isolated IDE')}
+                    aria-busy={isLaunchingWorkspace}
+                  >
+                    {isLaunchingWorkspace ? (
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Boxes className="h-3.5 w-3.5" aria-hidden="true" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs">
+                  {t('account.launchIsolatedIde', 'Launch Isolated IDE')}
+                </TooltipContent>
+              </Tooltip>
+
               {/* Family Button */}
               {onManageFamily && (
                 <Tooltip delayDuration={300}>
@@ -1320,6 +1391,9 @@ export function CloudAccountCard({
 }
 
 interface CompactCloudAccountCardProps {
+  onLaunchIsolatedIde?: (id: string) => Promise<void> | void;
+  launchWorkspaceAction?: (accountId: string) => Promise<{ pid: number }>;
+  toast?: ReturnType<typeof useToast>['toast'];
   account: CloudAccountView;
   quotaWindow?: QuotaWindow;
   quotaGroupVisibility?: QuotaGroupVisibility;
@@ -1340,6 +1414,9 @@ interface CompactCloudAccountCardProps {
 }
 
 export function CompactCloudAccountCard({
+  onLaunchIsolatedIde,
+  launchWorkspaceAction,
+  toast: customToast,
   account,
   quotaWindow = 'both',
   quotaGroupVisibility = DEFAULT_QUOTA_GROUP_VISIBILITY,
@@ -1358,6 +1435,42 @@ export function CompactCloudAccountCard({
   recommendationContext,
 }: CompactCloudAccountCardProps) {
   const { t } = useTranslation();
+  const { toast: defaultToast } = useToast();
+  const toast = customToast ?? defaultToast;
+  const isLaunchingRef = useRef(false);
+  const [isLaunchingWorkspace, setIsLaunchingWorkspace] = useState(false);
+
+  const handleLaunchIsolatedIde = async () => {
+    if (isLaunchingRef.current || isLaunchingWorkspace || isDeleting || isSwitching) return;
+    isLaunchingRef.current = true;
+    setIsLaunchingWorkspace(true);
+    try {
+      if (onLaunchIsolatedIde) {
+        await onLaunchIsolatedIde(account.id);
+      } else {
+        await (launchWorkspaceAction ?? launchWorkspaceForAccount)(account.id);
+      }
+      toast({
+        title: t('account.launchIsolatedIdeSuccess', 'Isolated IDE Launched'),
+        description: t(
+          'account.launchIsolatedIdeSuccessDesc',
+          'Launched isolated IDE instance for {{name}}',
+          { name: account.name || account.email || 'Workspace' },
+        ),
+      });
+    } catch (error) {
+      toast({
+        error,
+        title: t('account.launchIsolatedIdeError', 'Launch Failed'),
+        description: getLocalizedErrorMessage(error, t),
+        variant: 'destructive',
+      });
+    } finally {
+      isLaunchingRef.current = false;
+      setIsLaunchingWorkspace(false);
+    }
+  };
+
   const validationLink = useOpenAccountValidationLink();
   const { config } = useAppConfig();
   const { data: familyGroups = [] } = useFamilyGroups();
@@ -1878,6 +1991,18 @@ export function CompactCloudAccountCard({
             <DropdownMenuItem onClick={() => onRefresh(account.id)} disabled={isRefreshing} className="flex cursor-pointer items-center py-2 text-xs">
               <RefreshCw className={cn('mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground', isRefreshing && 'animate-spin')} />
               <span className="whitespace-nowrap">{t('cloud.card.refresh', 'Refresh Quota')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={handleLaunchIsolatedIde}
+              disabled={isLaunchingWorkspace || isDeleting || isSwitching}
+              className="flex cursor-pointer items-center py-2 text-xs"
+            >
+              {isLaunchingWorkspace ? (
+                <RefreshCw className="mr-2 h-3.5 w-3.5 animate-spin shrink-0 text-muted-foreground" />
+              ) : (
+                <Boxes className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              )}
+              <span className="whitespace-nowrap">{t('account.launchIsolatedIde', 'Launch Isolated IDE')}</span>
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={handleTogglePause}

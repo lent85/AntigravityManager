@@ -432,6 +432,9 @@ const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
 if (isDev) {
   app.setName('Antigravity Manager Dev');
+  if (!process.env.AGM_DIAGNOSTIC_DIRECTORY) {
+    app.setPath('userData', path.join(app.getPath('appData'), 'Antigravity Manager Dev'));
+  }
 }
 
 if (process.platform === 'win32') {
@@ -752,6 +755,12 @@ async function checkForUpdates() {
   const isForcingManualUpdate = isManualUpdateForceEnabled();
   if (!app.isPackaged && !isMockingManualUpdate && !isForcingManualUpdate) {
     logger.info('Update: Skipping startup update check in development');
+    return;
+  }
+
+  const appConfig = ConfigManager.loadConfig();
+  if (!appConfig.auto_update_enabled && !isMockingManualUpdate && !isForcingManualUpdate) {
+    logger.info('Update: Automatic update check is disabled by default in customized build');
     return;
   }
 

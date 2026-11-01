@@ -15,6 +15,7 @@ Instructions in a deeper `AGENTS.md` supplement this file for that subtree. Keep
 
 - Use Node.js `24.22.0` from `.nvmrc`, pnpm `10.34.6` from `packageManager` and the checked-in `pnpm-lock.yaml`. Do not use npm, Yarn or Bun for project dependency management.
 - Prefer project scripts from `package.json`; do not invent a parallel command when an owning script exists.
+- For adding, upgrading or auditing project Skills, follow [skill maintenance](docs/development/agent-skills.md).
 - Before running or changing repository scripts, read [scripts/AGENTS.md](scripts/AGENTS.md) and use [scripts/README.md](scripts/README.md) to locate existing verification and preparation tools.
 - The primary development shell is PowerShell on Windows. Keep scripts portable when CI or packaged behavior is cross-platform.
 - When `.codegraph/` exists, use CodeGraph before text search to understand symbols and call paths. Use `ast-grep` for syntax-aware structural search, bulk refactoring, custom lint checks, vulnerability patterns and framework/API migrations.
@@ -66,6 +67,7 @@ See [src/modules/AGENTS.md](src/modules/AGENTS.md), [src/modules/proxy-gateway/A
 Route the task before editing:
 
 - Do not automatically invoke OpenSpec prompts or skills for project work; use this workflow unless the user explicitly requests OpenSpec.
+- For frontend UI/UX design, implementation, refinement or review, automatically use [Impeccable](.agents/skills/impeccable/SKILL.md), even when the user does not name it. Follow its setup and request-specific playbook; use [PRODUCT.md](PRODUCT.md) for confirmed product context and design-reference preferences. Backend-only work does not trigger this workflow.
 - Read-only investigation ends with findings and evidence; do not create implementation files.
 - Bug fixes begin by reproducing or isolating the reported behavior and defining the observable regression check.
 - When work follows a regression, repeated CI failure, reopened issue, rollback or failed live acceptance, use [Agent lessons](.agents/lessons.md) to assess whether the confirmed gap warrants a reusable prevention candidate.
@@ -75,11 +77,12 @@ Route the task before editing:
 For implementation work:
 
 1. Record the repository, branch and starting worktree state so pre-existing user changes remain untouched.
-2. Identify the owning module and every runtime boundary the change crosses; read the nearest instructions, current architecture reference and owning tests.
+2. Identify the owning module and every runtime boundary the change crosses; read the nearest instructions, current architecture reference, owning tests and relevant [Agent lessons](.agents/lessons.md).
 3. Inspect relevant consumers before changing a shared or public contract.
-4. Implement the smallest complete slice and update its tests and current documentation together.
-5. Use [agm-validate-change](.agents/skills/agm-validate-change/SKILL.md) to establish change scope and select focused evidence from [docs/testing.md](docs/testing.md); widen only when the affected surface requires it.
-6. Complete the final semantic review with [agm-code-review](.agents/skills/agm-code-review/SKILL.md), then report findings, evidence and remaining risks.
+4. Use [agm-validate-change](.agents/skills/agm-validate-change/SKILL.md) before implementation to define acceptance and select focused evidence from [docs/testing.md](docs/testing.md).
+5. Implement the smallest complete slice and update its tests and current documentation together.
+6. Use the validation skill to check the actual diff and execute the selected evidence; widen when affected consumers or boundaries require it.
+7. Complete the final semantic review with [agm-code-review](.agents/skills/agm-code-review/SKILL.md), assess prevention gaps through Agent lessons, then report findings, evidence and remaining risks.
 
 For high-risk or difficult-to-reverse decisions, add or update an [Agent Note](.agents/notes/README.md) in the same change.
 

@@ -139,7 +139,7 @@ export function CloudAccountToolbar({
   const activeTargetsCount = [classicEnabled, ideEnabled, agyEnabled].filter(Boolean).length;
 
   return (
-    <div className="bg-card flex flex-col rounded-lg border shadow-xs">
+    <div data-slot="cloud-account-toolbar" className="bg-card flex flex-col rounded-lg border shadow-xs">
       {!isMinimalMode && (
         <div className="flex flex-wrap items-center gap-2 p-3">
           <div className="flex items-center gap-2 px-1 py-1">
@@ -255,7 +255,7 @@ export function CloudAccountToolbar({
             />
           )}
 
-          <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center gap-2 [@media(max-width:760px)]:ml-0 [@media(max-width:760px)]:w-full">
             <LocalAccountImportDialog />
 
             <CloudAccountFileDialogs />
@@ -265,7 +265,7 @@ export function CloudAccountToolbar({
       )}
 
       <div
-        className={`flex flex-wrap items-center gap-2 px-3 py-2 ${
+        className={`flex flex-wrap items-center gap-3 px-4 py-3 ${
           !isMinimalMode ? 'border-t' : ''
         }`}
       >
@@ -319,8 +319,8 @@ export function CloudAccountToolbar({
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
-                size="icon"
-                className="h-7 w-7 cursor-default"
+                size="icon-xs"
+                className="cursor-default"
                 aria-label={t(CLOUD_ACCOUNT_SORT_I18N_KEYS[currentSort])}
                 title={t(CLOUD_ACCOUNT_SORT_I18N_KEYS[currentSort])}
               >
@@ -415,14 +415,14 @@ export function CloudAccountToolbar({
         </div>
 
         <div
-          className="ml-auto flex items-center gap-1 rounded-md border p-1"
+          className="ml-auto flex items-center gap-1 rounded-lg border p-1"
           aria-label={t('cloud.quota-window.label')}
         >
           <Button
             variant={quotaWindow === 'both' ? 'secondary' : 'ghost'}
             aria-pressed={quotaWindow === 'both'}
-            size="sm"
-            className="h-7 cursor-default px-2 text-xs"
+            size="xs"
+            className="cursor-default px-2"
             onClick={() => onQuotaWindowChange('both')}
           >
             {t('cloud.quota-window.both-short')}
@@ -430,8 +430,8 @@ export function CloudAccountToolbar({
           <Button
             variant={quotaWindow === '5h' ? 'secondary' : 'ghost'}
             aria-pressed={quotaWindow === '5h'}
-            size="sm"
-            className="h-7 cursor-default px-2 text-xs"
+            size="xs"
+            className="cursor-default px-2"
             onClick={() => onQuotaWindowChange('5h')}
           >
             <Clock3 className="mr-1 h-3.5 w-3.5" />
@@ -440,8 +440,8 @@ export function CloudAccountToolbar({
           <Button
             variant={quotaWindow === 'weekly' ? 'secondary' : 'ghost'}
             aria-pressed={quotaWindow === 'weekly'}
-            size="sm"
-            className="h-7 cursor-default px-2 text-xs"
+            size="xs"
+            className="cursor-default px-2"
             onClick={() => onQuotaWindowChange('weekly')}
           >
             <CalendarDays className="mr-1 h-3.5 w-3.5" />
@@ -454,14 +454,14 @@ export function CloudAccountToolbar({
           onChange={onQuotaGroupVisibilityChange}
         />
 
-        <div className="flex items-center gap-1 rounded-md border p-1">
+        <div className="flex items-center gap-1 rounded-lg border p-1">
           <TooltipProvider delayDuration={0}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant={gridLayout === 'auto' ? 'secondary' : 'ghost'}
-                  size="icon"
-                  className="h-7 w-7 cursor-default"
+                  size="icon-xs"
+                  className="cursor-default"
                   onClick={() => onUpdateGridLayout('auto')}
                   aria-label={t('cloud.layout.auto')}
                   aria-pressed={gridLayout === 'auto'}
@@ -475,8 +475,8 @@ export function CloudAccountToolbar({
               <TooltipTrigger asChild>
                 <Button
                   variant={gridLayout === '2-col' ? 'secondary' : 'ghost'}
-                  size="icon"
-                  className="h-7 w-7 cursor-default"
+                  size="icon-xs"
+                  className="cursor-default"
                   onClick={() => onUpdateGridLayout('2-col')}
                   aria-label={t('cloud.layout.twoCol')}
                   aria-pressed={gridLayout === '2-col'}
@@ -490,8 +490,8 @@ export function CloudAccountToolbar({
               <TooltipTrigger asChild>
                 <Button
                   variant={gridLayout === '3-col' ? 'secondary' : 'ghost'}
-                  size="icon"
-                  className="h-7 w-7 cursor-default"
+                  size="icon-xs"
+                  className="cursor-default"
                   onClick={() => onUpdateGridLayout('3-col')}
                   aria-label={t('cloud.layout.threeCol')}
                   aria-pressed={gridLayout === '3-col'}
@@ -520,8 +520,8 @@ export function CloudAccountToolbar({
               <TooltipTrigger asChild>
                 <Button
                   variant={gridLayout === 'list' ? 'secondary' : 'ghost'}
-                  size="icon"
-                  className="h-7 w-7 cursor-default"
+                  size="icon-xs"
+                  className="cursor-default"
                   onClick={() => onUpdateGridLayout('list')}
                   aria-label={t('cloud.layout.list')}
                   aria-pressed={gridLayout === 'list'}
@@ -535,8 +535,8 @@ export function CloudAccountToolbar({
               <TooltipTrigger asChild>
                 <Button
                   variant={gridLayout === 'compact' ? 'secondary' : 'ghost'}
-                  size="icon"
-                  className="h-7 w-7 cursor-default"
+                  size="icon-xs"
+                  className="cursor-default"
                   onClick={() => onUpdateGridLayout('compact')}
                   aria-label={t('cloud.layout.compact')}
                   aria-pressed={gridLayout === 'compact'}

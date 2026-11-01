@@ -86,7 +86,7 @@ function getUpdater(): AppImageUpdater {
     }
     downloadedVersion = null;
     downloadedFile = null;
-    startDownload();
+    broadcast('available');
   });
   next.on('download-progress', (progress: ProgressInfo) => {
     if (state !== 'downloading' || !Number.isFinite(progress.percent)) {

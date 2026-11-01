@@ -33,6 +33,8 @@ export async function resolveClientAccountStorage(
     return process.platform === 'darwin' ? 'credential-store' : 'cli-session';
   }
   if (target === 'ide') {
+    // Desktop IDE OAuth lifecycle belongs to its application-storage database, including 2.6.
+    // The standalone client's OS credential target does not identify an IDE profile.
     return 'sqlite';
   }
   try {
@@ -77,9 +79,10 @@ export async function prepareClientAccountWrite(
     return {
       storage,
       write: async () => {
-        await writeAntigravityCredentialStoreToken(credentials.token, {
-          syncClassicOAuthFile: true,
-        });
+        await writeAntigravityCredentialStoreToken(
+          credentials.token,
+          target === 'classic' ? { syncClassicOAuthFile: true } : {},
+        );
         const written = await readAntigravityCredentialStoreToken();
         if (
           !written ||

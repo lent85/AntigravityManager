@@ -25,7 +25,10 @@ owns the change-to-evidence matrix; this guide identifies existing tools and the
 | `acceptance/fixtures/`    | Fixed media inputs; runtime-specific fixture constants stay with their runtime suite.          |
 | `development/`            | Development-server connection regression checks.                                               |
 | `release/`                | Release-note generation, source metadata and controlled publication tests.                     |
-| `review-eval/`            | Manually prepared historical source audits, evaluator rubrics and adjudicated reports.          |
+| `github/`                 | Issue policy, official-SDK inference, validated write-back and workflow contracts.             |
+| `review-eval/`            | Manually prepared historical source audits, evaluator rubrics and adjudicated reports.         |
+| `agent-skills/`           | Read-only skill inventory, provenance policy and entry mirror contracts.                       |
+| `agent-routing/`          | Manually evaluated workflow-selection cases and their structural contracts.                    |
 
 Existing governance, performance and release utilities remain at the root. pnpm commands are defined
 in [package.json](../package.json); use their names rather than relying on a script's filesystem path.
@@ -45,6 +48,11 @@ configuration. It leaves the index and unstaged edits intact. Governance changes
 shared CI wiring. These checks do not establish a passing application test suite.
 
 ## Quality checks
+
+`pnpm run skills:inventory` reports managed skill entries, provenance and advisories without
+modification. `check:agent-contracts` includes the skill and route-fixture contracts and their
+negative tests. See [skill maintenance](../docs/development/agent-skills.md) for update ownership
+and [routing evaluation](../docs/testing/agent-routing.md) for independent model evidence.
 
 `pnpm run check:agent-contracts` also validates upgrade guide structure and explicit Agent Note
 replacement/archive metadata. Its fixtures cover missing recovery instructions, invalid versions,
@@ -77,7 +85,22 @@ GitHub scheduling, package installation, native integrations or live providers. 
 the registry description and their owning procedure; the executable inventory avoids duplicating
 the command list here. Acceptance scripts remain owned by the dispatcher below.
 
+[GitHub automation](../docs/development/github-automation.md) owns the reusable build lane,
+conservative docs/full PR selection, complete merge gate and optional issue triage. The runner
+defaults to full checks outside positively identified documentation-only PRs. `test:automation`
+uses synthetic SDK responses and GitHub fixtures; `check:automation` validates actual workflow
+permissions and gate wiring. Neither command calls a provider or mutates GitHub. Inference is
+invoked only by the opt-in workflow; it consumes API tokens, writes temporary result files and
+uses the documented external-data policy. Local Git hooks are installed normally after dependency
+installation; CI-only dependency setup skips lifecycle scripts in credentialed triage jobs.
+
 ## Unified acceptance entry
+
+Release artifact verification uses `pnpm run test:acceptance release artifacts --source <directory>`.
+It reads merged build outputs and optionally GitHub artifact inventory pages, without GitHub writes
+or installer execution. The [release workflow procedure](../docs/development/build-and-package.md#release-workflow-verification)
+owns prerequisites, inventory capture, dry-run behavior and evidence limits. Its synthetic negative
+fixtures run through the existing `unit` selection.
 
 Historical reviewer evaluation uses `pnpm run review:eval prepare` and `pnpm run review:eval score`.
 Follow the [evaluation procedure](../docs/testing/review-evaluation.md) for local-history prerequisites,
@@ -152,6 +175,18 @@ window from the still-running local acceptance gateway, writes separate `report.
 files and summarizes the refreshed reports. The original reports are preserved.
 
 ## Record acceptance evidence
+
+The focused native launch fixture, `node scripts/test-antigravity-launch.integration.mjs`,
+verifies process discovery and startup using a unique temporary installation. On Windows it
+checks ordinary windowless close refusal and account-switch forced tree cleanup in three cycles.
+`--wsl-interop` selects its Windows fixture through the existing WSL bridge. It never writes
+credentials or starts an installed client; cleanup is restricted to its temporary fixture.
+See [runtime evidence limits](../docs/modules/antigravity-runtime/testing.md#discovery-and-switch-only-windows-forced-cleanup).
+
+`node scripts/acceptance/accounts/test-windows-graceful-close.integration.mjs` runs disposable
+WinForms windows on Windows. It checks visible/hidden normal-close buffer flushing, ordinary
+stop refusal and switch-only forced exit after a cancelled close. It never starts an installed
+client or writes credentials; forced exit does not establish that unsaved data was saved.
 
 Record the command, revision and tested artifact/runtime, platform, selected scenario, expected observable
 and actual result. Include cleanup/restoration results and a sanitized report path when the runner emits one.

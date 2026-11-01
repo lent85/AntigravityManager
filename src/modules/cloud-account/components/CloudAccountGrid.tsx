@@ -123,7 +123,7 @@ export function CloudAccountGrid({
   }, [accounts, familyGroups, isFamilyGrouped]);
 
   return (
-    <div className={GRID_LAYOUT_CLASSES[gridLayout]}>
+    <div data-slot="cloud-account-grid" className={GRID_LAYOUT_CLASSES[gridLayout]}>
       {displayItems.map((item) => {
         if (item.type === 'family') {
           return (

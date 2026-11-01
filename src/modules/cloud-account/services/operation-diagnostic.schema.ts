@@ -37,6 +37,8 @@ const LoginDiagnosticShape = OperationFailureSchema.omit({
   storage: true,
   rollback: true,
   readback: true,
+  switchRecovery: true,
+  credentialWrite: true,
 }).extend({
   operation: z.literal('google-login'),
   stage: GoogleLoginStageSchema,

@@ -70,8 +70,7 @@ function getUpdater(): NsisUpdater {
       return;
     }
     downloadedVersion = null;
-    broadcast('downloading');
-    void startNsisDownload();
+    broadcast('available');
   });
   next.on('download-progress', (progress: ProgressInfo) => {
     if (!Number.isFinite(progress.percent)) {

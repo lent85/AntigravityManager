@@ -170,21 +170,48 @@ describe('remote IPC capture', () => {
     owner.closeAdmission();
     await owner.drain();
   });
-  it.each(['gateway/auditList', 'gateway/thoughtRecord', 'config/read', 'gateway/syncOpenCode'])(
-    'preserves exclusion %s',
-    async (path) => {
-      const { owner, source } = fixture();
-      const begin = await owner.begin({ ...metadata, path });
-      expect(begin.captured).toBe(false);
-      await owner.run(begin.capability, async () => {
-        expect(getTrafficAuditRequestContext()?.parent).toBeNull();
-        expect(getTrafficAuditRequestContext()?.thoughtSessionStable).toBe(true);
-      });
-      await owner.finish({ capability: begin.capability, outcome: 'completed', error: null });
-      expect(source.startParent).not.toHaveBeenCalled();
-      expect(source.beginPreparedParentPayload).not.toHaveBeenCalled();
-      owner.closeAdmission();
-      await owner.drain();
+  it.each([
+    'gateway/auditList',
+    'gateway/thoughtRecord',
+    'config/read',
+    'gateway/syncOpenCode',
+    'proc/getOperation',
+    'proc/isProcessRunning',
+    'gateway/status',
+    'gateway/modelAvailability',
+  ])('preserves exclusion %s', async (path) => {
+    const { owner, source } = fixture();
+    const begin = await owner.begin({ ...metadata, path });
+    expect(begin.captured).toBe(false);
+    await owner.run(begin.capability, async () => {
+      expect(getTrafficAuditRequestContext()?.parent).toBeNull();
+      expect(getTrafficAuditRequestContext()?.thoughtSessionStable).toBe(true);
+    });
+    await owner.finish({ capability: begin.capability, outcome: 'completed', error: null });
+    expect(source.startParent).not.toHaveBeenCalled();
+    expect(source.beginPreparedParentPayload).not.toHaveBeenCalled();
+    owner.closeAdmission();
+    await owner.drain();
+  });
+  it.each(['startAntigravity', 'closeAntigravity'])(
+    'captures process mutation %s through the selected owner',
+    async (operation) => {
+      const { owner, recorder, source } = fixture();
+      try {
+        await expect(
+          recorder.run(['proc', operation], { target: 'classic' }, () => ({ output: null })),
+        ).resolves.toEqual({ output: null });
+        expect(source.startParent).toHaveBeenCalledWith(
+          expect.objectContaining({ operation: `proc/${operation}`, trafficClass: 'ipc' }),
+        );
+        expect(source.completeParent).toHaveBeenCalledWith(
+          { id: 'parent', startedAt: 1, trafficClass: 'ipc' },
+          expect.objectContaining({ outcome: 'completed', status: 200 }),
+        );
+      } finally {
+        owner.closeAdmission();
+        await owner.drain();
+      }
     },
   );
   it('rejects reordered, invalid UTF-8, noncanonical and wrong-owner chunks', async () => {

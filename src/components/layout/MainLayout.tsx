@@ -14,6 +14,7 @@ import {
   FlaskConical,
   Activity,
   Wrench,
+  Boxes,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -69,9 +70,19 @@ export const MainLayout: React.FC = () => {
       label: t('nav.accounts'),
     },
     {
+      to: '/workspaces',
+      icon: Boxes,
+      label: t('nav.workspaces', 'Workspaces'),
+    },
+    {
       to: '/proxy',
       icon: Network,
       label: t('nav.proxy'),
+    },
+    {
+      to: '/playground',
+      icon: FlaskConical,
+      label: t('nav.playground', 'Playground'),
     },
     {
       to: '/client-tools',
@@ -105,24 +116,38 @@ export const MainLayout: React.FC = () => {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside
+          data-slot="app-sidebar"
           className={cn(
-            'bg-sidebar text-sidebar-foreground border-sidebar-border flex shrink-0 flex-col border-r select-none',
+            'bg-sidebar text-sidebar-foreground border-sidebar-border flex shrink-0 flex-col border-r select-none [@media(max-width:760px)]:w-16',
             isCollapsed ? 'w-16' : 'w-56',
           )}
         >
-          <div className={cn('flex flex-col py-5', isCollapsed ? 'items-center px-3' : 'px-4')}>
+          <div
+            className={cn(
+              'flex flex-col px-4 py-6 [@media(max-width:760px)]:px-3',
+              isCollapsed && 'items-center',
+            )}
+          >
             <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap">
               <div className="bg-info-soft text-info border-info-border flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border">
                 <Rocket className="h-4 w-4" aria-hidden="true" />
               </div>
-              <div className={cn('overflow-hidden', isCollapsed && 'hidden')}>
+              <div
+                className={cn(
+                  'overflow-hidden [@media(max-width:760px)]:hidden',
+                  isCollapsed && 'hidden',
+                )}
+              >
                 <div className="text-sm font-semibold tracking-tight">Antigravity</div>
                 <div className="text-muted-foreground text-xs">Manager</div>
               </div>
             </div>
           </div>
 
-          <nav aria-label={t('nav.navigation')} className="flex-1 space-y-1 px-2">
+          <nav
+            aria-label={t('nav.navigation')}
+            className="flex-1 space-y-1 px-3 [@media(max-width:760px)]:px-2"
+          >
             <TooltipProvider>
               {navItems.map((item) => {
                 const isActive = location.pathname === item.to;
@@ -135,13 +160,21 @@ export const MainLayout: React.FC = () => {
                           to={item.to}
                           aria-current={isActive ? 'page' : undefined}
                           className={cn(
-                            'relative focus-visible:ring-ring mx-auto flex h-10 w-10 cursor-default items-center justify-center rounded-md outline-none transition-all duration-200 focus-visible:ring-2',
+                            'relative focus-visible:ring-ring mx-auto flex h-10 w-10 cursor-default items-center justify-center rounded-md text-sm font-medium outline-none transition-all duration-200 focus-visible:ring-2',
                             isActive
-                              ? 'bg-sidebar-accent text-sidebar-accent-foreground ring-sidebar-border ring-1 ring-inset'
+                              ? 'bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-none'
                               : 'hover:bg-muted text-muted-foreground hover:text-foreground',
                           )}
                         >
-                          <item.icon className="h-4 w-4" aria-hidden="true" />
+                          <item.icon
+                            className={cn(
+                              'size-4 [@media(max-width:760px)]:size-5',
+                              isActive
+                                ? '[@media(max-width:760px)]:text-sidebar-accent-foreground'
+                                : '[@media(max-width:760px)]:text-muted-foreground',
+                            )}
+                            aria-hidden="true"
+                          />
                           {item.badge !== undefined && (
                             <span className="absolute top-1.5 right-1.5 flex h-2 w-2 rounded-full bg-purple-500 ring-2 ring-background animate-pulse" />
                           )}
@@ -160,20 +193,29 @@ export const MainLayout: React.FC = () => {
                   <Link
                     key={item.to}
                     to={item.to}
+                    aria-label={item.label}
                     aria-current={isActive ? 'page' : undefined}
                     className={cn(
-                      'focus-visible:ring-ring flex h-10 cursor-default items-center justify-between rounded-md px-3 text-sm font-medium outline-none transition-all duration-200 focus-visible:ring-2',
+                      'focus-visible:ring-ring flex h-10 cursor-default items-center justify-between rounded-md px-3 text-sm font-medium outline-none transition-all duration-200 focus-visible:ring-2 [@media(max-width:760px)]:justify-center [@media(max-width:760px)]:gap-0 [@media(max-width:760px)]:p-0',
                       isActive
-                        ? 'bg-sidebar-accent text-sidebar-accent-foreground ring-sidebar-border font-semibold ring-1 ring-inset'
+                        ? 'bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-none'
                         : 'hover:bg-muted text-muted-foreground hover:text-foreground',
                     )}
                   >
                     <div className="flex items-center gap-3">
-                      <item.icon className="h-4 w-4" aria-hidden="true" />
-                      <span>{item.label}</span>
+                      <item.icon
+                        className={cn(
+                          'size-4 [@media(max-width:760px)]:size-5',
+                          isActive
+                            ? '[@media(max-width:760px)]:text-sidebar-accent-foreground'
+                            : '[@media(max-width:760px)]:text-muted-foreground',
+                        )}
+                        aria-hidden="true"
+                      />
+                      <span className="[@media(max-width:760px)]:hidden">{item.label}</span>
                     </div>
                     {item.badge !== undefined && (
-                      <span className="rounded-full bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-purple-400 border border-purple-500/30">
+                      <span className="rounded-full bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-purple-400 border border-purple-500/30 [@media(max-width:760px)]:hidden">
                         {item.badge}
                       </span>
                     )}
@@ -187,7 +229,7 @@ export const MainLayout: React.FC = () => {
             <SidebarIndicators isCollapsed={isCollapsed} />
           </div>
 
-          <div className="space-y-2 border-border/60 border-t p-2">
+          <div className="space-y-2 border-border/60 border-t p-2 [@media(max-width:760px)]:hidden">
             <Button
               variant="ghost"
               className={cn(
@@ -211,7 +253,7 @@ export const MainLayout: React.FC = () => {
         </aside>
 
         {/* Content Area */}
-        <main className="min-w-0 flex-1 overflow-auto">
+        <main data-slot="app-content" className="min-w-0 flex-1 overflow-auto">
           <ErrorBoundary
             resetKeys={[location.pathname]}
             onReset={() => {

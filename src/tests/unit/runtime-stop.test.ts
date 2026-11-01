@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { stopFromContext } from '@/modules/antigravity-runtime/stop';
 import { switchContext } from '../support/runtime-switch-fixture';
 import { processError } from '@/modules/antigravity-runtime/processErrors';
+import type { LaunchContext, RuntimeProcess } from '@/modules/antigravity-runtime/types';
 
 const mocks = vi.hoisted(() => ({
   observe: vi.fn(),
@@ -12,6 +13,10 @@ const mocks = vi.hoisted(() => ({
   nativeStop: vi.fn(),
   existsSync: vi.fn(),
   closeWindow: vi.fn(),
+  switchStop: vi.fn(),
+}));
+vi.mock('@/modules/antigravity-runtime/stopWindowsClientForSwitch', () => ({
+  stopWindowsClientForSwitch: mocks.switchStop,
 }));
 vi.mock('node:fs', async (importOriginal) => {
   const fs = await importOriginal<typeof import('node:fs')>();
@@ -38,6 +43,8 @@ vi.mock('@/modules/antigravity-runtime/processObserver', () => ({
 }));
 vi.mock('@/modules/antigravity-runtime/launchContext', () => ({
   assertContextProcesses: mocks.assert,
+  filterContextProcesses: (_context: LaunchContext, processes: readonly RuntimeProcess[]) =>
+    processes,
 }));
 vi.mock('@/shared/logging/logger', () => ({ logger: { warn: vi.fn() } }));
 const windowsContext = { ...switchContext, executablePath: '/mnt/c/Apps/Antigravity.exe' };
@@ -68,6 +75,15 @@ it('never forces termination when a Windows client refuses normal close', async 
   await result;
   expect(mocks.execFile).toHaveBeenCalledTimes(1);
   expect(mocks.execFile.mock.calls[0][1]).not.toContain('/F');
+});
+
+it('uses the switch-only forced close policy only when explicitly requested', async () => {
+  mocks.observe.mockResolvedValue([main]);
+  mocks.switchStop.mockResolvedValue(undefined);
+  await stopFromContext(windowsContext, 500, { forceAfterTimeout: true });
+  expect(mocks.switchStop).toHaveBeenCalledExactlyOnceWith(windowsContext, [main], 500);
+  expect(mocks.closeWindow).not.toHaveBeenCalled();
+  expect(mocks.execFile).not.toHaveBeenCalled();
 });
 
 it('reports an unconfirmed exit when the last Windows observation consumes the close deadline', async () => {

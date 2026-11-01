@@ -15,16 +15,51 @@ failure transport and that close failure stops credential writes.
 
 ## Native process queries
 
+### Windows source-build acceptance evidence
+
+On 2026-10-27, the current main/preload/worker and renderer source build passed the Electron
+account owner matrix: Classic and IDE each completed cloud A-B-A and local-snapshot A-B-A.
+The runner invokes the renderer's real MessagePort/IPC transport and verifies stored token
+ownership, live Google identity and official-client authentication. This establishes the desktop
+transport and account lifecycle, not a card-button interaction test or installer acceptance.
+The run used Node 24.22.0 and Electron 37.10.3, with the prepared upstream proxy configuration.
+Both matrices restored the exact shared Windows credential; Electron login startup settings were
+also restored and compared with their baseline.
+
+The official IDE retained an existing real test conversation across normal close/relaunch and
+cloud A-B-A. The check opened the same history-entry identifier and verified its exact persisted
+reply before and after each transition. The owner stopped and the shared credential was restored.
+A separate attempt to create a new test reply failed before history verification because the
+official service rejected the request with an unsupported-location precondition. Existing-history
+retention therefore passes. A fresh CLI/Core build on 2026-10-28, after correcting proxy environment
+forwarding to the detached Core, passed one new Gemini 3.8 Flash High reply through the configured
+proxy. The observer attributed Cloud Code CONNECT requests to the language server, official logs
+contained no unsupported-location precondition, and configuration, credentials and process cleanup
+were verified. This does not establish provider eligibility for every account or exit address.
+Interruption during generation remains unverified. These checks do not establish recovery of
+unsaved content after forced termination.
+
+Source desktop acceptance must use the Forge main/preload build configuration. A generic Vite
+web build can replace main-process runtime environment access and select a different credential
+destination. Retain artifact hashes and compare an isolated source copy with the current source
+before attributing a failed acceptance run to production behavior.
+
 ### Window close and official history
 
 After changing Windows client shutdown, run `node scripts/acceptance/accounts/test-windows-graceful-close.integration.mjs`
 on Windows. It runs production stop logic against temporary WinForms windows and verifies that
-normal close flushes an in-memory buffer for visible and hidden windows, while a cancelled close
-leaves the process alive. Native Windows uses PID-scoped `WM_CLOSE` requests for unowned
+normal close flushes an in-memory buffer for visible and hidden windows, while ordinary stop
+leaves a cancelled close alive. It then invokes the switch-only policy against that refusing
+window and confirms forced exit without claiming the unsaved buffer was flushed.
+Native Windows uses PID-scoped `WM_CLOSE` requests for unowned
 top-level windows; owned save/confirmation dialogs remain under the client's control.
 The focused `runtime-stop.test.ts` cases also cover slow initial native Windows observations
 and forbid posting close after the operation deadline. Startup slow-observation and late-result
 cases belong to `runtime-launch.test.ts`; neither operation extends its overall deadline.
+Windows runtime confirmation (including WSL) allows fifteen seconds for two cold observations
+and stable process identity; native Linux/macOS retain six seconds. The launch fixture's WSL
+process stays alive beyond the complete verification budget so natural exit cannot impersonate
+forced cleanup. Deadline failures still dispatch only one launch.
 The fixture uses a scoped observer and does not prove official IDE conversation persistence.
 For official IDE evidence, prepare the isolated Windows account-switch profile, build the
 acceptance helpers, and run `node scripts/acceptance/accounts/test-official-ide-history.integration.mjs`.
@@ -87,6 +122,8 @@ For desktop acceptance, use an isolated Manager configuration and application ho
 ## Client credential storage checks
 
 The focused `client-account-write.test.ts`, `snapshot-credentials.test.ts`, `account-backup-file.test.ts`, `database-backup-keys.test.ts` and account handler suites cover destination routing, preflight, preserved topic rows, missing projects, primary-store failures, encrypted snapshot round trips and historical snapshot input. Credential-store and CLI suites cover native readback, required file failures and isolation of the local CLI session from other operating-system environments. `antigravityVersion.test.ts` covers version caching, coalescing, metadata changes and probe deadlines.
+
+Windows IDE uses the selected profile's state database, including IDE 2.6. Verify its UnifiedStateSync OAuth row and fresh official account confirmation; a successful local write alone is insufficient. Isolated A/B acceptance must keep both instances running, stop and restart only A, and verify B remains alive and authenticated. Compare the shared `gemini:antigravity` credential before and after to reject accidental standalone-store writes. Check official provider-populated user status after normal shutdown has flushed the database; the seeded minimal status cannot establish acceptance. The inspected 2.6 client can authenticate and populate account status without persisting a renewed short-lived access token into the original OAuth row, so that row's expiry alone is not an identity or refresh-success check. See [workspace runtime ownership](../workspace/runtime.md) for scope and recovery rules.
 
 `node scripts/test-client-account-write.integration.mjs` exercises real SQLite under Electron on Windows and Node on Linux/macOS with isolated synthetic credentials. Windows and Linux verify WAL-aware backups, repeated writes to one captured destination, A-to-B-to-A restoration, unchanged client recovery files and full transaction rollback on an injected primary-write failure. The Mac branch verifies sequential writes, root-level ID-token input, unchanged unrelated cache/auth rows, project removal and retained earlier statements after a later failure; it does not invoke Keychain. Windows additionally exercises the production Win32 credential adapter with exact-target A-to-B-to-A writes, independent keytar enumeration and repeated nondestructive reads. The credential target is redirected to a unique synthetic target and deleted during cleanup. Mocked CLI and Google destinations verify that an Agy switch does not change that host credential on Windows and Linux. For Linux validation from Windows, install Linux native dependencies in an isolated directory and set `AGM_CLIENT_NATIVE_DEPS` to that directory; Windows native modules cannot validate the Linux path.
 
@@ -170,6 +207,132 @@ does not establish a working account conversation. The Windows file-service chec
 remove their independent copies. They do not change the installed CLI or account state.
 
 ## IDE hot-switch lifecycle checks
+
+### Classic hot-switch recovery
+
+`classic-hot-switch` tests installation-owned descendants, actual retirement, new identities,
+reused PIDs, unsupported platforms, stale ancestry, denied termination and independent restart
+ownership. `classic-switch-recovery` injects failures at preparation, consent capture, initial
+write/readback, retirement, reassertion, replacement and consent confirmation through the production
+coordinator. It verifies one restart, post-exit reconciliation, one final account update, uncertain
+startup without another dispatch, and retention of both failures when recovery fails.
+
+`runtime-observer-profile` covers same-profile helper retirement for Classic and IDE on Windows and Linux,
+as well as unknown and distinct profile boundaries. `classic-hot-switch` verifies ownership
+failure categories without permitting termination. Coordinator tests verify that a failed rewrite
+returns uncertain credential state even after an earlier confirmed write. `errorMessages` and
+`process-failure-diagnostics` check partial-completion presentation, transport-safe evidence,
+Sentry projection and sanitized export. These checks do not establish the cause of every
+production `switched-hot-unconfirmed` report.
+
+`classic-terms-switch` includes a negative case where the official writer still records the previous
+account after service replacement. The live client must synchronize its own record; the Manager
+does not rewrite that file during hot switching. `switch-trace-diagnostics`, local/cloud owner,
+correlated diagnostic and sanitized-log tests cover the complete attempt timeline, recovered warning,
+local owner/RPC/IPC preservation, privacy and reporting failure isolation.
+
+These synthetic checks do not establish official account acceptance. The running-client mode of
+the [account acceptance runner](account-switch-acceptance.md) records whether the captured main
+process identity survived each switch. Combine this with the trace outcome, official identity,
+genuine consent and provider-task evidence; a preserved main or new service PID alone is insufficient.
+
+The 2026-10-30 issue #374 follow-up validates the current fix in a Windows x64 Forge package
+built on `e1faed6c79f979d095ae84d39a87069f94c012d4` with its uncommitted source changes.
+Classic 2.28.2 passes cloud/local A-B-A through packaged Electron and cloud A-B-A through the
+packaged CLI. The exact original Windows credential is restored. Packaged diagnostics pass
+embedded/Core/CLI transport and preserve the existing master keys. These are package-payload
+and account-identity checks, without installer or AI-response acceptance.
+
+Native Ubuntu/WSLg Node 24.22.0 checks exercise production discovery over real fixture roots:
+same-profile and unscoped child retirement preserve the original main identity, while a different
+profile remains rejected. Fixture cleanup leaves no live roots. The separate official-client
+matrix requires a Linux filesystem for Unix sockets and a fresh isolated Secret Service keyring;
+an old test keyring with a different password cannot establish client credential behavior.
+An initial Classic 2.19.1 matrix remains partial for both B transitions because its durable terms
+slot still records another account, despite matching live Google and visible client identities.
+That older result does not establish acceptance of the current Linux client.
+
+The official Linux 2.28.1 archive downloaded separately from Google's release page passes all
+six cloud/local A-B-A transitions through the current standalone CLI/Core. Every transition
+confirms live Google identity, visible official-client identity and the selected account's durable
+terms record; the isolated Core stops afterward. Official setup is completed only with explicit
+authorization. This is Ubuntu/WSLg native process, keyring and client evidence, not a Linux Manager
+package, every Linux distribution or native Linux hot switching; these transitions use restart.
+
+On Windows Classic 2.23.0, the initial native run retained the previous account's consent slot on
+both cloud and local B switches, despite fresh services and target credential readback. Its two
+B results were partial, and original credentials and the owner were restored. That negative result
+owns the consent-confirmation recovery regression; it is not a successful hot-account acceptance.
+
+After the fix, the Windows Classic 2.23.0 CLI/Core owner passed cloud A-B-A and local-snapshot
+A-B-A: all six transitions confirmed official identity and durable consent. On Classic 2.27.0,
+after manual completion of the updated official consent dialog for each account, the Electron
+37.10.3 source build also passed all six transitions through real IPC. The same-account local
+transition retained the captured main; cross-account transitions used full restart. The desktop
+run restored the exact Windows credential, login startup settings and desktop preferences.
+
+A separate Classic 2.27.0 CLI/Core provider run confirmed official identity and four fresh AI
+replies: initial A, same-account A with the main preserved, B after restart and A after restart.
+Each unique reply marker was absent before submission and present in the actual response.
+The client and owner stopped, and the original Windows credential was restored exactly.
+This provider run preceded the final recovery-ownership timeout and diagnostic-only refinements;
+focused regression checks and the final desktop run cover those refinements.
+
+The real Sentry SDK passed nine localhost-receiver fixtures in each of standalone Node and
+embedded Electron, including complete recovered and terminal switch traces after normalization.
+These checks establish local SDK projection and privacy, not remote Sentry delivery. Final process
+sampling checks isolated client/service/desktop/Core cleanup. Installer acceptance and native
+Linux/macOS hot switching remain unverified; unsupported hot layouts retain the restart route.
+
+On 2026-10-28, the real Windows x64 Forge package passed native standalone runtime acceptance,
+including SQLite, synthetic OS-credential CRUD, Core lifecycle and crash recovery. The packaged
+runtime hashes match the independently tested preparation output. Real packaged Electron passed
+embedded/standalone startup, settings navigation and reopen, CLI lifecycle, external-owner retention
+and desktop/Core crash recovery. Packaged operation diagnostics passed through embedded desktop,
+standalone Core and CLI. Login settings and production master-key identities were preserved.
+
+The configured WiX maker produced a 188.73-MiB MSI after the identical package was copied to a
+shorter owned path; WiX 3 rejected a 264-character source path in the initial output directory.
+Administrative extraction preserved the existing 0.26.0 product registration and matched the
+versioned executable, ASAR, Core, CLI and runtime-manifest hashes. This does not establish registered
+installation, repair, upgrade or uninstall; those checks require a host without an existing product
+in the same family. Direct execution of the extracted versioned payload passed embedded desktop,
+standalone Core and CLI diagnostic acceptance with unchanged production keys and restored login
+settings. The same versioned MSI payload passed all six Classic cloud and local-snapshot A-B-A
+transitions with confirmed official identity. The same-account local hot switch retained the main;
+cross-account transitions restarted it. The shared client credential, login settings and isolated
+desktop preferences were restored and compared with their baselines.
+
+This package does not pass the complete size gate: its ASAR is 121.50 MiB against the 120-MiB
+budget. The standalone runtime is 117.63 MiB against 120 MiB. The ASAR includes an existing
+September `dist/assets` tree and `dist/tsconfig.tsbuildinfo`; together they account for more than
+the 1.50-MiB excess. A clean-input package needs separate verification before claiming that this
+failure is resolved. The budget is unchanged, and Squirrel/NSIS installers are not selected here.
+
+### Discovery and switch-only Windows forced cleanup
+
+The focused `antigravity-process-identity`, `runtime-observer`, `runtime-context` and
+`windows-client-executable` unit suites cover engine role arguments, captured-path bypasses,
+same-installation stale-path recovery, competing installations and Windows discovery layouts.
+`windows-switch-close` covers normal acceptance, refused prompts, windowless processes,
+reparented children, reused identities, failed or expired probes, conflicts, denied force and WSL identity.
+It also covers transient descendant metadata before normal close and after reparenting, and
+rejects persistent unreadability without treating a captured process as exited.
+An updater appearing below the client during normal close aborts before any forced termination.
+The observer suite includes PID 0 and creation-time parsing from a complete WSL CIM snapshot.
+`runtime-preflight` runs the production preflight and observer together. It covers a partial
+Windows process snapshot that becomes readable after the status-query deadline, the shared
+five-second updater/client budget, and persistent unreadability remaining a failure.
+`runtime-stop` retains ordinary stop's refusal policy; `runtime-switch` selects the forced policy.
+
+`node scripts/test-antigravity-launch.integration.mjs` uses isolated temporary binaries and the
+production observer/stop functions. Windows checks ordinary windowless refusal followed by
+switch-only forced cleanup, verifies all nine fixture processes are gone, and checks there is
+exactly one launch per cycle. Its optional WSL mode uses the Windows CIM bridge. No installed
+client, shared credential or provider request is involved. This check proves process cleanup,
+not saving unsaved buffers or an official-client account change. Forced cleanup can discard work.
+
+### Existing supervised IDE coverage
 
 For real cloud and local account A-B-A checks through the CLI and Electron owners, follow the [account switching acceptance tutorial](account-switch-acceptance.md). It distinguishes official login confirmation from credential-only evidence and records the Linux restart-only limitation.
 

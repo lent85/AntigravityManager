@@ -348,13 +348,13 @@ function SettingsPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-4xl space-y-5 p-6">
+    <div className="container space-y-5">
       <div className="flex items-start gap-3">
         <div className="bg-warning-soft text-warning border-warning-border flex size-11 shrink-0 items-center justify-center rounded-xl border">
           <Settings className="size-5" aria-hidden="true" />
         </div>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t('settings.title')}</h1>
+          <h1 className="text-page-title text-balance">{t('settings.title')}</h1>
           <p className="text-muted-foreground mt-1 text-sm">{t('settings.description')}</p>
         </div>
       </div>
@@ -460,6 +460,7 @@ function SettingsPage() {
                     <SelectItem value="vi">{t('settings.language.vietnamese')}</SelectItem>
                     <SelectItem value="tr">{t('settings.language.turkish')}</SelectItem>
                     <SelectItem value="fr">{t('settings.language.french')}</SelectItem>
+                    <SelectItem value="pt-BR">{t('settings.language.portuguese')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -964,6 +965,22 @@ function SettingsPage() {
                     </Button>
                   </>
                 )}
+                <div className="text-muted-foreground">{t('settings.auto_update', 'Tự động cập nhật')}</div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={config?.auto_update_enabled ?? false}
+                    onCheckedChange={async (checked) => {
+                      if (config) {
+                        await saveConfig({ ...config, auto_update_enabled: checked });
+                      }
+                    }}
+                  />
+                  <span className="text-muted-foreground text-xs">
+                    {config?.auto_update_enabled
+                      ? t('settings.auto_update_enabled_desc', 'Đang bật')
+                      : t('settings.auto_update_disabled_desc', 'Đã tắt (khuyên dùng cho bản tùy biến)')}
+                  </span>
+                </div>
 
                 <div className="text-muted-foreground">{t('action.openLogs')}</div>
                 <button

@@ -13,6 +13,7 @@ import {
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Route as ProxyRoute } from '@/routes/proxy';
 import { Route as SettingsRoute } from '@/routes/settings';
+import { PlaygroundPage } from '@/modules/proxy-gateway/playground/PlaygroundPage';
 import { ThemeProvider } from '@/components/shared/theme-provider';
 import { AppToaster } from '@/modules/app-shell/components/AppToaster';
 import { toast } from '@/components/ui/use-toast';
@@ -187,7 +188,7 @@ const accountRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   path: '/',
   component: () => (
-    <div className="container mx-auto p-6">
+    <div className="container">
       <CloudAccountList />
     </div>
   ),
@@ -201,6 +202,11 @@ const workspaceRouter = createRouter({
   routeTree: workspaceRoute.addChildren([
     accountRoute,
     trafficRoute,
+    createRoute({
+      getParentRoute: () => workspaceRoute,
+      path: '/playground',
+      component: PlaygroundPage,
+    }),
     createRoute({
       getParentRoute: () => workspaceRoute,
       path: '/proxy',

@@ -21,7 +21,7 @@ export const GlobalSystemPromptConfigSchema = z.object({
 
 export const TrafficAuditConfigSchema = z.object({
   enabled: z.boolean().default(true),
-  max_disk_mib: z.number().int().min(128).max(16_384).default(1024),
+  max_disk_mib: z.number().int().min(128).max(16_384).default(256),
   body_retention_hours: z
     .number()
     .int()
@@ -120,7 +120,7 @@ export const ProxyConfigSchema = z.object({
   }),
   traffic_audit: TrafficAuditConfigSchema.default({
     enabled: true,
-    max_disk_mib: 1024,
+    max_disk_mib: 256,
     body_retention_hours: 24,
     summary_retention_days: 30,
     max_rows: 100_000,
@@ -154,6 +154,7 @@ export const AppConfigSchema = z.object({
   metrics_delay_min_seconds: z.number().default(30), // seconds between account syncs
   metrics_delay_max_seconds: z.number().default(45), // seconds between account syncs
   process_poll_interval: z.number().default(30), // seconds, 0 means manual only
+  auto_update_enabled: z.boolean().default(false),
   auto_startup: z.boolean(),
   start_in_tray: z.boolean().default(false),
   error_reporting_enabled: z.boolean(),
@@ -204,6 +205,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   metrics_delay_min_seconds: 30,
   metrics_delay_max_seconds: 45,
   process_poll_interval: 30,
+  auto_update_enabled: false,
   auto_startup: false,
   start_in_tray: false,
   error_reporting_enabled: true,
@@ -265,7 +267,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     },
     traffic_audit: {
       enabled: true,
-      max_disk_mib: 1024,
+      max_disk_mib: 256,
       body_retention_hours: 24,
       summary_retention_days: 30,
       max_rows: 100_000,

@@ -14,7 +14,7 @@ import {
   type ImageRetryPenaltyMode,
   type ProxyUpstreamFailureClassification,
 } from '@/modules/proxy-gateway/server/shared/services/proxy-retry.service';
-import { CloudAccount } from '@/modules/cloud-account/types';
+import type { CloudAccount } from '@/modules/cloud-account/types';
 import {
   GenerationConstraintsService,
   type RegisteredGenerationConstraints,
@@ -140,6 +140,7 @@ export abstract class BaseProxyService {
     sessionKey?: string,
     imageRequest = false,
     signal?: AbortSignal,
+    targetAccountId?: string,
   ): Promise<CloudAccount | null> {
     const account = await this.retryPolicy.selectRetryToken(
       retryState,
@@ -147,6 +148,7 @@ export abstract class BaseProxyService {
       sessionKey,
       imageRequest,
       signal,
+      targetAccountId,
     );
     if (account) {
       recordAccountUsage({
@@ -155,7 +157,7 @@ export abstract class BaseProxyService {
         name: account.name,
       });
     }
-    setCurrentAuditAccountId(account?.id ?? null);
+    setCurrentAuditAccountId(account?.id ?? null, account?.email ?? null);
     return account;
   }
 

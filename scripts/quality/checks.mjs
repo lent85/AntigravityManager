@@ -1,4 +1,9 @@
 export const CI_LANES = {
+  build: {
+    workflow: '.github/workflows/build-check.yml',
+    job: 'build',
+    platforms: ['ubuntu-latest', 'windows-latest'],
+  },
   tests: {
     workflow: '.github/workflows/testing.yaml',
     job: 'tests-unit',
@@ -15,10 +20,31 @@ export const CI_LANES = {
 // Shared checks run in each CI lane so another lane can detect missing workflow wiring.
 export const CHECKS = [
   {
+    script: 'check:automation',
+    lane: 'tests',
+    groups: ['governance'],
+    description: 'Verify trusted triage, PR maintenance and complete merge-gate wiring.',
+  },
+  {
+    script: 'test:automation',
+    lane: 'tests',
+    groups: ['governance'],
+    description:
+      'Exercise issue boundaries, SDK requests, retries and automation workflow regressions without network calls.',
+  },
+  { script: 'build:core', lane: 'build', description: 'Compile the standalone core and workers.' },
+  { script: 'build:cli', lane: 'build', description: 'Compile the standalone CLI.' },
+  {
+    script: 'package',
+    lane: 'build',
+    description: 'Build the unsigned Electron app without publishing or running installers.',
+  },
+  {
     script: 'check:agent-contracts',
     lane: 'tests',
     groups: ['governance'],
-    description: 'Validate agent instructions, decision records and their local references.',
+    description:
+      'Validate agent instructions, skill entries and mirrors, decision records and local references.',
   },
   {
     script: 'check:quality',
@@ -134,6 +160,7 @@ export const ADDITIONAL_CHECKS = {
     'Selected Electron profiling scenarios require an isolated graphical environment.',
   'test:performance-recorder-process':
     'Native Windows command-shell regression; select for recorder changes.',
+  'test:workspace': 'Workspace profile multi-instance isolation and persistence unit test suite.',
   'test:all': 'Full unit, harness and Electron rehearsal; select explicitly for its broad scope.',
 };
 

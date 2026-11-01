@@ -19,36 +19,6 @@ export function ManualUpdateNotification() {
     });
   }, []);
 
-  useEffect(() => {
-    const asyncFn = async () => {
-      if (update?.source !== 'electron-updater' || update.state !== 'available') {
-        return undefined;
-      }
-
-      const version = update.version;
-      const result = await window.electron.downloadUpdate().catch(() => {
-        setUpdate((current) =>
-          current?.version === version && current.state === 'available'
-            ? { ...current, state: 'error' }
-            : current,
-        );
-        return { status: 'error', message: 'download failed' };
-      });
-      setUpdate((current) => {
-        if (!current || current.version !== version || current.state !== 'available') {
-          return current;
-        }
-        if (result.status === 'started' || result.status === 'already-downloading') {
-          return { ...current, state: 'downloading' };
-        }
-        if (result.status === 'already-downloaded') {
-          return { ...current, state: 'downloaded', downloadPercent: 100 };
-        }
-        return { ...current, state: 'error' };
-      });
-    };
-    asyncFn();
-  }, [update?.source, update?.state, update?.version]);
 
   const details = detailsTarget ? (
     <ReleaseNotesDialog

@@ -3,6 +3,7 @@ import {
   observeProcesses,
   parseProcessArguments,
 } from '@/modules/antigravity-runtime/processObserver';
+import { readWslWindowsProcesses } from '@/modules/antigravity-runtime/windowsInterop';
 const mocks = vi.hoisted(() => ({
   execFile: vi.fn(),
   native: vi.fn(),
@@ -44,6 +45,66 @@ afterEach(() => {
   Object.defineProperty(process, 'platform', { value: platform, configurable: true });
 });
 describe('bounded process observation', () => {
+  it('accepts the system idle row in complete WSL snapshots and preserves creation identity', async () => {
+    mocks.execFile.mockImplementation((_file, _args, _options, callback) =>
+      callback(
+        null,
+        JSON.stringify([
+          {
+            ProcessId: 0,
+            Name: 'System Idle Process',
+            ExecutablePath: null,
+            CommandLine: null,
+            StartTime: null,
+          },
+          {
+            ProcessId: 42,
+            ParentProcessId: 1,
+            Name: main.name,
+            ExecutablePath: main.exe,
+            CommandLine: main.exe,
+            StartTime: '638971234567890123',
+          },
+        ]),
+      ),
+    );
+    expect(
+      await readWslWindowsProcesses(main.exe, new AbortController().signal, 1000, true),
+    ).toEqual([
+      {
+        pid: 42,
+        ppid: 1,
+        name: main.name,
+        executablePath: main.exe,
+        commandLine: main.exe,
+        startTime: 638971234567890123n,
+      },
+    ]);
+    expect(mocks.execFile.mock.calls[0][1].at(-1)).not.toContain('-Filter $filter');
+  });
+  it.each(['--standalone', '--subclient_type=ide', '--override_ide_name'])(
+    'does not let a captured path admit an orphan engine (%s)',
+    async (flag) => {
+      mocks.configured.mockReturnValue(main.exe);
+      mocks.native.mockResolvedValue([{ ...main, cmd: [main.exe, flag] }]);
+      expect(await observeProcesses('classic', 1000, main.exe)).toEqual([]);
+    },
+  );
+  it.each([
+    '--folder=C:\\work\\--standalone',
+    '--title=release --standalone',
+    '--title=release --type=utility',
+  ])('keeps role-like text in an ordinary argument value (%s)', async (value) => {
+    mocks.native.mockResolvedValue([{ ...main, cmd: [main.exe, value] }]);
+    expect(await observeProcesses('classic', 1000, main.exe)).toEqual([
+      {
+        pid: 42,
+        executablePath: main.exe,
+        args: [value],
+        startTime: 1n,
+      },
+    ]);
+  });
   it('keeps genuine competing installations visible to preflight conflict checks', async () => {
     const rival = {
       ...main,
@@ -263,6 +324,47 @@ describe('bounded process observation', () => {
       { pid: 71, executablePath: exe, args: ['--user-data-dir=C:\\Other'], startTime: 1n },
     ]);
   });
+  it('does not admit Linux forked helpers as primary clients when role arguments are absent', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+    const exe = '/opt/ide/antigravity-ide';
+    const root = {
+      ...main,
+      name: 'antigravity-ide',
+      exe,
+      cmd: [exe, '--user-data-dir=/profiles/B'],
+    };
+    mocks.native.mockResolvedValue([
+      { ...root, pid: 43, parentPid: 42, startTime: 2n, cmd: ['/bin/sh', '-c', 'fixture'] },
+      root,
+    ]);
+    expect(await observeProcesses('ide', 1000, exe)).toEqual([
+      { pid: 42, executablePath: exe, args: ['--user-data-dir=/profiles/B'], startTime: 1n },
+    ]);
+  });
+
+  it('preserves Linux explicit instances, unrelated roots and younger-parent conflicts', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+    const exe = '/opt/ide/antigravity-ide';
+    const root = { ...main, name: 'antigravity-ide', exe, cmd: [exe] };
+    mocks.native.mockResolvedValue([
+      root,
+      { ...root, pid: 70, parentPid: 1 },
+      { ...root, pid: 71, parentPid: 42, cmd: [exe, '--user-data-dir=/profiles/other'] },
+      { ...root, pid: 72, parentPid: 73 },
+      { ...root, pid: 73, parentPid: 1, startTime: 2n },
+      {
+        ...root,
+        pid: 74,
+        parentPid: 42,
+        exe: '/other/antigravity-ide',
+        cmd: ['/other/antigravity-ide'],
+      },
+    ]);
+    expect((await observeProcesses('ide', 1000, exe)).map((row) => row.pid)).toEqual([
+      42, 70, 71, 72, 73, 74,
+    ]);
+  });
+
   it('fails explicitly when the visible app metadata is unreadable', async () => {
     vi.useFakeTimers();
     mocks.native.mockResolvedValue([{ ...main, exe: undefined, cmd: [] }]);

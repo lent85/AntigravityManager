@@ -32,12 +32,12 @@ export function AccountTierFilterDropdown({
   onToggle,
 }: AccountTierFilterDropdownProps) {
   return (
-    <div className="flex items-center gap-1 rounded-md border p-1">
+    <div className="flex items-center gap-1 rounded-lg border p-1">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             variant={hasActiveFilter ? 'secondary' : 'ghost'}
-            size="sm"
+            size="xs"
             title={triggerLabel}
             aria-label={triggerLabel}
             className="h-7 max-w-36 cursor-pointer gap-1.5 px-2 text-xs"

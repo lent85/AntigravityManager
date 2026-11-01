@@ -13,6 +13,7 @@ import { verifyClientIdentity } from './client-ui.mjs';
 import { readOfficialSignedIn } from './official-auth-state.mjs';
 import { readClassicTermsAcceptance } from './classic-terms-state.mjs';
 import { captureWindowsCredential } from './windows-credential-recovery.mjs';
+import { assertSnapshotIsolation } from './snapshot-isolation.mjs';
 
 const options = new Command()
   .requiredOption('--owner <owner>', 'cli or electron')
@@ -59,6 +60,9 @@ const home = path.resolve(options.profileHome);
 const helperDirectory = path.resolve(options.helpers);
 const ids = JSON.parse(await fs.readFile(options.accountsFile, 'utf8'));
 assert.equal(ids.length, 2);
+if (options.localSnapshots) {
+  await assertSnapshotIsolation(home);
+}
 const environment = {
   ...process.env,
   HOME: home,
@@ -150,6 +154,10 @@ async function invoke(name, input) {
 }
 
 async function switchAccount(id, target, source = 'cloud') {
+  const before =
+    options.keepClientRunning && target !== 'agy'
+      ? await library.prepareLaunchContext(target)
+      : null;
   if (process.platform === 'linux' && target !== 'agy' && !options.keepClientRunning) {
     await closeTarget(target);
   }
@@ -161,6 +169,25 @@ async function switchAccount(id, target, source = 'cloud') {
       appTarget: target,
     });
   }
+  if (before) {
+    const after = await library.prepareLaunchContext(target);
+    return {
+      clientWasRunning: before.processes.length > 0,
+      mainProcessPreserved:
+        before.processes.length > 0 &&
+        before.processes.length === after.processes.length &&
+        before.processes.every((original) =>
+          after.processes.some(
+            (current) =>
+              original.pid === current.pid &&
+              original.startTime !== undefined &&
+              original.startTime === current.startTime &&
+              original.executablePath === current.executablePath,
+          ),
+        ),
+    };
+  }
+  return undefined;
 }
 
 async function closeTarget(target) {
@@ -330,8 +357,11 @@ try {
       const started = Date.now();
       try {
         stage = 'switch';
-        await switchAccount(ids[index], target);
+        const processObservation = await switchAccount(ids[index], target);
         const result = await verify(target, ids[index], alias, 'cloud', started);
+        if (processObservation) {
+          Object.assign(result, processObservation);
+        }
         if (options.localSnapshots && snapshots.length < 2) {
           stage = 'snapshot';
           if (process.platform === 'linux' && target !== 'agy' && !options.keepClientRunning) {
@@ -386,8 +416,11 @@ try {
       ]) {
         try {
           const started = Date.now();
-          await switchAccount(snapshots[index], target, 'local');
+          const processObservation = await switchAccount(snapshots[index], target, 'local');
           const result = await verify(target, ids[index], alias, 'local', started);
+          if (processObservation) {
+            Object.assign(result, processObservation);
+          }
           report.results.push({
             ...result,
             status: target !== 'agy' && !result.clientIdentityConfirmed ? 'partial' : 'passed',
