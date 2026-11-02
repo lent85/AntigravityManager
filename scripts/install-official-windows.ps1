@@ -114,15 +114,29 @@ if ($SkipBuild) {
         }
     }
 
+    # Ensure electron-winstaller has 7z.exe configured
+    $winstaller7z = Join-Path $repoRoot "node_modules\electron-winstaller\vendor\7z.exe"
+    $winstaller7zScript = Join-Path $repoRoot "node_modules\electron-winstaller\script\select-7z-arch.js"
+    if (-not (Test-Path -LiteralPath $winstaller7z) -and (Test-Path -LiteralPath $winstaller7zScript)) {
+        Write-Info "Configuring 7z architecture for electron-winstaller..."
+        $winstallerDir = Join-Path $repoRoot "node_modules\electron-winstaller"
+        Push-Location $winstallerDir
+        try {
+            & node script/select-7z-arch.js
+        } finally {
+            Pop-Location
+        }
+    }
+
     Write-Step "2/5" "Building official release package with electron-forge..."
 
     $hasWix = (Get-Command candle.exe -ErrorAction SilentlyContinue) -and (Get-Command light.exe -ErrorAction SilentlyContinue)
     if ($hasWix) {
         Write-Info "WiX toolset detected. Building all Windows targets (Squirrel + WiX MSI)..."
-        & pnpm.cmd exec electron-forge make --platform=win32 --arch=x64
+        & pnpm.cmd run make -- --platform=win32 --arch=x64
     } else {
         Write-Info "WiX toolset not detected. Building Squirrel setup package..."
-        & pnpm.cmd exec electron-forge make --platform=win32 --arch=x64 --targets @electron-forge/maker-squirrel
+        & pnpm.cmd run make -- --platform=win32 --arch=x64 --targets @electron-forge/maker-squirrel
     }
 
     if ($LASTEXITCODE -ne 0) {
