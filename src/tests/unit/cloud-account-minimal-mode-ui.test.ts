@@ -62,7 +62,7 @@ describe('CloudAccountListSummary minimal mode', () => {
     expect(screen.getByText('0')).not.toBeNull();
     expect(screen.getByText('82.8%')).not.toBeNull();
 
-    const standardDl = container.querySelector('dl.grid-cols-2.xl\\:grid-cols-4');
+    const standardDl = container.querySelector('dl[data-slot="cloud-account-summary-metrics"]');
     expect(standardDl).not.toBeNull();
   });
 
@@ -89,8 +89,8 @@ describe('CloudAccountListSummary minimal mode', () => {
     expect(screen.getByText('Weekly Quota')).not.toBeNull();
     expect(screen.getByText('91.5%')).not.toBeNull();
 
-    // The standard large cards grid should not exist
-    const standardDl = container.querySelector('dl.grid-cols-2.xl\\:grid-cols-4');
+    // The standard metrics strip should not exist
+    const standardDl = container.querySelector('dl[data-slot="cloud-account-summary-metrics"]');
     expect(standardDl).toBeNull();
 
     // The compact summary dl should exist with background color styling
