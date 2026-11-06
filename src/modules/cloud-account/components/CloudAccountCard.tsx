@@ -119,6 +119,8 @@ const GEMINI_LEGACY_MODEL_PATTERN = /gemini-[12](\.|$|-)/i;
 const GEMINI_PRO_COMBINED_MODEL_ID = 'gemini-3.1-pro-low/high';
 
 const MODEL_DISPLAY_REPLACEMENTS: Array<[string, string]> = [
+  ['gemini-4-argon-high', 'Gemini 4 Argon (High)'],
+  ['gemini-4-argon', 'Gemini 4 Argon'],
   [GEMINI_PRO_COMBINED_MODEL_ID, 'Gemini 3.1 Pro (Low/High)'],
   ['gemini-4.0-flash', 'Gemini 4.0 Flash'],
   ['gemini-4.0-pro', 'Gemini 4.0 Pro'],

@@ -78,6 +78,8 @@ const fr = {
   },
   appName: 'Antigravity Manager',
   'process-runtime': {
+    'switched-identity-unconfirmed':
+      'Les identifiants ont été mis à jour, mais l’Agent IDE redémarré n’a pas confirmé le compte choisi. Vérifiez le compte dans l’IDE avant de réessayer. Fermez tous les clients Antigravity avant une restauration.',
     'update-in-progress':
       'Antigravity est en cours de mise à jour. Terminez la mise à jour, puis réessayez.',
     'close-failed':
@@ -322,6 +324,15 @@ const fr = {
     'copy-curl': 'Copier en cURL',
     latency: 'Latence',
     ttft: 'TTFT',
+    'not-measured': 'Non mesuré',
+    'e2e-duration': 'Bout en bout',
+    'response-started': 'Début de réponse',
+    'first-byte': 'Premier octet',
+    'first-text': 'Premier texte',
+    'first-reasoning': 'Premier raisonnement',
+    'tooltip-first-byte': 'Du départ de la requête au premier octet reçu du fournisseur en amont.',
+    'tooltip-first-text':
+      'Du départ de la requête au premier delta de texte visible. Le raisonnement seul n’est pas compté.',
     'tokens-total': 'Tokens',
     'http-error': 'Erreur {{status}}',
     'compare-title': 'Comparer les comptes',
@@ -331,6 +342,9 @@ const fr = {
     'select-all': 'Tout sélectionner',
     'clear-all': 'Tout désélectionner',
     'selected-count': '{{count}} compte(s) sélectionné(s)',
+    'compare-limit':
+      'Jusqu’à {{count}} comptes par comparaison ; les sélections suivantes sont désactivées.',
+    'only-visible-models': 'Modèles visibles uniquement',
     'run-comparison': 'Lancer sur les comptes sélectionnés',
     'comparison-results': 'Résultats de la comparaison',
     'request-failed': 'La requête a échoué',
@@ -339,7 +353,7 @@ const fr = {
     'tab-benchmark': 'Benchmark des modèles',
     'benchmark-settings-title': 'Tester tous les modèles du compte',
     'benchmark-settings-desc':
-      'Envoie successivement une requête sonde à chaque modèle du compte avec un délai aléatoire.',
+      'Répète une requête sonde pour chaque modèle du compte, puis affiche la médiane et le p95 des échantillons.',
     'benchmark-prompt': 'Prompt du benchmark',
     'reset-prompt': 'Réinitialiser',
     'select-account': 'Sélectionner un compte...',
@@ -351,6 +365,11 @@ const fr = {
     'stop-benchmark': 'Arrêter le benchmark',
     stopping: 'Arrêt en cours...',
     'testing-progress': 'Test {{current}} sur {{total}} : {{model}}...',
+    iterations: 'Itérations',
+    'run-of': 'passage {{current}} sur {{total}}',
+    samples: 'Échantillons',
+    'insufficient-samples': 'Au moins {{count}} échantillons requis',
+    'benchmark-profile': '{{count}} modèle(s) × {{iterations}} passage(s)',
     'passed-failed': 'Réussi / Échoué',
     'avg-ttft': 'TTFT moyen',
     'avg-gen-speed': 'Vitesse de gén. moyenne',
@@ -367,6 +386,10 @@ const fr = {
     'report-passed': 'Réussis',
     'report-failed': 'Échoués',
     'report-tokens': 'Tokens (entrée/sortie)',
+    'first-text-median': 'Médiane premier texte',
+    'first-text-p95': 'P95 premier texte',
+    'gen-median': 'Médiane gén.',
+    'gen-p95': 'P95 gén.',
     'gen-speed': 'Vitesse gén.',
     'e2e-speed': 'Vitesse E2E',
     'seconds-short': 's',
@@ -382,9 +405,9 @@ const fr = {
     'reasoning-medium': 'Moyen (Medium)',
     'reasoning-high': 'Élevé (High)',
     'tooltip-ttft': 'Délai avant le premier token généré (Time-to-First-Token)',
-    'tooltip-e2e-speed':
-      'Vitesse globale moyenne de génération (tokens/sec incluant le délai TTFT)',
-    'tooltip-gen-speed': 'Vitesse pure de génération des tokens par le modèle (hors délai TTFT)',
+    'tooltip-e2e-speed': 'Tokens de sortie divisés par la durée totale de la requête.',
+    'tooltip-gen-speed':
+      'Vitesse entre le premier et le dernier delta généré. Non mesurée si l’un des deux n’a pas été observé.',
     'tooltip-quota': 'Quota restant pour ce modèle sur le compte',
     'tooltip-tokens': 'Tokens d’entrée (Prompt) / Tokens de sortie (Completion)',
     'total-latency': 'Latence totale',
@@ -404,6 +427,13 @@ const fr = {
   },
   traffic: {
     ...en.traffic,
+    'recovered-badge': 'Rétabli ({{count}} tentatives)',
+    'recovered-hint': 'Rétabli après {{count}} tentatives',
+    'fallback-diagnostics': 'Diagnostics de secours',
+    'fallback-attempt-failed': 'Tentative {{index}} {{operation}}a échoué{{status}}{{error}}',
+    'fallback-attempt-recovered': 'Rétabli à la tentative {{index}} {{operation}}{{status}}',
+    'reset-dropped': 'Réinitialiser',
+    'reset-dropped-failed': 'Impossible de réinitialiser le compteur. Réessayez.',
     'detail-load-failed': 'Impossible de charger cette requête. Réessayez.',
     'detail-not-found': 'Cet enregistrement est indisponible. Il a peut-être été effacé.',
     fields: {
@@ -1586,6 +1616,9 @@ const fr = {
       'allow-local-video-paths': 'Autoriser les chemins video locaux',
       'allow-local-video-paths-desc':
         'Autoriser les outils connectés à lire les vidéos de cet ordinateur accessibles à votre compte. Activez uniquement pour des outils de confiance.',
+      'context-cache-enabled': 'Cache de contexte Gemini (Payant, Vertex AI)',
+      'context-cache-enabled-desc':
+        'Mise en cache explicite et payante via Google Cloud Vertex AI des instructions système et outils (>8192 caractères) pour les projets commerciaux avec facturation activée.',
       'global-system-prompt-title': 'Consignes pour toutes les requêtes IA',
       'global-system-prompt-description':
         'Ajouter automatiquement ces consignes avant celles de chaque outil connecté, pour toute requête passant par Manager.',

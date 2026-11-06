@@ -23,6 +23,7 @@ import {
 } from '@/modules/proxy-gateway/server/modules/files/file-reference-expander';
 import { setResponseUsage } from '../../shared/services/request-usage-context';
 import { AnthropicService } from './anthropic.service';
+import { setProxyResponseTimingHeaders } from '../../common/proxy-response-timing';
 
 @Controller('v1')
 @UseGuards(ProxyGuard)
@@ -66,6 +67,7 @@ export class AnthropicController extends BaseProxyController {
         this.writeSseResponse(res, result, req, body.model);
         return;
       } else {
+        setProxyResponseTimingHeaders(res, req);
         const response = result as AnthropicChatResponse;
         if (req) {
           setResponseUsage(req, {

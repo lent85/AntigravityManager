@@ -189,6 +189,8 @@ const ptBRTranslations = {
   },
   appName: 'Antigravity Manager',
   'process-runtime': {
+    'switched-identity-unconfirmed':
+      'As credenciais foram atualizadas, mas o Agent do IDE reiniciado não confirmou a conta selecionada. Verifique a conta no IDE antes de tentar novamente. Feche todos os clientes Antigravity antes de restaurar.',
     'update-in-progress':
       'O Antigravity está atualizando. Conclua a atualização e tente novamente.',
     'close-failed':
@@ -484,6 +486,16 @@ const ptBRTranslations = {
     'copy-curl': 'Copiar como cURL',
     latency: 'Latência',
     ttft: 'TTFT',
+    'not-measured': 'Não medido',
+    'e2e-duration': 'Ponta a ponta',
+    'response-started': 'Início da resposta',
+    'first-byte': 'Primeiro byte',
+    'first-text': 'Primeiro texto',
+    'first-reasoning': 'Primeiro raciocínio',
+    'tooltip-first-byte':
+      'Do início da requisição até o primeiro byte recebido do provedor upstream.',
+    'tooltip-first-text':
+      'Do início da requisição até o primeiro delta de texto visível. Saída apenas de raciocínio não é contada.',
     'tokens-total': 'Tokens',
     'http-error': 'Erro {{status}}',
     'compare-title': 'Comparar Contas',
@@ -493,6 +505,8 @@ const ptBRTranslations = {
     'select-all': 'Selecionar tudo',
     'clear-all': 'Limpar tudo',
     'selected-count': '{{count}} conta(s) selecionada(s)',
+    'compare-limit': 'Até {{count}} contas por comparação; seleções adicionais ficam desativadas.',
+    'only-visible-models': 'Apenas modelos visíveis',
     'run-comparison': 'Executar nas Contas Selecionadas',
     'comparison-results': 'Resultados da Comparação',
     'request-failed': 'Falha na requisição',
@@ -501,7 +515,7 @@ const ptBRTranslations = {
     'tab-benchmark': 'Benchmark de Contas',
     'benchmark-settings-title': 'Testar todos os modelos da conta',
     'benchmark-settings-desc':
-      'Envia sequencialmente uma requisição de teste para cada modelo desta conta com atraso aleatório (jitter).',
+      'Repete uma requisição de teste para cada modelo desta conta e exibe a mediana e o p95 das amostras coletadas.',
     'benchmark-prompt': 'Prompt de Teste do Benchmark',
     'reset-prompt': 'Restaurar padrão',
     'select-account': 'Selecione uma conta...',
@@ -513,6 +527,11 @@ const ptBRTranslations = {
     'stop-benchmark': 'Parar Benchmark',
     stopping: 'Parando...',
     'testing-progress': 'Testando {{current}} de {{total}}: {{model}}...',
+    iterations: 'Iterações',
+    'run-of': 'execução {{current}} de {{total}}',
+    samples: 'Amostras',
+    'insufficient-samples': 'São necessárias ao menos {{count}} amostras',
+    'benchmark-profile': '{{count}} modelo(s) × {{iterations}} execução(ões)',
     'passed-failed': 'Aprovados / Com falha',
     'avg-ttft': 'TTFT Médio',
     'avg-gen-speed': 'Velocidade Média de Geração',
@@ -529,6 +548,10 @@ const ptBRTranslations = {
     'report-passed': 'Aprovados',
     'report-failed': 'Com Falha',
     'report-tokens': 'Tokens (Entrada/Saída)',
+    'first-text-median': 'Mediana do primeiro texto',
+    'first-text-p95': 'P95 do primeiro texto',
+    'gen-median': 'Mediana da geração',
+    'gen-p95': 'P95 da geração',
     'gen-speed': 'Vel. Geração',
     'e2e-speed': 'Vel. E2E',
     'seconds-short': 's',
@@ -544,10 +567,9 @@ const ptBRTranslations = {
     'reasoning-medium': 'Médio',
     'reasoning-high': 'Alto',
     'tooltip-ttft': 'Tempo até o primeiro token gerado',
-    'tooltip-e2e-speed':
-      'Velocidade média geral de geração (tokens/segundo incluindo tempo de espera TTFT)',
+    'tooltip-e2e-speed': 'Tokens de saída divididos pela duração total da requisição.',
     'tooltip-gen-speed':
-      'Velocidade pura de emissão de tokens pelo modelo (excluindo tempo de espera TTFT)',
+      'Velocidade entre o primeiro e o último delta gerado. Fica não medida quando um deles não foi observado.',
     'tooltip-quota': 'Cota restante do modelo na conta',
     'tooltip-tokens': 'Tokens de entrada (Prompt) / Tokens de saída (Conclusão)',
     'total-latency': 'Latência total',
@@ -599,6 +621,8 @@ const ptBRTranslations = {
     records: '{{count}} registros',
     'on-disk': '{{size}} no disco',
     dropped: '{{count}} descartados',
+    'reset-dropped': 'Redefinir',
+    'reset-dropped-failed': 'Não foi possível redefinir o contador. Tente novamente.',
     model: 'Requisições de modelo',
     auxiliary: 'Outras requisições',
     ipc: 'Ações do aplicativo',
@@ -644,6 +668,11 @@ const ptBRTranslations = {
     'loading-records': 'Carregando registros…',
     'no-records': 'Nenhum registro nesta categoria.',
     'detail-title': 'Detalhes do tráfego',
+    'recovered-badge': 'Recuperado ({{count}} tentativas)',
+    'recovered-hint': 'Recuperado após {{count}} tentativas',
+    'fallback-diagnostics': 'Diagnóstico de fallback',
+    'fallback-attempt-failed': 'Tentativa {{index}} {{operation}}falhou{{status}}{{error}}',
+    'fallback-attempt-recovered': 'Recuperado na Tentativa {{index}} {{operation}}{{status}}',
     'loading-detail': 'Carregando detalhes do tráfego…',
     'system-operation': 'Operação do sistema',
     metadata: 'Detalhes da requisição',
@@ -777,6 +806,9 @@ const ptBRTranslations = {
       'allow-local-video-paths': 'Permitir caminhos de vídeo locais',
       'allow-local-video-paths-desc':
         'Permite que ferramentas conectadas leiam arquivos de vídeo neste computador aos quais sua conta de usuário tem acesso. Ative apenas para ferramentas confiáveis.',
+      'context-cache-enabled': 'Cache de contexto do Gemini (Pago, Vertex AI)',
+      'context-cache-enabled-desc':
+        'Cache explícito pago de instruções do sistema e ferramentas (>8192 caracteres) via Google Cloud Vertex AI para projetos comerciais com faturamento ativado.',
       'global-system-prompt-title': 'Instruções para todas as requisições de IA',
       'global-system-prompt-description':
         'Adiciona automaticamente estas instruções antes das instruções de cada ferramenta conectada, para todas as requisições enviadas através do Manager.',

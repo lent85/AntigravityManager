@@ -27,6 +27,7 @@ import type {
 } from '@/shared/observability/operationDiagnostic';
 import { readHttpResponseEvidence } from './google-http-evidence';
 import { createGoogleProxyAgent } from './google-proxy-agent';
+import { populateSyntheticArgonModels } from '@/modules/cloud-account/utils/quota-groups';
 
 // --- Constants & Config ---
 const URLS = {
@@ -1208,6 +1209,7 @@ export class GoogleAPIService {
           const quotaSummary = await this.fetchQuotaSummary(accessToken, projectId, axiosOptions);
           if (quotaSummary?.quotaGroups) {
             result.quota_groups = quotaSummary.quotaGroups;
+            populateSyntheticArgonModels(result.models, quotaSummary.quotaGroups);
           }
           if (quotaSummary?.isForbidden) {
             result.is_forbidden = true;
