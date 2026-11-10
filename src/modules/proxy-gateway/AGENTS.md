@@ -15,6 +15,7 @@ These instructions supplement `src/modules/AGENTS.md` for the proxy gateway.
 - Enforce authentication, request limits, model availability and account-lease policy in the execution path that performs the operation. UI visibility and schema omission are not enforcement.
 - Apply byte, item and time limits where the complete emitted or retained value is known, including wrappers and metadata.
 - Publish response/session state only after its owning operation reaches the intended commit point.
+- Multi-key usage telemetry (`proxy-usage.store.ts`), request usage context (`request-usage-context.ts`), gateway landing page, and custom account selection filtering are fork-specific extensions; follow [docs/development/upstream-sync.md](../../../docs/development/upstream-sync.md) when merging upstream gateway changes.
 
 ## Security
 

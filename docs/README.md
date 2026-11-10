@@ -38,7 +38,8 @@ The root guides contain shared rules and entry points. Detailed procedures and c
 their own owners:
 
 - Development: [build and package](development/build-and-package.md), [Git checks](development/git-checks.md),
-  [diagnostics](development/diagnostics.md), [Nix](development/nix.md) and [release tooling](development/release-tooling.md).
+  [diagnostics](development/diagnostics.md), [Nix](development/nix.md), [release tooling](development/release-tooling.md)
+  and [upstream sync and fork customizations](development/upstream-sync.md).
 - Security: [diagnostic privacy](security/diagnostics.md), [private runtime transport](security/runtime-transport.md)
   and the feature contracts linked from [Security](security.md#topic-guides).
 - Testing: [native runtime](testing/native-runtime.md), [diagnostics](testing/diagnostics.md),

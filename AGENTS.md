@@ -111,3 +111,16 @@ For high-risk or difficult-to-reverse decisions, add or update an [Agent Note](.
 - Treat existing tracked and untracked changes as user-owned. Do not modify, delete, stage or format unrelated files.
 - Do not commit, push, rewrite history, publish or deploy unless the user explicitly asks.
 - Never discard work with destructive Git or filesystem commands without explicit authorization and a verified target.
+
+## Fork customizations and upstream synchronization
+
+- This repository is a customized fork of [Draculabo/AntigravityManager](https://github.com/Draculabo/AntigravityManager). The official upstream is tracked as `upstream` (`main`), while this fork is tracked as `origin` (`main`).
+- Read [docs/development/upstream-sync.md](docs/development/upstream-sync.md) for the complete customization inventory and conflict resolution matrix before merging upstream changes.
+- Never discard or overwrite fork-specific features during upstream syncs:
+  - Cloud Account: Family group quota sync, account emulation, compact status strip and toolbar, generation-based model grouping and depth colors, model visibility toggles, "Mark as In-Use" without restart, "Force Apply" to runtime environments, identity masking, and separate handling for forbidden/paused states.
+  - Client Tools: Interactive testing runner, presets, inspection panel, and dialogs under `src/modules/client-tools/`.
+  - Proxy Gateway: Multi-key usage tracking (`proxy-usage.store.ts`), response token telemetry (`setResponseUsage`), custom account selection mode (`account_selection_mode === 'custom'`), gateway HTML landing page, and hardened OpenAI WebSocket protocol.
+  - Localization: Keep strict TypeScript key parity across all translation files in `src/localization/` whenever upstream introduces new localization keys.
+  - Toolchain & Updates: Preserve packaging configuration in `forge.config.ts`/`forgeIgnore.ts` and keep auto-updates disabled by default in `electronUpdaterService.ts`.
+- When resolving merge conflicts, combine upstream fixes and new features with existing fork enhancements rather than choosing one side exclusively.
+- Always execute `pnpm run type-check`, `pnpm run test:runtime-boundaries`, `pnpm run test:type-boundaries`, and `pnpm run check:agent-contracts` before committing any merge from upstream.

@@ -8,6 +8,7 @@ These instructions supplement the repository root `AGENTS.md` for `src/modules/`
 - Keep behavior in the module that owns its language and lifecycle. Visual reuse alone does not make a feature component generic.
 - Expose a narrow public type, service or hook when another module has a real consumer. Do not deep-import another feature's internal file as an informal API.
 - Move a capability to `src/shared` only after it has multiple consumers and no remaining feature-specific policy.
+- Fork-specific modules and extensions (such as `src/modules/client-tools/`, family groups, emulation, and quota colors in `src/modules/cloud-account/`) are owned customizations that must be preserved during upstream merges; see [docs/development/upstream-sync.md](../../docs/development/upstream-sync.md).
 
 ## IPC and boundaries
 
