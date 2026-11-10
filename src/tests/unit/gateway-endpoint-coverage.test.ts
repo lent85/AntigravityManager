@@ -423,7 +423,10 @@ beforeAll(async () => {
     }
   });
 
-  app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, { logger: false });
+  app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, {
+    logger: false,
+    abortOnError: false,
+  });
   await app.init();
 }, 60_000);
 

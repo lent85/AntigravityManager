@@ -10,10 +10,7 @@ import { OpenAIService } from '../modules/proxy-gateway/server/modules/openai/op
 import { DEFAULT_MAX_FILE_BYTES } from '../modules/proxy-gateway/server/modules/files/file-store.types';
 import { attachOpenAIResponsesWebSocketServer } from '../modules/proxy-gateway/server/modules/openai/responses/openai-responses-websocket.server';
 import { createResponsesWebSocketOperations } from '@/modules/proxy-gateway/server/modules/openai/responses/openai-responses-websocket.operations';
-import {
-  extractApiKeyToken,
-  hasConfiguredApiKey,
-} from '../modules/proxy-gateway/server/guards/api-key-auth.util';
+import { extractApiKeyToken } from '../modules/proxy-gateway/server/guards/api-key-auth.util';
 import { MAX_IMAGE_GENERATION_BODY_BYTES } from '@/modules/proxy-gateway/server/modules/openai/media/image-input-validation';
 import {
   DEFAULT_PROXY_JSON_BODY_LIMIT_BYTES,
@@ -336,7 +333,12 @@ export async function stopNestServer(): Promise<boolean> {
     try {
       detachResponsesWebSocketServer?.();
       detachResponsesWebSocketServer = null;
-      await app.close();
+      let closeFailure: unknown;
+      try {
+        await app.close();
+      } catch (error) {
+        closeFailure = error;
+      }
       const storeResults = await Promise.allSettled([
         trafficAuditService.close(),
         thoughtStoreService.close(),
@@ -344,6 +346,9 @@ export async function stopNestServer(): Promise<boolean> {
       const failures = storeResults.flatMap((result) =>
         result.status === 'rejected' ? [result.reason] : [],
       );
+      if (closeFailure !== undefined) {
+        failures.unshift(closeFailure);
+      }
       if (failures.length > 0) {
         throw new AggregateError(failures, 'Gateway diagnostic stores did not close');
       }
@@ -379,6 +384,26 @@ export function evictNestServerAccountLeaseAccount(accountId: string): boolean {
   }
 
   return app.get(AccountLeaseService).evictAccount(accountId);
+}
+
+export function quarantineNestServerAccountLeaseAccount(accountId: string): void {
+  if (app) {
+    app.get(AccountLeaseService).quarantineAccountInMemory(accountId);
+  }
+}
+
+export function getNestServerAccountMemoryQuarantineGeneration(accountId: string): number {
+  return app?.get(AccountLeaseService).getMemoryQuarantineGeneration(accountId) ?? 0;
+}
+
+export function clearNestServerAccountMemoryQuarantine(
+  accountId: string,
+  generation: number,
+): boolean {
+  if (app) {
+    return app.get(AccountLeaseService).clearMemoryQuarantine(accountId, generation);
+  }
+  return true;
 }
 
 export function updateNestServerAccountLeaseOAuthHealth(

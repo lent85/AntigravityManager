@@ -586,6 +586,7 @@ const fr = {
       turkish: 'Turc',
       french: 'Français',
       portuguese: 'Portugais (Brésil)',
+      japanese: 'Japonais',
     },
     about: {
       title: 'A propos',
@@ -1153,6 +1154,16 @@ const fr = {
       active: 'Actif',
       use: 'Utiliser',
       rateLimited: 'Limite par le debit',
+      accountDisabledToS: 'Désactivé (ToS)',
+      submitAppeal: 'Faire appel',
+      'clear-disabled': 'Lever la quarantaine',
+      'clear-disabled-title': 'Lever la quarantaine du compte ?',
+      'clear-disabled-description':
+        'Continuez uniquement après le rétablissement de l’accès par Google. Le blocage local sera levé sans vérification et le compte pourrait être bloqué à nouveau.',
+      'clear-disabled-confirm': 'Lever le blocage local',
+      'clear-disabled-failed': 'Impossible de lever la quarantaine du compte',
+      serviceBlockedNotice:
+        'Le service a été désactivé par Google (violation des ToS). Les modèles sont indisponibles.',
       validationRiskControlled: 'Risque / limite par le debit',
       validationOAuthReauthRequired: 'Reconnectez-vous à Google',
       validationRequired: 'Verification requise',
@@ -1174,6 +1185,7 @@ const fr = {
       liveLimitModelNotSupported: 'Modèle non pris en charge',
       liveLimitModelForbidden: 'Modèle interdit',
       liveLimitQuotaExhausted: 'Quota épuisé',
+      liveLimitCapacityExhausted: 'Capacité serveur épuisée (503)',
       liveLimitRateLimited: 'Débit limité',
       liveLimitRemaining: '{{duration}} restantes',
       liveLimitDetectedAgo: 'détecté il y a {{duration}}',

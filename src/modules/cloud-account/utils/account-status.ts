@@ -23,6 +23,16 @@ export const OAUTH_HINTS = [
   'further action is required',
   'validation required',
   'validation_url',
+] as const;
+
+export const SERVICE_DISABLED_HINTS = [
+  'tos_violation',
+  'terms of service',
+  'service has been disabled',
+  'org_restriction_violation',
+  'organization restriction',
+  'account_suspended',
+  'user_suspended',
   'appeal_url',
 ] as const;
 
@@ -61,6 +71,10 @@ export function isForbiddenReason(reason?: string | null): boolean {
   return includesAny(reason.toLowerCase(), FORBIDDEN_HINTS);
 }
 
+export function isServiceDisabledReason(reason: string): boolean {
+  return includesAny(reason.toLowerCase(), SERVICE_DISABLED_HINTS);
+}
+
 export function extractErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -80,6 +94,9 @@ export function classifyAccountStatusFromError(
   }
 
   const normalizedReason = reason.toLowerCase();
+  if (isServiceDisabledReason(normalizedReason)) {
+    return { status: 'expired', reason };
+  }
   if (isRateLimitReason(normalizedReason)) {
     return { status: 'rate_limited', reason };
   }
@@ -88,6 +105,9 @@ export function classifyAccountStatusFromError(
   }
 
   if (normalizedReason.includes('unauthorized')) {
+    return { status: 'expired', reason };
+  }
+  if (normalizedReason === 'forbidden' || normalizedReason.startsWith('forbidden:')) {
     return { status: 'expired', reason };
   }
 

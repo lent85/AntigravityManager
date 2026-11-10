@@ -1,4 +1,5 @@
 import { CloudAccountRepo } from '@/modules/cloud-account/persistence/cloudHandler';
+import { isAccountOAuthRecoveryBlocked } from '@/modules/cloud-account/persistence/oauth-recovery-service';
 import { CloudAccountSettingsStore } from '@/modules/cloud-account/persistence/cloud-account-settings-store';
 import {
   AutoSwitchModelsConfigSchema,
@@ -88,6 +89,9 @@ export class AutoSwitchService {
 
     // 1. Filter viable candidate accounts
     const candidates = accounts.filter((acc) => {
+      if (isAccountOAuthRecoveryBlocked(acc.id)) {
+        return false;
+      }
       if (acc.id === currentAccountId) return false;
       if (acc.status !== 'active') return false; // Rate limited or expired accounts are skipped
       if (!acc.quota) return false; // No quota data means risky

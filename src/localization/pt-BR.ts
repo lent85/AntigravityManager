@@ -990,6 +990,7 @@ const ptBRTranslations = {
       turkish: 'Turkish',
       french: 'French',
       portuguese: 'Português (Brasil)',
+      japanese: 'Japonês',
     },
     about: {
       title: 'Sobre',
@@ -1399,6 +1400,16 @@ const ptBRTranslations = {
       active: 'Ativa',
       use: 'Usar',
       rateLimited: 'Limite Atingido',
+      accountDisabledToS: 'Desativado (ToS)',
+      submitAppeal: 'Enviar Recurso',
+      'clear-disabled': 'Remover quarentena',
+      'clear-disabled-title': 'Remover a quarentena da conta?',
+      'clear-disabled-description':
+        'Continue somente após o Google restaurar o acesso. O bloqueio local será removido sem verificar o Google; as solicitações podem ser retomadas e a conta bloqueada novamente.',
+      'clear-disabled-confirm': 'Remover bloqueio local',
+      'clear-disabled-failed': 'Não foi possível remover a quarentena da conta',
+      serviceBlockedNotice:
+        'O serviço foi desativado pelo Google (violação dos ToS). Os modelos estão indisponíveis.',
       validationRiskControlled: 'Risco / Limite Atingido',
       validationOAuthReauthRequired: 'Fazer login no Google novamente',
       validationRequired: 'Verificação Necessária',
@@ -1416,6 +1427,7 @@ const ptBRTranslations = {
       liveLimitModelNotSupported: 'Modelo não suportado',
       liveLimitModelForbidden: 'Modelo proibido',
       liveLimitQuotaExhausted: 'Cota esgotada',
+      liveLimitCapacityExhausted: 'Capacidade do servidor esgotada (503)',
       liveLimitRateLimited: 'Limite de requisições atingido',
       liveLimitRemaining: '{{duration}} restante',
       liveLimitDetectedAgo: 'detectado há {{duration}}',

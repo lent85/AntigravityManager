@@ -478,6 +478,7 @@ const ru = {
       turkish: 'Турецкий',
       french: 'Французский',
       portuguese: 'Португальский (Бразилия)',
+      japanese: 'Японский',
     },
     about: {
       title: 'О программе',
@@ -871,6 +872,16 @@ const ru = {
       active: 'Активен',
       use: 'Использовать',
       rateLimited: 'Лимит исчерпан',
+      accountDisabledToS: 'Заблокирован (ToS)',
+      submitAppeal: 'Подать апелляцию',
+      'clear-disabled': 'Снять карантин',
+      'clear-disabled-title': 'Снять карантин аккаунта?',
+      'clear-disabled-description':
+        'Продолжайте только после восстановления доступа Google. Локальная блокировка будет снята без проверки Google; запросы могут возобновиться, а аккаунт — снова заблокирован.',
+      'clear-disabled-confirm': 'Снять локальную блокировку',
+      'clear-disabled-failed': 'Не удалось снять карантин аккаунта',
+      serviceBlockedNotice:
+        'Сервис заблокирован Google за нарушение Условий использования (ToS). Модели недоступны.',
       validationRiskControlled: 'Риск / Ограничение',
       validationOAuthReauthRequired: 'Войдите в Google снова',
       validationRequired: 'Требуется проверка',
@@ -892,6 +903,7 @@ const ru = {
       liveLimitModelNotSupported: 'Модель не поддерживается',
       liveLimitModelForbidden: 'Доступ к модели запрещён',
       liveLimitQuotaExhausted: 'Квота исчерпана',
+      liveLimitCapacityExhausted: 'Перегрузка серверов (503)',
       liveLimitRateLimited: 'Ограничение частоты',
       liveLimitRemaining: 'осталось {{duration}}',
       liveLimitDetectedAgo: 'обнаружено {{duration}} назад',
