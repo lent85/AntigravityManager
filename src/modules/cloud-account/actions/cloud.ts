@@ -4,6 +4,11 @@ import type { DeviceProfile } from '@/modules/identity-profile/types';
 import { isValidProxyUrl } from '@/shared/utils/url';
 import type { WeeklyWarmupConfig } from '@/modules/cloud-account/services/weekly-warmup-contract';
 import type { AccountFamilyGroup } from '@/modules/cloud-account/persistence/family-group-store';
+import type {
+  FetchAccountProjectIdInput,
+  GetAccountProjectIdInput,
+  SetAccountProjectIdInput,
+} from '../services/cloud-account-project-id.schema';
 
 export function listCloudAccounts() {
   return ipc.client.cloud.listCloudAccounts();
@@ -19,6 +24,18 @@ export function togglePauseCloudAccount(input: { accountId: string; paused: bool
 
 export function batchSetCloudAccountsPaused(input: { accountIds: string[]; paused: boolean }) {
   return ipc.client.cloud.batchSetCloudAccountsPaused(input);
+}
+
+export function getAccountProjectId(input: GetAccountProjectIdInput) {
+  return ipc.client.cloud.getAccountProjectId(input);
+}
+
+export function setAccountProjectId(input: SetAccountProjectIdInput) {
+  return ipc.client.cloud.setAccountProjectId(input);
+}
+
+export function fetchAccountProjectId(input: FetchAccountProjectIdInput) {
+  return ipc.client.cloud.fetchAccountProjectId(input);
 }
 
 export function openAccountValidationLink(input: { accountId: string }) {
@@ -157,6 +174,14 @@ export function setAccountProxy(input: { accountId: string; proxyUrl: string | n
     throw new Error('Invalid proxy URL format');
   }
   return ipc.client.cloud.setAccountProxy(input);
+}
+
+export function setAccountRouting(input: {
+  accountId: string;
+  proxyPriority: number;
+  proxyEnabled: boolean;
+}) {
+  return ipc.client.cloud.setAccountRouting(input);
 }
 
 export function exportCloudAccounts(input: { stripTokens?: boolean }) {

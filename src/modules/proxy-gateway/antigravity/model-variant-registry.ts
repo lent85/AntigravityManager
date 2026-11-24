@@ -1,9 +1,12 @@
+import { isRetiredModel } from './retired-models';
+
 export type ModelVariantTier = 'low' | 'medium' | 'high';
 
 export interface ResolveModelVariantInput {
   model: string;
   budgetTokens?: number;
   effort?: string;
+  physicalTarget?: boolean;
 }
 
 export interface ResolvedModelVariant {
@@ -86,36 +89,6 @@ const GEMINI_35_FLASH_VARIANTS: Record<
   },
 };
 
-const GEMINI_31_PRO_VARIANTS: Record<
-  ModelVariantTier,
-  Omit<ResolvedModelVariant, 'canonicalModel' | 'tier'>
-> = {
-  low: {
-    model: 'gemini-3.1-pro-low',
-    thinkingBudget: 1001,
-    maxOutputTokens: 65535,
-    includeThoughts: true,
-    preserveClientBudget: false,
-    supportsTools: true,
-  },
-  medium: {
-    model: 'gemini-pro-agent',
-    thinkingBudget: 10001,
-    maxOutputTokens: 65535,
-    includeThoughts: true,
-    preserveClientBudget: false,
-    supportsTools: true,
-  },
-  high: {
-    model: 'gemini-pro-agent',
-    thinkingBudget: 10001,
-    maxOutputTokens: 65535,
-    includeThoughts: true,
-    preserveClientBudget: false,
-    supportsTools: true,
-  },
-};
-
 const GEMINI_4_ARGON_VARIANTS: Record<
   ModelVariantTier,
   Omit<ResolvedModelVariant, 'canonicalModel' | 'tier'>
@@ -191,15 +164,6 @@ const MODEL_VARIANT_FAMILIES: ModelVariantFamily[] = [
       'gemini-3-flash': 'tier',
     },
   },
-  {
-    canonicalModel: 'gemini-3.1-pro',
-    variants: GEMINI_31_PRO_VARIANTS,
-    aliases: {
-      'gemini-3.1-pro-high': 'tier',
-      'gemini-pro': 'tier',
-      'gemini-3.1-pro-low': 'low',
-    },
-  },
 ];
 
 /**
@@ -263,8 +227,31 @@ function parseExplicitModelTier(model: string): ModelVariantTier | null {
 }
 
 function parseEffort(effort: string | undefined): ModelVariantTier | null {
-  if (effort === 'low' || effort === 'medium' || effort === 'high') {
-    return effort;
+  const normalized = effort?.trim().toLowerCase().replaceAll('_', '-');
+  if (!normalized) {
+    return null;
+  }
+  if (
+    normalized === 'low' ||
+    normalized === 'extra-low' ||
+    normalized === 'min' ||
+    normalized === 'minimal' ||
+    normalized === 'lite' ||
+    normalized === 'flash-lite'
+  ) {
+    return 'low';
+  }
+  if (normalized === 'medium') {
+    return 'medium';
+  }
+  if (
+    normalized === 'high' ||
+    normalized === 'x-high' ||
+    normalized === 'xhigh' ||
+    normalized === 'max' ||
+    normalized === 'extreme'
+  ) {
+    return 'high';
   }
 
   return null;
@@ -275,6 +262,19 @@ function resolveNonVariantModel(
   tier: ModelVariantTier,
   budgetTokens: number | undefined,
 ): ResolvedModelVariant | null {
+  if (model === 'gemini-3.1-pro-low') {
+    return {
+      canonicalModel: 'gemini-3.1-pro',
+      model,
+      tier: 'low',
+      thinkingBudget: 1001,
+      maxOutputTokens: 65535,
+      includeThoughts: true,
+      preserveClientBudget: false,
+      supportsTools: true,
+    };
+  }
+
   if (
     model === 'gemini-3.1-flash-lite' ||
     model === 'gemini-2.5-flash-lite' ||
@@ -337,17 +337,63 @@ function resolveNonVariantModel(
 
 export function resolveModelVariant(input: ResolveModelVariantInput): ResolvedModelVariant | null {
   const model = input.model.trim().toLowerCase();
+  if (input.physicalTarget) {
+    const physicalFamily = MODEL_VARIANT_FAMILIES.find(
+      (candidate) =>
+        Object.values(candidate.variants).some((variant) => variant.model === model) ||
+        Object.prototype.hasOwnProperty.call(candidate.physicalAliases ?? {}, model),
+    );
+    if (physicalFamily) {
+      return rebindModelVariant(
+        {
+          canonicalModel: physicalFamily.canonicalModel,
+          tier: 'high',
+          ...physicalFamily.variants.high,
+        },
+        model,
+      );
+    }
+    const variant = resolveNonVariantModel(
+      model,
+      parseEffort(input.effort) ?? inferTier(input.budgetTokens),
+      input.budgetTokens,
+    );
+    return variant?.model === model ? variant : null;
+  }
   const family = MODEL_VARIANT_FAMILIES.find(
     (candidate) =>
       candidate.canonicalModel === model ||
       Object.prototype.hasOwnProperty.call(candidate.aliases, model),
   );
   if (!family) {
+    const physicalFamily = MODEL_VARIANT_FAMILIES.find((candidate) =>
+      Object.values(candidate.variants).some((variant) => variant.model === model),
+    );
+    if (physicalFamily) {
+      return rebindModelVariant(
+        {
+          canonicalModel: physicalFamily.canonicalModel,
+          tier: 'high',
+          ...physicalFamily.variants.high,
+        },
+        model,
+      );
+    }
     return resolveNonVariantModel(
       model,
       parseEffort(input.effort) ?? inferTier(input.budgetTokens),
       input.budgetTokens,
     );
+  }
+
+  if (model.endsWith('-tiered') && family.physicalAliases?.[model] === 'automatic') {
+    return {
+      canonicalModel: family.canonicalModel,
+      tier: 'high',
+      ...family.variants.high,
+      model,
+      thinkingBudget: -1,
+    };
   }
 
   const explicitModelTier = parseExplicitModelTier(model);
@@ -361,6 +407,51 @@ export function resolveModelVariant(input: ResolveModelVariantInput): ResolvedMo
     tier,
     ...family.variants[tier],
   };
+}
+
+/** Account binding preserves an explicit profile while retaining registered public recipes. */
+export function isModelTierBindingAllowed(
+  requestedModel: string,
+  physicalModel: string,
+  physicalTarget = false,
+): boolean {
+  if (isRetiredModel(requestedModel) || isRetiredModel(physicalModel)) {
+    return false;
+  }
+  const requested = requestedModel.trim().toLowerCase();
+  const physical = physicalModel.trim().toLowerCase();
+  const requestedVariant = resolveModelVariant({ model: requested, physicalTarget });
+  if (
+    requested === physical &&
+    (physicalTarget || !requestedVariant || requestedVariant.model === physical)
+  ) {
+    return true;
+  }
+
+  if (physicalTarget && !requestedVariant) {
+    return false;
+  }
+  const reboundVariant = rebindModelVariant(requestedVariant, physical);
+  const requestedSuffix = /-(extra-low|low|medium|high|tiered)$/.exec(requested)?.[1];
+  const isPhysicalRecipe = MODEL_VARIANT_FAMILIES.some((family) =>
+    Object.values(family.variants).some((variant) => variant.model === requested),
+  );
+  if (requestedVariant) {
+    if (!reboundVariant) {
+      return false;
+    }
+    return (
+      (!physicalTarget && !requestedSuffix && !isPhysicalRecipe) ||
+      (reboundVariant.tier === requestedVariant.tier &&
+        reboundVariant.thinkingBudget === requestedVariant.thinkingBudget &&
+        reboundVariant.maxOutputTokens === requestedVariant.maxOutputTokens &&
+        reboundVariant.includeThoughts === requestedVariant.includeThoughts &&
+        reboundVariant.preserveClientBudget === requestedVariant.preserveClientBudget &&
+        reboundVariant.supportsTools === requestedVariant.supportsTools)
+    );
+  }
+
+  return !requestedSuffix || physical.endsWith(`-${requestedSuffix}`);
 }
 
 export function rebindModelVariant(

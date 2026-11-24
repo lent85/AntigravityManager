@@ -6,6 +6,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { hasErrorCode, isErrorWithCode } from '@/shared/errors/error-guards';
 import { logger } from '@/shared/logging/logger';
+import { CredentialReadbackError } from '@/shared/auth/credentialReadbackError';
 import type { CredentialStoreTokenInput } from '@/shared/auth/credentialStoreToken';
 import { writePrivateFileAtomically } from '@/shared/persistence/privateFile';
 import { readWindowsCredential, writeWindowsCredential } from './windowsCredentialStore';
@@ -17,6 +18,8 @@ import {
   writeMacOSCredentialStore,
 } from './macosCredentialStore';
 import { readLinuxIdeCredentialSnapshot } from './linuxIdeCredentialStore';
+
+const WINDOWS_CREDENTIAL_TARGET = 'gemini:antigravity';
 
 export interface CredentialStoreToken {
   accessToken?: string;
@@ -118,8 +121,24 @@ export function parseCredentialStorePayload(payload: string): CredentialStoreTok
   let expiryTimestamp = token.expiry_timestamp;
   if (expiryTimestamp === undefined && token.expiry) {
     const parsedExpiry = Date.parse(token.expiry);
-    if (Number.isFinite(parsedExpiry)) {
-      expiryTimestamp = Math.floor(parsedExpiry / 1000);
+    if (!Number.isFinite(parsedExpiry)) {
+      throw new CredentialStoreReadError('malformed');
+    }
+    expiryTimestamp = Math.floor(parsedExpiry / 1000);
+  }
+  if (expiryTimestamp !== undefined) {
+    if (!Number.isFinite(expiryTimestamp) || expiryTimestamp <= 0) {
+      throw new CredentialStoreReadError('malformed');
+    }
+    if (expiryTimestamp > 10_000_000_000) {
+      expiryTimestamp = Math.trunc(expiryTimestamp / 1000);
+    }
+    if (
+      !Number.isSafeInteger(expiryTimestamp) ||
+      expiryTimestamp <= 0 ||
+      expiryTimestamp > 10_000_000_000
+    ) {
+      throw new CredentialStoreReadError('malformed');
     }
   }
 
@@ -134,7 +153,6 @@ export function parseCredentialStorePayload(payload: string): CredentialStoreTok
   };
 }
 
-/** Agy reads its session file; desktop clients read the system credential store. */
 export async function readClientAccountToken(
   target?: AntigravityAppTarget | null,
 ): Promise<CredentialStoreToken | null> {
@@ -158,6 +176,19 @@ export async function readClientAccountToken(
   if (target !== 'agy') {
     return readAntigravityCredentialStoreToken();
   }
+  return readAgyCredentialFile();
+}
+
+/** Read the dedicated CLI session file without consulting the shared credential store. */
+export async function readAgyAccountToken(): Promise<CredentialStoreToken | null> {
+  const token = await readAgyCredentialFile();
+  if (token && !token.refreshToken) {
+    throw new CredentialStoreReadError('malformed');
+  }
+  return token;
+}
+
+async function readAgyCredentialFile(): Promise<CredentialStoreToken | null> {
   try {
     const payload = await fs.readFile(
       path.join(os.homedir(), '.gemini', 'antigravity-cli', 'antigravity-oauth-token'),
@@ -237,13 +268,15 @@ function readViaSecretTool(): Uint8Array | null {
   return payload ? Buffer.from(payload, 'utf-8') : null;
 }
 
-export async function readAntigravityCredentialStoreToken(): Promise<CredentialStoreToken | null> {
+export async function readAntigravityCredentialStoreToken({
+  allowFileFallback = true,
+}: { allowFileFallback?: boolean } = {}): Promise<CredentialStoreToken | null> {
   if (process.platform === 'darwin') {
-    return readMacOSCredentialStore(true);
+    return readMacOSCredentialStore(allowFileFallback);
   }
   if (process.platform === 'win32') {
     try {
-      const payload = await readWindowsCredential('gemini:antigravity');
+      const payload = await readWindowsCredential(WINDOWS_CREDENTIAL_TARGET);
       return payload === null ? null : parseCredentialStorePayload(payload);
     } catch (error) {
       throw classifyCredentialStoreReadError(error);
@@ -326,6 +359,14 @@ export interface CredentialStoreWriteOptions {
   syncClassicOAuthFile?: true;
 }
 
+/** Confirm the entire IDE envelope, including identity metadata omitted by token reads. */
+export async function writeWindowsIdeCredentialPayload(payload: string): Promise<void> {
+  await writeWindowsCredential(WINDOWS_CREDENTIAL_TARGET, 'antigravity', payload);
+  if ((await readWindowsCredential(WINDOWS_CREDENTIAL_TARGET)) !== payload) {
+    throw new CredentialReadbackError('Windows IDE credential write could not be confirmed', {});
+  }
+}
+
 export async function writeAntigravityCredentialStoreToken(
   token: CredentialStoreTokenInput,
   options: CredentialStoreWriteOptions = {},
@@ -355,7 +396,7 @@ export async function writeAntigravityCredentialStoreToken(
 
 async function writeToSystemCredentialStore(payload: string): Promise<void> {
   if (process.platform === 'win32') {
-    await writeWindowsCredential('gemini:antigravity', 'antigravity', payload);
+    await writeWindowsCredential(WINDOWS_CREDENTIAL_TARGET, 'antigravity', payload);
     return;
   }
   if (process.platform === 'linux' && isSecretToolAvailable()) {

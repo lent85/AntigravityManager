@@ -1,4 +1,6 @@
 import type { CoreRpcOperations, CoreRpcWorkLifecycle } from './operations';
+import { GatewayRememberChoiceSchema, GatewayManualStartResultSchema, GatewayManualStopResultSchema, GatewayChoicePersistenceSchema } from '@/modules/proxy-gateway/services/gateway-management.schema';
+import { gatewayLifecycleService } from '@/modules/proxy-gateway/services/gateway-lifecycle.service';
 import { createPlaygroundRouter } from '@/modules/proxy-gateway/playground/playground.router';
 import { playgroundService } from '@/modules/proxy-gateway/playground/playground.service';
 import { createDiagnosticLogCoreRouter } from '@/modules/app-shell/diagnostic-logs/core-router';
@@ -20,12 +22,23 @@ import { createAuditFileRouter } from '@/modules/proxy-gateway/audit/audit-file-
 import { openCodeOwner } from '@/modules/proxy-gateway/opencode-sync/opencode-owner.service';
 import { agentToolsOwner } from '@/modules/proxy-gateway/agent-tools/agent-tools.owner';
 import { createAgentToolsRouter } from '@/modules/proxy-gateway/agent-tools/agent-tools.router';
+import { createDshOwnerRouter } from '@/modules/proxy-gateway/dsh-sync/dsh-owner.router';
+import { dshOwner } from '@/modules/proxy-gateway/dsh-sync/dsh-owner.service';
+import { clientConfigOwner } from '@/modules/proxy-gateway/agent-tools/client-config-owner.service';
+import { connectionProfilesOwner } from '@/modules/proxy-gateway/connection-profiles/connection-profiles.owner';
+import { createConnectionProfilesRouter } from '@/modules/proxy-gateway/connection-profiles/connection-profiles.router';
+import { createClientConfigOwnerRouter } from '@/modules/proxy-gateway/agent-tools/client-config-owner.router';
 import { createOpenCodeOwnerRouter } from '@/modules/proxy-gateway/opencode-sync/opencode-owner.router';
 export type { CoreRpcOperations, CoreRpcWorkLifecycle } from './operations';
 import { localAccountOwner } from '@/modules/account/services/local-account-owner.service';
 import { createLocalAccountRouter } from '@/modules/account/services/local-account.router';
 import { getCloudAccountSwitchStatus } from '@/modules/cloud-account/services/cloud-account-switch-status.service';
+import { deleteCloudAccount } from '@/modules/cloud-account/services/cloud-account-deletion.service';
 import { serviceConfigService } from '@/modules/config/service-config.service';
+import {
+  errorDiagnosticOwner,
+  createErrorDiagnosticRouter,
+} from '@/modules/error-diagnostics/public';
 import { ConfigManager } from '@/modules/config/ipc/manager';
 import {
   createServiceConfigRouter,
@@ -57,7 +70,7 @@ import { toCloudAccountFileORPCError } from '@/modules/cloud-account/services/cl
 import { os } from '@orpc/server';
 import { z } from 'zod';
 import { getNestServerStatus } from '@/server/main';
-import { explicitContextCacheManager } from '@/modules/proxy-gateway/server/modules/gemini/explicit-context-cache.store';
+import { explicitContextCacheManager } from '@/server/gateway/modules/gemini/explicit-context-cache.store';
 import { CloudAccountSummarySchema } from '@/modules/cloud-account/services/cloud-account-summary.schema';
 import { listCloudAccountSummaries } from '@/modules/cloud-account/services/cloud-account-summary.service';
 import {
@@ -66,12 +79,18 @@ import {
 } from '@/modules/cloud-account/services/cloud-account-view';
 import { cloudAccountListService } from '@/modules/cloud-account/services/cloud-account-list.service';
 import { CloudAccountRepo } from '@/modules/cloud-account/persistence/cloudHandler';
+import { cloudAccountProjectId } from '@/modules/cloud-account/services/cloud-account-project-id.service';
+import { createCloudAccountProjectIdProcedures } from '@/modules/cloud-account/ipc/cloud-account-project-id-router';
 import {
   CloudAccountMutationResultSchema,
   CloudAccountIdSchema,
   DeleteCloudAccountInputSchema,
   SetCloudAccountProxyInputSchema,
 } from '@/modules/cloud-account/services/cloud-account-mutation.schema';
+import {
+  CloudAccountRoutingResultSchema,
+  SetCloudAccountRoutingInputSchema,
+} from '@/modules/cloud-account/services/cloud-account-routing.schema';
 import { refreshAccountQuotaCore } from '@/modules/cloud-account/services/cloud-account-quota-refresh.service';
 import { clearServiceDisabledManually } from '@/modules/cloud-account/services/CloudAccountHealthService';
 import { cloudAccountWeeklyWarmupRunner } from '@/modules/cloud-account/services/cloud-account-weekly-warmup-runner';
@@ -129,7 +148,7 @@ import {
 } from './schema';
 
 export function createCoreRpcOperations(
-  core: Pick<CoreService, 'startGateway' | 'stopGateway'>,
+  core: Pick<CoreService, 'startGateway' | 'stopGateway' | 'manualStartGateway' | 'manualStopGateway' | 'retryGatewaySaveChoice'>,
 ): CoreRpcOperations & CoreRpcWorkLifecycle {
   const inFlightAccountWork = new Set<Promise<unknown>>();
   let acceptingAccountMutations = true;
@@ -149,6 +168,7 @@ export function createCoreRpcOperations(
 
   return {
     diagnosticLogs: (until) => readDiagnosticLogs('core', until),
+    errorDiagnostics: errorDiagnosticOwner,
     playground: {
       execute: (input, signal) =>
         runAccountMutation(() => playgroundService.execute(input, signal)),
@@ -162,6 +182,9 @@ export function createCoreRpcOperations(
     auditFile: auditFileOwner,
     openCode: openCodeOwner,
     agentTools: agentToolsOwner,
+    dsh: dshOwner,
+    clientConfig: clientConfigOwner,
+    connectionProfiles: connectionProfilesOwner,
     localAccount: localAccountOwner,
     errorReporting: errorReportingService,
     serviceConfig: {
@@ -172,33 +195,43 @@ export function createCoreRpcOperations(
       generateKey: () => runAccountMutation(serviceConfigService.generateKey),
     },
     closeAccountMutationAdmission: () => {
+      gatewayLifecycleService.closeAdmission();
       acceptingAccountMutations = false;
       ipcCaptureOwner.closeAdmission();
       auditCurlOwner.closeAdmission();
       thoughtOwner.closeAdmission();
+      errorDiagnosticOwner.closeAdmission();
       auditOwner.closeAdmission();
       auditFileOwner.closeAdmission();
       openCodeOwner.closeAdmission();
       agentToolsOwner.closeAdmission();
+      dshOwner.closeAdmission();
+      clientConfigOwner.closeAdmission();
+      connectionProfilesOwner.closeAdmission();
       localAccountOwner.closeAdmission();
       cloudAccountAlertPolicy.closeAdmission();
       localAccountImportCoordinator.closeAdmission();
     },
     drainAccountMutations: async () => {
+      await gatewayLifecycleService.drain();
       await ipcCaptureOwner.drain();
       await auditCurlOwner.drain();
       await thoughtOwner.drain();
+      await errorDiagnosticOwner.drain();
       await auditOwner.drain();
       await auditFileOwner.drain();
       await openCodeOwner.drain();
       await agentToolsOwner.drain();
-      // Admitted tool writes can still need the serialized configuration queue for review routing.
-      serviceConfigService.closeAdmission();
-      await serviceConfigService.drain();
+      await dshOwner.drain();
+      await clientConfigOwner.drain();
+      await connectionProfilesOwner.drain();
       await localAccountOwner.drain();
       await Promise.allSettled(Array.from(inFlightAccountWork));
       await localAccountImportCoordinator.drain();
       await localAccountPostImportService.drain();
+      // Admitted account deletion/import and tool writes can still enqueue configuration work.
+      serviceConfigService.closeAdmission();
+      await serviceConfigService.drain();
     },
     accountAlertPolicy: {
       read: cloudAccountAlertPolicy.read,
@@ -293,10 +326,20 @@ export function createCoreRpcOperations(
       CloudAccountRepo.setAccountProxy(accountId, proxyUrl);
       return { success: true };
     },
-    accountDelete: async (accountId) => {
-      await CloudAccountRepo.removeAccount(accountId);
+    accountProjectId: {
+      getAccountProjectId: cloudAccountProjectId.getAccountProjectId,
+      setAccountProjectId: (input) => runAccountMutation(() => cloudAccountProjectId.setAccountProjectId(input)),
+      fetchAccountProjectId: (input) => runAccountMutation(() => cloudAccountProjectId.fetchAccountProjectId(input)),
+    },
+    accountSetRouting: async (accountId, proxyPriority, proxyEnabled) => {
+      CloudAccountRepo.setAccountRouting(accountId, proxyPriority, proxyEnabled);
       return { success: true };
     },
+    accountDelete: (accountId) =>
+      runAccountMutation(async () => {
+        await deleteCloudAccount(accountId);
+        return { success: true };
+      }),
     oauthClientList: listOAuthClients,
     oauthClientActive: () => ({ client_key: getActiveOAuthClient() }),
     oauthClientSet: (clientKey) => {
@@ -304,6 +347,9 @@ export function createCoreRpcOperations(
       return { success: true };
     },
     gatewayStart: (port) => core.startGateway(port),
+    gatewayManualStart: (port) => runAccountMutation(() => core.manualStartGateway(port)),
+    gatewayManualStop: () => runAccountMutation(() => core.manualStopGateway()),
+    gatewayRetrySaveChoice: (choice) => runAccountMutation(() => core.retryGatewaySaveChoice(choice)),
     gatewayStop: async () => {
       const success = await core.stopGateway();
       if (!success) {
@@ -316,16 +362,26 @@ export function createCoreRpcOperations(
 
 export function createCoreRpcRouter(operations: CoreRpcOperations) {
   return os.router({
+    ...createCloudAccountProjectIdProcedures(() => operations.accountProjectId),
+    gatewayManualStart: os.input(z.strictObject({ port: z.number().int().min(1024).max(65535) }))
+      .output(GatewayManualStartResultSchema).handler(({ input }) => operations.gatewayManualStart(input.port)),
+    gatewayManualStop: os.output(GatewayManualStopResultSchema).handler(() => operations.gatewayManualStop()),
+    gatewayRetrySaveChoice: os.input(GatewayRememberChoiceSchema).output(GatewayChoicePersistenceSchema)
+      .handler(({ input }) => operations.gatewayRetrySaveChoice(input)),
     playground: createPlaygroundRouter(operations.playground),
     diagnosticLogs: createDiagnosticLogCoreRouter(operations.diagnosticLogs),
     errorReporting: createErrorReportingRouter(operations.errorReporting),
     ipcCapture: createIpcCaptureRouter(operations.ipcCapture),
     audit: createAuditOwnerRouter(operations.audit),
     thought: createThoughtOwnerRouter(operations.thought),
+    errorDiagnostics: createErrorDiagnosticRouter(operations.errorDiagnostics),
     auditCurl: createAuditCurlOwnerRouter(operations.auditCurl),
     auditFile: createAuditFileRouter(operations.auditFile),
     openCode: createOpenCodeOwnerRouter(operations.openCode),
     agentTools: createAgentToolsRouter(operations.agentTools),
+    dsh: createDshOwnerRouter(operations.dsh ?? dshOwner),
+    clientConfig: createClientConfigOwnerRouter(operations.clientConfig),
+    connectionProfiles: createConnectionProfilesRouter(operations.connectionProfiles),
     localAccount: createLocalAccountRouter(operations.localAccount),
     accountAlertPolicy: createAccountAlertPolicyRouter(operations.accountAlertPolicy),
     serviceConfig: createServiceConfigRouter(operations.serviceConfig),
@@ -477,6 +533,19 @@ export function createCoreRpcRouter(operations: CoreRpcOperations) {
       .input(SetCloudAccountProxyInputSchema)
       .output(CloudAccountMutationResultSchema)
       .handler(({ input }) => operations.accountSetProxy(input.accountId, input.proxyUrl)),
+    accountSetRouting: os
+      .input(SetCloudAccountRoutingInputSchema)
+      .output(CloudAccountRoutingResultSchema)
+      .handler(({ input }) => {
+        if (!operations.accountSetRouting) {
+          throw new Error('Cloud account routing settings are unavailable');
+        }
+        return operations.accountSetRouting(
+          input.accountId,
+          input.proxyPriority,
+          input.proxyEnabled,
+        );
+      }),
     accountDelete: os
       .input(DeleteCloudAccountInputSchema)
       .output(CloudAccountMutationResultSchema)

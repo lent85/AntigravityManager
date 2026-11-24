@@ -14,10 +14,7 @@ import {
   selectCloudAccountAdapter,
 } from '@/modules/cloud-account/ipc/cloud-account-adapter';
 import { cloudRouter } from '@/modules/cloud-account/ipc/router';
-import {
-  cloudAccountListService,
-  createCloudAccountListService,
-} from '@/modules/cloud-account/services/cloud-account-list.service';
+import { cloudAccountListService } from '@/modules/cloud-account/services/cloud-account-list.service';
 import type { CloudAccountView } from '@/modules/cloud-account/services/cloud-account-view';
 import { projectCloudAccountView } from '@/modules/cloud-account/services/cloud-account-view';
 import { CloudAccountRepo } from '@/modules/cloud-account/persistence/cloudHandler';
@@ -27,18 +24,18 @@ import * as oauthSettings from '@/modules/cloud-account/services/cloud-account-o
 import * as quotaService from '@/modules/cloud-account/services/cloud-account-quota-refresh.service';
 import { cloudAccountWeeklyWarmupRunner } from '@/modules/cloud-account/services/cloud-account-weekly-warmup-runner';
 import { WeeklyWarmupService } from '@/modules/cloud-account/services/WeeklyWarmupService';
-import { CloudAccountSettingsStore } from '@/modules/cloud-account/persistence/cloud-account-settings-store';
 import { readIdeAccountSyncErrorCode } from '@/modules/cloud-account/services/ide-account-sync.schema';
-import { updateTrayMenu } from '@/modules/app-shell/ipc/tray/handler';
+import { refreshTrayAccount } from '@/modules/app-shell/ipc/tray/handler';
 import { readAccountValidationLinkErrorCode } from '@/modules/cloud-account/services/account-validation-link.schema';
 import { desktopOAuthLogin } from '@/modules/cloud-account/ipc/desktop-oauth-login';
 import { GoogleLoginOperation } from '@/modules/cloud-account/services/google-login-operation';
 import { CloudAccountHealthService } from '@/modules/cloud-account/services/CloudAccountHealthService';
 import * as serverMain from '@/server/main';
+import { mockCoreGatewayLifecycle } from '../support/core-gateway-lifecycle';
 
 vi.mock('electron', () => ({ shell: { openExternal: vi.fn() } }));
 vi.mock('@/modules/cloud-account/ipc/handler', () => ({}));
-vi.mock('@/modules/app-shell/ipc/tray/handler', () => ({ updateTrayMenu: vi.fn() }));
+vi.mock('@/modules/app-shell/ipc/tray/handler', () => ({ refreshTrayAccount: vi.fn() }));
 
 const closeables: Array<{ close(): Promise<void> }> = [];
 const directories: string[] = [];
@@ -142,6 +139,7 @@ describe('cloud account read adapter', () => {
           shutdown: async () => {},
           onShutdownError: vi.fn(),
           rpc: createCoreRpcOperations({
+            ...mockCoreGatewayLifecycle(),
             startGateway: vi.fn(async (port: number) => ({
               success: true as const,
               port,
@@ -216,6 +214,7 @@ describe('cloud account read adapter', () => {
       shutdown: async () => {},
       onShutdownError: vi.fn(),
       rpc: createCoreRpcOperations({
+        ...mockCoreGatewayLifecycle(),
         startGateway: vi.fn(async (port: number) => ({
           success: true as const,
           port,
@@ -259,6 +258,7 @@ describe('cloud account read adapter', () => {
       onShutdownError: vi.fn(),
       oauth,
       rpc: createCoreRpcOperations({
+        ...mockCoreGatewayLifecycle(),
         startGateway: vi.fn(async (port: number) => ({
           success: true as const,
           port,
@@ -347,6 +347,7 @@ describe('cloud account read adapter', () => {
       shutdown: async () => {},
       onShutdownError: vi.fn(),
       rpc: createCoreRpcOperations({
+        ...mockCoreGatewayLifecycle(),
         startGateway: vi.fn(async (port: number) => ({
           success: true as const,
           port,
@@ -377,6 +378,7 @@ describe('cloud account read adapter', () => {
       shutdown: async () => {},
       onShutdownError: vi.fn(),
       rpc: createCoreRpcOperations({
+        ...mockCoreGatewayLifecycle(),
         startGateway: vi.fn(async (port: number) => ({
           success: true as const,
           port,
@@ -478,6 +480,7 @@ describe('cloud account read adapter', () => {
       shutdown: async () => {},
       onShutdownError: vi.fn(),
       rpc: createCoreRpcOperations({
+        ...mockCoreGatewayLifecycle(),
         startGateway: vi.fn(async (port: number) => ({
           success: true as const,
           port,
@@ -511,6 +514,7 @@ describe('cloud account read adapter', () => {
       shutdown: async () => {},
       onShutdownError: vi.fn(),
       rpc: createCoreRpcOperations({
+        ...mockCoreGatewayLifecycle(),
         startGateway: vi.fn(async (port: number) => ({
           success: true as const,
           port,
@@ -562,6 +566,7 @@ describe('cloud account read adapter', () => {
     });
     vi.spyOn(IdeAccountImportAdapter, 'syncFromIde').mockImplementation(() => waiting);
     const operations = createCoreRpcOperations({
+      ...mockCoreGatewayLifecycle(),
       startGateway: vi.fn(async (port: number) => ({ success: true as const, port, base_url: '' })),
       stopGateway: vi.fn(async () => true),
     });
@@ -607,14 +612,13 @@ describe('cloud account read adapter', () => {
     const warmup = vi
       .spyOn(cloudAccountWeeklyWarmupRunner, 'schedule')
       .mockImplementation(() => {});
-    vi.spyOn(CloudAccountSettingsStore, 'getSetting').mockReturnValue('en');
     vi.spyOn(cloudAccountListService, 'listViews').mockImplementation(async () => [
       projectCloudAccountView(stored),
     ]);
 
     const embedded = await rendererCloud.refreshAccountQuota({ accountId: stored.id });
     expect(embedded).toEqual(projectCloudAccountView(stored));
-    expect(updateTrayMenu).toHaveBeenCalledOnce();
+    expect(refreshTrayAccount).toHaveBeenCalledExactlyOnceWith();
     expect(warmup).toHaveBeenCalledWith([stored]);
 
     const socketPath = await endpoint();
@@ -624,6 +628,7 @@ describe('cloud account read adapter', () => {
       shutdown: async () => {},
       onShutdownError: vi.fn(),
       rpc: createCoreRpcOperations({
+        ...mockCoreGatewayLifecycle(),
         startGateway: vi.fn(async (port: number) => ({
           success: true as const,
           port,
@@ -639,7 +644,7 @@ describe('cloud account read adapter', () => {
     const remote = await rendererCloud.refreshAccountQuota({ accountId: stored.id });
     expect(remote).toEqual(embedded);
     expect(await rendererCloud.listCloudAccounts()).toEqual([remote]);
-    expect(updateTrayMenu).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(refreshTrayAccount).toHaveBeenCalledTimes(2));
     expect(warmup).toHaveBeenCalledTimes(2);
     expect(refresh).toHaveBeenCalledTimes(2);
     expect(JSON.stringify(remote)).not.toMatch(
@@ -668,6 +673,7 @@ describe('cloud account read adapter', () => {
       .mockImplementation(() => {});
     const refresh = vi.spyOn(quotaService, 'refreshAccountQuotaCore');
     const operations = createCoreRpcOperations({
+      ...mockCoreGatewayLifecycle(),
       startGateway: vi.fn(async (port: number) => ({ success: true as const, port, base_url: '' })),
       stopGateway: vi.fn(async () => true),
     });
@@ -719,6 +725,7 @@ describe('cloud account read adapter', () => {
     );
     const run = vi.spyOn(WeeklyWarmupService, 'run');
     const operations = createCoreRpcOperations({
+      ...mockCoreGatewayLifecycle(),
       startGateway: vi.fn(async (port: number) => ({ success: true as const, port, base_url: '' })),
       stopGateway: vi.fn(async () => true),
     });
@@ -754,6 +761,7 @@ describe('cloud account read adapter', () => {
     const embedded = await rendererCloud.listCloudAccounts();
     const socketPath = await endpoint();
     const operations = createCoreRpcOperations({
+      ...mockCoreGatewayLifecycle(),
       startGateway: vi.fn(async (port: number) => ({
         success: true as const,
         port,
@@ -779,90 +787,6 @@ describe('cloud account read adapter', () => {
     expect(embeddedLogin).not.toHaveBeenCalled();
   }, 15_000);
 
-  it('routes proxy replacement, removal and deletion through the selected owner', async () => {
-    const account: CloudAccount = {
-      id: 'account-1',
-      provider: 'google',
-      email: 'example@example.com',
-      token: {
-        access_token: 'test-access',
-        refresh_token: 'test-refresh',
-        expires_in: 3600,
-        expiry_timestamp: 1000,
-        token_type: 'Bearer',
-      },
-      created_at: 1,
-      last_used: 2,
-    };
-    let storedAccounts = [account];
-    const setProxy = vi
-      .spyOn(CloudAccountRepo, 'setAccountProxy')
-      .mockImplementation((_id, url) => {
-        storedAccounts[0].proxy_url = url ?? undefined;
-      });
-    const removeAccount = vi
-      .spyOn(CloudAccountRepo, 'removeAccount')
-      .mockImplementation(async () => {
-        storedAccounts = [];
-      });
-    const listService = createCloudAccountListService({
-      getAccounts: async () => storedAccounts,
-      backfillOAuthClientKeys: async () => false,
-      refreshProcessCache: async () => {},
-      getCurrentAccountInfo: () => ({ isAuthenticated: false, email: '' }),
-      usesCredentialStore: () => false,
-      getActiveAccountId: () => '',
-      warn: vi.fn(),
-    });
-    vi.spyOn(cloudAccountListService, 'listViews').mockImplementation(listService.listViews);
-    const socketPath = await endpoint();
-    const server = new ManagementServer({
-      endpoint: socketPath,
-      getStatus: () => ({ state: 'running', pid: 123, gateway: { running: false, port: null } }),
-      shutdown: async () => {},
-      onShutdownError: vi.fn(),
-      rpc: createCoreRpcOperations({
-        startGateway: vi.fn(async (port: number) => ({
-          success: true as const,
-          port,
-          base_url: `http://localhost:${port}`,
-        })),
-        stopGateway: vi.fn(async () => true),
-      }),
-    });
-    closeables.push(server);
-    await server.start();
-    const proxyUrl = 'http://proxy-user:proxy-password@127.0.0.1:7890';
-
-    await rendererCloud.setAccountProxy({ accountId: 'account-1', proxyUrl });
-    expect((await rendererCloud.listCloudAccounts())[0]?.proxy_configured).toBe(true);
-    await rendererCloud.setAccountProxy({ accountId: 'account-1', proxyUrl: null });
-    expect((await rendererCloud.listCloudAccounts())[0]?.proxy_configured).toBe(false);
-    await rendererCloud.deleteCloudAccount({ accountId: 'account-1' });
-    expect(await rendererCloud.listCloudAccounts()).toEqual([]);
-    expect(setProxy.mock.calls).toEqual([
-      ['account-1', proxyUrl],
-      ['account-1', null],
-    ]);
-    expect(removeAccount).toHaveBeenCalledOnce();
-
-    setProxy.mockClear();
-    removeAccount.mockClear();
-    storedAccounts = [account];
-    selectCloudAccountAdapter({ mode: 'standalone-core', client: new CoreRpcClient(socketPath) });
-    await rendererCloud.setAccountProxy({ accountId: 'account-1', proxyUrl });
-    expect((await rendererCloud.listCloudAccounts())[0]?.proxy_configured).toBe(true);
-    await rendererCloud.setAccountProxy({ accountId: 'account-1', proxyUrl: null });
-    expect((await rendererCloud.listCloudAccounts())[0]?.proxy_configured).toBe(false);
-    await rendererCloud.deleteCloudAccount({ accountId: 'account-1' });
-    expect(await rendererCloud.listCloudAccounts()).toEqual([]);
-    expect(setProxy.mock.calls).toEqual([
-      ['account-1', proxyUrl],
-      ['account-1', null],
-    ]);
-    expect(removeAccount).toHaveBeenCalledOnce();
-  }, 15_000);
-
   it('rejects invalid proxy input before writing through either transport', async () => {
     const setProxy = vi.spyOn(CloudAccountRepo, 'setAccountProxy').mockImplementation(() => {});
     await expect(
@@ -877,6 +801,7 @@ describe('cloud account read adapter', () => {
       shutdown: async () => {},
       onShutdownError: vi.fn(),
       rpc: createCoreRpcOperations({
+        ...mockCoreGatewayLifecycle(),
         startGateway: vi.fn(async (port: number) => ({
           success: true as const,
           port,
@@ -922,6 +847,7 @@ describe('cloud account read adapter', () => {
       shutdown: async () => {},
       onShutdownError: vi.fn(),
       rpc: createCoreRpcOperations({
+        ...mockCoreGatewayLifecycle(),
         startGateway: vi.fn(async (port: number) => ({
           success: true as const,
           port,
@@ -1021,6 +947,15 @@ describe('cloud account read adapter', () => {
             throw error;
           }),
           setAccountProxy: vi.fn(async () => {
+            throw error;
+          }),
+          getAccountProjectId: vi.fn(async () => {
+            throw error;
+          }),
+          setAccountProjectId: vi.fn(async () => {
+            throw error;
+          }),
+          fetchAccountProjectId: vi.fn(async () => {
             throw error;
           }),
           deleteCloudAccount: vi.fn(async () => {

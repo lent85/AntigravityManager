@@ -5,10 +5,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_APP_CONFIG } from '@/modules/config/types';
 import { getServerConfig, setServerConfig } from '@/server/server-config';
-import { ProxyGuard } from '@/modules/proxy-gateway/server/guards/proxy.guard';
-import { GeminiController } from '@/modules/proxy-gateway/server/modules/gemini/gemini.controller';
-import { GeminiService } from '@/modules/proxy-gateway/server/modules/gemini/gemini.service';
-import { AccountLeaseService } from '@/modules/proxy-gateway/server/modules/account-lease/account-lease.service';
+import { ProxyGuard } from '@/server/gateway/guards/proxy.guard';
+import { GeminiController } from '@/server/gateway/modules/gemini/gemini.controller';
+import { GeminiService } from '@/server/gateway/modules/gemini/gemini.service';
+import { AnthropicController } from '@/server/gateway/modules/anthropic/anthropic.controller';
+import { AnthropicService } from '@/server/gateway/modules/anthropic/anthropic.service';
+import { AccountLeaseService } from '@/server/gateway/modules/account-lease/account-lease.service';
 
 vi.mock('@/modules/proxy-gateway/opencode-sync/opencode-credentials', () => ({
   openCodeCredentialService: { matches: () => false },
@@ -18,19 +20,22 @@ const previous = getServerConfig() ?? DEFAULT_APP_CONFIG.proxy;
 const apps: NestFastifyApplication[] = [];
 const headers = { authorization: 'Bearer synthetic-model-key' };
 
+vi.setConfig({ testTimeout: 15_000 });
+
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
   setServerConfig(previous);
 });
 
-async function createSurface() {
-  const getAllRawQuotaModels = vi.fn(() => new Set(['gemini-2.5-flash']));
+async function createSurface(rawModels = ['gemini-2.5-flash']) {
+  const getAllRawQuotaModels = vi.fn(() => new Set(rawModels));
   const getAllCollectedModels = vi.fn(() => new Set(['gemini-3-flash']));
   @Module({
-    controllers: [GeminiController],
+    controllers: [GeminiController, AnthropicController],
     providers: [
       ProxyGuard,
       { provide: GeminiService, useValue: {} },
+      { provide: AnthropicService, useValue: {} },
       { provide: AccountLeaseService, useValue: { getAllRawQuotaModels, getAllCollectedModels } },
     ],
   })
@@ -51,6 +56,32 @@ async function createSurface() {
 }
 
 describe('Gemini model queries HTTP', () => {
+  it('returns identical native Anthropic list/retrieve metadata on the existing Claude routes', async () => {
+    const { app } = await createSurface();
+    const list = await app.inject({ url: '/v1/models/claude', headers });
+    const model = {
+      type: 'model',
+      id: 'gemini-2.5-flash',
+      display_name: 'gemini-2.5-flash',
+      created_at: '1970-01-01T00:00:00Z',
+    };
+    expect({ status: list.statusCode, body: list.json() }).toEqual({
+      status: 200,
+      body: { data: [model], first_id: model.id, has_more: false, last_id: model.id },
+    });
+    const get = await app.inject({ url: '/v1/models/claude/GEMINI-2.5-FLASH', headers });
+    expect({ status: get.statusCode, body: get.json() }).toEqual({ status: 200, body: model });
+  });
+
+  it.each(['/v1/models/claude', '/v1/models/claude/gemini-2.5-flash'])(
+    'protects the Anthropic directory before catalog access: %s',
+    async (url) => {
+      const { app, getAllRawQuotaModels } = await createSurface();
+      const reply = await app.inject({ url });
+      expect(reply.statusCode).toBe(401);
+      expect(getAllRawQuotaModels).not.toHaveBeenCalled();
+    },
+  );
   it('returns the complete raw model catalog with HTTP 200', async () => {
     const { app, getAllRawQuotaModels, getAllCollectedModels } = await createSurface();
     const reply = await app.inject({ url: '/v1beta/models', headers });
@@ -62,8 +93,8 @@ describe('Gemini model queries HTTP', () => {
             name: 'models/gemini-2.5-flash',
             displayName: 'gemini-2.5-flash',
             description: '',
-            inputTokenLimit: 128000,
-            outputTokenLimit: 8192,
+            inputTokenLimit: 1048576,
+            outputTokenLimit: 65536,
             supportedGenerationMethods: ['generateContent', 'countTokens'],
             temperature: 1,
             topK: 64,
@@ -77,24 +108,50 @@ describe('Gemini model queries HTTP', () => {
     expect(getAllCollectedModels).not.toHaveBeenCalled();
   });
 
-  it.each(['gemini-2.5-flash', 'models%2Fgemini-2.5-flash'])(
+  it.each(['gemini-2.5-flash', 'models%2Fgemini-2.5-flash', 'GEMINI-2.5-FLASH'])(
     'returns an existing model projection for %s',
     async (model) => {
       const { app } = await createSurface();
       const reply = await app.inject({ url: `/v1beta/models/${model}`, headers });
       expect({ status: reply.statusCode, body: reply.json() }).toEqual({
         status: 200,
-        body: { name: 'models/gemini-2.5-flash', displayName: 'gemini-2.5-flash' },
+        body: {
+          name: 'models/gemini-2.5-flash',
+          displayName: 'gemini-2.5-flash',
+          description: '',
+          inputTokenLimit: 1048576,
+          outputTokenLimit: 65536,
+          supportedGenerationMethods: ['generateContent', 'countTokens'],
+          temperature: 1,
+          topK: 64,
+          topP: 0.95,
+          version: '001',
+        },
       });
     },
   );
 
-  it('preserves HTTP 200 fallback metadata for an unknown model', async () => {
+  it('uses exact spelling first and refuses an ambiguous case-insensitive match', async () => {
+    const { app } = await createSurface(['case-model', 'CASE-MODEL']);
+    for (const id of ['case-model', 'CASE-MODEL']) {
+      const reply = await app.inject({ url: `/v1beta/models/${id}`, headers });
+      expect(reply.statusCode).toBe(200);
+      expect(reply.json().name).toBe(`models/${id}`);
+    }
+    const ambiguous = await app.inject({ url: '/v1beta/models/Case-Model', headers });
+    expect(ambiguous.statusCode).toBe(404);
+  });
+
+  it('returns a typed 404 for an unknown model', async () => {
     const { app } = await createSurface();
     const reply = await app.inject({ url: '/v1beta/models/unknown-model', headers });
     expect({ status: reply.statusCode, body: reply.json() }).toEqual({
-      status: 200,
-      body: { name: 'models/unknown-model', displayName: 'unknown-model' },
+      status: 404,
+      body: {
+        statusCode: 404,
+        error: 'Not Found',
+        message: "Model 'models/unknown-model' was not found",
+      },
     });
   });
 

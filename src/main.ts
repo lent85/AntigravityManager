@@ -4,7 +4,6 @@ import { isDesktopEmbeddedCloudAccountOwner } from '@/modules/cloud-account/ipc/
 import { localAccountImportCoordinator } from '@/modules/cloud-account/local-import/local-account-import-coordinator.service';
 import { localAccountPostImportService } from '@/modules/cloud-account/local-import/local-account-post-import.service';
 import { app, BrowserWindow, dialog, shell, powerMonitor } from 'electron';
-import type { MessageBoxOptions } from 'electron';
 import path from 'path';
 import { getStandaloneRuntimePaths } from '@/shared/packaging/standalone-runtime-layout';
 import fs from 'fs';
@@ -18,12 +17,6 @@ import { logger } from './shared/logging/logger';
 import { shutdownDiagnosticStores } from '@/modules/proxy-gateway/diagnostics/shutdown';
 import { ipcAuditRecorder } from '@/modules/proxy-gateway/audit/ipc-audit-recorder';
 import { AppError } from '@/shared/errors/appError';
-import {
-  getExpectedInstallRoot,
-  getInstallNoticeText,
-  isRunningFromExpectedInstallDir as isRunningFromExpectedInstallDirUtil,
-  resolveInstallNoticeLanguage,
-} from './modules/app-shell/utils/installNotice';
 import { applyStartupGpuSwitches } from '@/modules/app-shell/utils/startupGpuSwitches';
 import { initializeDesktopAccountSecurity } from '@/modules/app-shell/services/account-security-startup';
 import {
@@ -33,20 +26,30 @@ import {
 import { desktopCoreConnection } from '@/modules/app-shell/services/desktop-core-connection';
 import { selectDesktopOwners } from '@/modules/app-shell/services/desktop-owner-selection';
 import { getDesktopStartupErrorTexts } from '@/modules/app-shell/services/desktop-startup-text';
-import { getDesktopPreferencesLanguage } from '@/modules/config/ipc/desktop-preferences';
+import {
+  desktopPreferencesStore,
+  getDesktopPreferencesLanguage,
+  getDesktopPreferencesZoom,
+} from '@/modules/config/ipc/desktop-preferences';
 import { createDesktopShutdownCoordinator } from '@/modules/app-shell/services/desktop-shutdown';
 import { ProfileLease, ProfileOwnershipError } from '@/core/ownership/profile-lease';
 import { initDatabase } from '@/modules/account/public';
 import { CloudMonitorService } from '@/modules/cloud-account/services/CloudMonitorService';
-import { configureImageQuotaRefresh } from '@/modules/proxy-gateway/server/modules/openai/image-quota-refresh';
+import { configureImageQuotaRefresh } from '@/server/gateway/modules/openai/image-quota-refresh';
 import { auditFileOwner } from '@/modules/proxy-gateway/audit/audit-file-owner.service';
 import { auditOwner } from '@/modules/proxy-gateway/audit/audit-owner.service';
 import { auditCurlOwner } from '@/modules/proxy-gateway/traffic-monitor/audit-curl-owner.service';
 import { thoughtOwner } from '@/modules/proxy-gateway/thought-store/thought-owner.service';
 import { openCodeOwner } from '@/modules/proxy-gateway/opencode-sync/opencode-owner.service';
 import { agentToolsOwner } from '@/modules/proxy-gateway/agent-tools/agent-tools.owner';
+import { clientConfigOwner } from '@/modules/proxy-gateway/agent-tools/client-config-owner.service';
+import { connectionProfilesOwner } from '@/modules/proxy-gateway/connection-profiles/connection-profiles.owner';
+import { dshOwner } from '@/modules/proxy-gateway/dsh-sync/dsh-owner.service';
 import { localAccountOwner } from '@/modules/account/services/local-account-owner.service';
 import { loadDesktopPreferences } from '@/modules/config/ipc/handlers';
+import { installDesktopMenu } from '@/modules/app-shell/ipc/desktop-menu';
+import { getConfigAdapter } from '@/modules/config/ipc/config-adapter';
+import { errorProcessOwner, errorDiagnosticOwner } from '@/modules/error-diagnostics/public';
 import { serviceConfigService } from '@/modules/config/service-config.service';
 import { cloudAccountAlertPolicy } from '@/modules/cloud-account/services/cloud-account-alert-policy.service';
 import {
@@ -58,7 +61,11 @@ import {
 import { drainDesktopCloudAccountSwitches } from '@/modules/cloud-account/ipc/cloud-account-switch-desktop';
 import { createWeeklyWarmupExecutor } from '@/modules/proxy-gateway/weekly-warmup-executor';
 import { subscribeSelectedAuditEvents } from '@/modules/proxy-gateway/ipc/audit-presentation';
-import { exportSelectedAuditBody } from '@/modules/proxy-gateway/ipc/audit-file-desktop';
+import {
+  exportSelectedAuditBody,
+  exportSelectedAuditHar,
+  exportSelectedAuditSession,
+} from '@/modules/proxy-gateway/ipc/audit-file-desktop';
 
 // Static Imports to fix Bundle Resolution Errors
 import { disableWindowsPowerThrottling } from '@/shared/platform/windowsPowerThrottling';
@@ -68,10 +75,15 @@ import {
   setTrayLanguage,
   destroyTray,
   setTrayMainWindow,
+  isTrayReady,
 } from '@/modules/app-shell/ipc/tray/handler';
-import { restoreExistingWindow } from '@/modules/app-shell/utils/windowActivation';
+import {
+  restoreExistingWindow,
+  restoreHiddenStartupWindow,
+} from '@/modules/app-shell/utils/windowActivation';
 import { rpcHandler } from './ipc/handler';
-import { ConfigManager } from '@/modules/config/ipc/manager';
+import { ConfigManager, ConfigLoadError } from '@/modules/config/ipc/manager';
+import { gatewayLifecycleService } from '@/modules/proxy-gateway/services/gateway-lifecycle.service';
 import { AppConfig } from '@/modules/config/types';
 import { isAutoStartLaunch, syncAutoStart } from '@/modules/antigravity-runtime/utils/autoStart';
 import { safeStringifyPacket } from './shared/security/sensitiveDataMasking';
@@ -131,6 +143,7 @@ if (!app.isPackaged) {
 // logging below runs, so the shipped app keeps logging to disk as before.
 // Importing the logger module itself must stay free of filesystem side effects.
 logger.enableFileLogging();
+errorProcessOwner.register('app');
 configureImageQuotaRefresh(() => getCloudAccountAdapter().forcePoll());
 
 const packetLogPath = path.join(app.getPath('userData'), 'orpc_packets.log');
@@ -156,11 +169,6 @@ function logPacket(data: unknown) {
     }
   }
 }
-ipcMain.on(IPC_CHANNELS.CHANGE_LANGUAGE, (event, lang) => {
-  logger.info(`IPC: Received CHANGE_LANGUAGE: ${lang}`);
-  setTrayLanguage(lang);
-});
-
 const gpuSwitchResult = applyStartupGpuSwitches(app, process.platform, process.env);
 if (gpuSwitchResult.disabledHardwareAcceleration || gpuSwitchResult.appliedSwitches.length > 0) {
   logger.info(
@@ -218,66 +226,10 @@ const desktopProfileLease = new ProfileLease('desktop');
 let desktopOwner: Awaited<ReturnType<typeof bootstrapDesktopOwner>> | undefined;
 let ownerMode: 'desktop-embedded' | 'standalone-core' = 'desktop-embedded';
 let shouldStartHidden = false;
-let hasShownInstallNotice = false;
 let pendingManualUpdate: ManualUpdateInfo | null = null;
 let isManualUpdateRendererReady = false;
 let updateInstallRequested = false;
 const notifiedManualUpdateVersions = new Set<string>();
-
-function isRunningFromExpectedInstallDir() {
-  return isRunningFromExpectedInstallDirUtil({
-    platform: process.platform,
-    isPackaged: app.isPackaged,
-    localAppData: process.env.LOCALAPPDATA,
-    appName: app.getName(),
-    execPath: process.execPath,
-  });
-}
-
-function showWindowsInstallNoticeIfNeeded() {
-  if (hasShownInstallNotice) {
-    return;
-  }
-
-  if (isRunningFromExpectedInstallDir()) {
-    return;
-  }
-
-  const expectedRoot = getExpectedInstallRoot({
-    platform: process.platform,
-    localAppData: process.env.LOCALAPPDATA,
-    appName: app.getName(),
-  });
-  if (!expectedRoot) {
-    return;
-  }
-
-  hasShownInstallNotice = true;
-  const language = resolveInstallNoticeLanguage({
-    configLanguage: startupConfig?.language,
-    locale: app.getLocale(),
-  });
-  const text = getInstallNoticeText(language);
-
-  const options: MessageBoxOptions = {
-    type: 'info',
-    title: text.title,
-    message: text.message,
-    detail: `${text.detailPrefix}${expectedRoot}`,
-    buttons: [...text.buttons],
-    defaultId: 1,
-  };
-
-  const showPromise = globalMainWindow
-    ? dialog.showMessageBox(globalMainWindow, options)
-    : dialog.showMessageBox(options);
-
-  showPromise.then(({ response }) => {
-    if (response === 0) {
-      shell.openPath(expectedRoot);
-    }
-  });
-}
 
 function emitManualUpdateNotification(update: ManualUpdateInfo, { force = false } = {}) {
   if (!force && notifiedManualUpdateVersions.has(update.version)) {
@@ -415,6 +367,40 @@ ipcMain.handle(
   },
 );
 
+ipcMain.handle(
+  IPC_CHANNELS.SAVE_TRAFFIC_AUDIT_SESSION,
+  async (_event, sessionId: string, suggestedName: string) => {
+    return exportSelectedAuditSession(sessionId, suggestedName, async (safeName) => {
+      const options = {
+        defaultPath: safeName,
+        title: 'Save traffic audit session',
+        filters: [{ name: 'NDJSON', extensions: ['ndjson'] }],
+      };
+      const result = globalMainWindow
+        ? await dialog.showSaveDialog(globalMainWindow, options)
+        : await dialog.showSaveDialog(options);
+      return result.canceled ? null : (result.filePath ?? null);
+    });
+  },
+);
+
+ipcMain.handle(
+  IPC_CHANNELS.SAVE_TRAFFIC_AUDIT_HAR,
+  async (_event, requestId: string, suggestedName: string) => {
+    return exportSelectedAuditHar(requestId, suggestedName, async (safeName) => {
+      const options = {
+        defaultPath: safeName,
+        title: 'Save traffic HAR',
+        filters: [{ name: 'HTTP Archive', extensions: ['har'] }],
+      };
+      const result = globalMainWindow
+        ? await dialog.showSaveDialog(globalMainWindow, options)
+        : await dialog.showSaveDialog(options);
+      return result.canceled ? null : (result.filePath ?? null);
+    });
+  },
+);
+
 ipcMain.handle(IPC_CHANNELS.GET_OBSERVABILITY_CONFIG, () => {
   return getQuickObservabilityConfig(
     (message, error) => {
@@ -507,13 +493,14 @@ function createWindow({ startHidden }: { startHidden: boolean }) {
     show: !startHidden,
     autoHideMenuBar: true,
     webPreferences: {
+      zoomFactor: getDesktopPreferencesZoom() / 100,
       backgroundThrottling: true,
       devTools: inDevelopment,
-      sandbox: false,
-      webviewTag: true,
+      sandbox: true,
+      webviewTag: false,
       webSecurity: !inDevelopment,
-      contextIsolation: false,
-      nodeIntegration: true,
+      contextIsolation: true,
+      nodeIntegration: false,
       nodeIntegrationInSubFrames: false,
       preload: preload,
     },
@@ -522,6 +509,7 @@ function createWindow({ startHidden }: { startHidden: boolean }) {
   globalMainWindow = mainWindow;
   setTrayMainWindow(mainWindow);
   logger.info('createWindow: BrowserWindow instance created');
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   if (startHidden) {
     mainWindow.hide();
     logger.info('createWindow: startHidden enabled, window hidden');
@@ -563,10 +551,13 @@ function createWindow({ startHidden }: { startHidden: boolean }) {
   }
 
   logger.info('Window created');
-  showWindowsInstallNoticeIfNeeded();
 
   mainWindow.on('close', (event) => {
     if (!isQuitting) {
+      if (!isTrayReady()) {
+        logger.warn('Window close allowed because the tray is unavailable');
+        return;
+      }
       event.preventDefault();
       if (mainWindow.isFullScreen()) {
         mainWindow.setFullScreen(false);
@@ -639,6 +630,8 @@ const desktopShutdown = createDesktopShutdownCoordinator({
   },
   drainWarmups: async () => {
     await desktopRpcAdmission.drain();
+    desktopPreferencesStore.closeAdmission();
+    await desktopPreferencesStore.drain();
     ipcAuditRecorder.closeAdmission();
     await ipcAuditRecorder.drain();
     await drainAccountOwnerPresentation();
@@ -648,18 +641,28 @@ const desktopShutdown = createDesktopShutdownCoordinator({
     auditFileOwner.closeAdmission();
     auditOwner.closeAdmission();
     thoughtOwner.closeAdmission();
+    errorDiagnosticOwner.closeAdmission();
     auditCurlOwner.closeAdmission();
     openCodeOwner.closeAdmission();
     agentToolsOwner.closeAdmission();
+    clientConfigOwner.closeAdmission();
+    connectionProfilesOwner.closeAdmission();
+    dshOwner.closeAdmission();
     localAccountOwner.closeAdmission();
     cloudAccountAlertPolicy.closeAdmission();
     localAccountImportCoordinator.closeAdmission();
     await auditFileOwner.drain();
     await auditOwner.drain();
     await thoughtOwner.drain();
+    await errorDiagnosticOwner.drain();
     await auditCurlOwner.drain();
     await openCodeOwner.drain();
     await agentToolsOwner.drain();
+    await clientConfigOwner.drain();
+    await connectionProfilesOwner.drain();
+    await dshOwner.drain();
+    gatewayLifecycleService.closeAdmission();
+    await gatewayLifecycleService.drain();
     serviceConfigService.closeAdmission();
     await localAccountOwner.drain();
     await serviceConfigService.drain();
@@ -812,6 +815,10 @@ async function checkForUpdates() {
 async function setupORPC() {
   ipcMain.on(IPC_CHANNELS.START_ORPC_SERVER, (event) => {
     logger.info('IPC: Received START_ORPC_SERVER');
+    if (!globalMainWindow || event.sender.id !== globalMainWindow.webContents.id) {
+      logger.warn('IPC: Rejected START_ORPC_SERVER from an unknown renderer');
+      return;
+    }
     const [port] = event.ports;
 
     if (process.env.DEBUG_ORPC_PACKETS === 'true') {
@@ -847,6 +854,7 @@ process.on('unhandledRejection', (reason) => {
 app
   .whenReady()
   .then(async () => {
+    installDesktopMenu();
     if (process.platform === 'win32' && process.env.DISABLE_WINDOWS_POWER_THROTTLING === 'true') {
       disableWindowsPowerThrottling()
         .then(() => {
@@ -875,8 +883,17 @@ app
       selectDesktopEmbedded: () => selectDesktopOwners({ mode: 'desktop-embedded' }),
       initializeDesktopEmbedded: async () => {
         logger.info('Step: Load Config');
-        const config = ConfigManager.loadConfig();
-        startupConfig = config;
+        try {
+          startupConfig = ConfigManager.loadConfig();
+        } catch (error) {
+          if (!(error instanceof ConfigLoadError)) {
+            throw error;
+          }
+          logger.error(
+            'Service settings are unavailable; desktop features remain available.',
+            error,
+          );
+        }
         if (shouldStartHidden) {
           logger.info('Startup: Auto-start detected, window will start hidden');
         }
@@ -905,6 +922,16 @@ app
         });
       },
     });
+    try {
+      const selectedConfig = await getConfigAdapter().read();
+      await errorProcessOwner.start(
+        'app',
+        selectedConfig.error_diagnostics,
+        selectedConfig.errorDiagnosticsBudget,
+      );
+    } catch {
+      logger.warn('Local error diagnostic storage unavailable; captures remain bounded in memory');
+    }
   })
   .then(() => {
     logger.info('Step: setupORPC');
@@ -978,6 +1005,14 @@ app
     logger.info('Step: Startup Complete');
     if (isQuitting) {
       return;
+    }
+    const mainWindow = globalMainWindow;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      setTrayLanguage(getDesktopPreferencesLanguage(app.getLocale()));
+      const trayReady = initTray(mainWindow, requestTrayShutdown);
+      if (shouldStartHidden) {
+        restoreHiddenStartupWindow(mainWindow, trayReady);
+      }
     }
     await startAccountOwnerPresentation();
   })

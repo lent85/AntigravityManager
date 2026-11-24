@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { buildNativeEntry, runNativeEntry, withNativeFixture } from '../helpers/native-fixture.mjs';
+import { seedNativeBootstrapDiagnostic } from './seed-native-bootstrap-diagnostic.mjs';
 
 const args = process.argv.slice(2);
 assert(args.length === 0 || (args.length === 2 && args[0] === '--runtime-root'));
 const runtimeRoot = path.resolve(args[1] ?? process.cwd());
 await withNativeFixture(runtimeRoot, 'agm-bootstrap-native-', async (fixture) => {
   const { directory, preload } = fixture;
+  await seedNativeBootstrapDiagnostic(fixture.home, path.join(directory, 'error-window.worker.js'));
   // Disposable substitutes never load or write the user's OS credential store.
   const keytar = path.join(directory, 'node_modules/keytar');
   const keyring = path.join(directory, 'node_modules/@napi-rs/keyring');

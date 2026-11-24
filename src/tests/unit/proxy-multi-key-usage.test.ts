@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutionContext } from '@nestjs/common';
 import { HttpStatus, UnauthorizedException } from '@nestjs/common';
-import { ProxyGuard } from '../../modules/proxy-gateway/server/guards/proxy.guard';
+import { ProxyGuard } from '@/server/gateway/guards/proxy.guard';
 import {
   resolveConfiguredApiKeys,
   getClientInfo,
-} from '../../modules/proxy-gateway/server/shared/services/request-usage-context';
-import { proxyUsageStore } from '../../modules/proxy-gateway/server/shared/services/proxy-usage.store';
+} from '@/server/gateway/shared/services/request-usage-context';
+import { proxyUsageStore } from '@/server/gateway/shared/services/proxy-usage.store';
 import type { ProxyConfig } from '../../modules/config/types';
 
 // Mock openCodeCredentialService
@@ -237,14 +237,14 @@ describe('Proxy Multiple API Keys & Usage Tracking', () => {
 
       // Client breakdown checks
       expect(stats.clientBreakdown).toHaveLength(2);
-      const cursorBreakdown = stats.clientBreakdown.find((c) => c.keyId === 'client-a');
+      const cursorBreakdown = stats.clientBreakdown.find((c: any) => c.keyId === 'client-a');
       expect(cursorBreakdown).toBeDefined();
       expect(cursorBreakdown?.keyName).toBe('Cursor IDE');
       expect(cursorBreakdown?.requests).toBe(2);
       expect(cursorBreakdown?.errors).toBe(1);
       expect(cursorBreakdown?.tokens).toBe(150);
 
-      const openCodeBreakdown = stats.clientBreakdown.find((c) => c.keyId === 'client-b');
+      const openCodeBreakdown = stats.clientBreakdown.find((c: any) => c.keyId === 'client-b');
       expect(openCodeBreakdown).toBeDefined();
       expect(openCodeBreakdown?.keyName).toBe('OpenCode');
       expect(openCodeBreakdown?.requests).toBe(1);
@@ -252,9 +252,9 @@ describe('Proxy Multiple API Keys & Usage Tracking', () => {
 
       // Model breakdown checks
       expect(stats.modelBreakdown).toHaveLength(2);
-      const geminiModel = stats.modelBreakdown.find((m) => m.model === 'gemini-3-flash');
+      const geminiModel = stats.modelBreakdown.find((m: any) => m.model === 'gemini-3-flash');
       expect(geminiModel?.requests).toBe(2);
-      const claudeModel = stats.modelBreakdown.find((m) => m.model === 'claude-sonnet-4-6-thinking');
+      const claudeModel = stats.modelBreakdown.find((m: any) => m.model === 'claude-sonnet-4-6-thinking');
       expect(claudeModel?.requests).toBe(1);
 
       // Access logs query
@@ -268,7 +268,7 @@ describe('Proxy Multiple API Keys & Usage Tracking', () => {
 
       // Filter logs by error
       const errorLogs = await proxyUsageStore.getLogs({ limit: 10 });
-      const errorEntry = errorLogs.logs.find((l) => l.statusCode === 429);
+      const errorEntry = errorLogs.logs.find((l: any) => l.statusCode === 429);
       expect(errorEntry?.errorMessage).toBe('Quota exhausted');
     });
 

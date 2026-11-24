@@ -12,6 +12,19 @@ or the exact provider-generated answer reported by the user.
 
 ## Decision
 
+The hot namespace has one 10,000-association ceiling across message, legacy and
+tool-ID indexes, counting aliases and null ambiguity markers. A 500-session ceiling
+alone left one session's message slots unbounded. Oldest captured associations are
+evicted first, while the separate session LRU remains. Keep this retention policy
+feature-owned instead of creating another mutable reverse registry.
+
+Mapper cache values have no authoritative physical completion timestamp, so their
+existing one-hour horizon becomes a fixed first-capture maximum. Reads, equivalent
+updates and conflicts cannot renew it. Extending unknown provenance to seven days
+or stamping a read as completion would fabricate lifetime evidence. Proven durable
+Thought references keep their separate original-completion contract. A later capture
+after expiry may establish a new association; eviction never replays a tool/model.
+
 OpenAI Chat and Anthropic Messages derive signature ownership at the protocol service boundary.
 The scope includes a digest of the presented proxy credential, a session hint and the initial
 content anchor. Headers take precedence over query parameters and body metadata. Stable user
@@ -22,6 +35,19 @@ The in-memory store has no unscoped bucket. Historical tool recovery requires a 
 scoped tool-call ID, tool name and compatible effective model. A cache miss preserves explicit
 request-local signatures and existing model-specific unsigned-tool handling. Generic latest-turn
 or message-count signature fallback cannot establish tool ownership and is removed.
+
+Tool entries additionally separate compatible physical-model families. Two independent
+opaque values within one scoped tool ID invalidate automatic recovery, regardless of
+length or message count. A different tool name under that ID is also ambiguous. The
+cache retains a null marker, not an arbitrary candidate, until ordinary expiry, eviction
+or explicit scope clearing. Recognized raw/wrapped forms of one Claude signature remain
+equivalent and retain the first received bytes.
+
+Session/message-count slots follow the same opaque-value conflict rule and are separated
+by the normalized compatible model family, or exact physical model when no family is
+registered. Rewind removes only future slots from the compatible source scope. When the
+latest compatible slot is ambiguous, generic lookup returns a miss rather than an older
+value. Message count is an index only, not causal ownership or a stream-fragment identity.
 
 No credential, session hint or content is logged by scope resolution. Only fixed scope labels
 and existing bounded counters enter signature-cache logs. This changes neither authentication
@@ -48,6 +74,10 @@ the same conversation. Missing context cannot justify unscoped recovery.
 Existing model provenance, bounded cache capacity, expiry and targeted recovery invalidation
 remain in force. Restart clears this in-memory namespace. Native Gemini requests preserve their
 own signed parts; this change adds no Gemini history reconstruction.
+An ambiguous miss can leave a client without cached recovery. Request-local signatures
+remain authoritative; the cache does not execute tools, concatenate opaque signatures
+or introduce retries to repair a miss. Proving stream-fragment ownership requires a
+separate response/part owner and remains a D04 obligation.
 
 ## Verification
 
@@ -69,3 +99,8 @@ Two concurrent Codex CLI sessions also complete Responses tool calls and result 
 returning their own exact file content with no foreign marker. All four requests ultimately
 receive successful provider responses. These real-agent sessions are ephemeral; persisted
 session restart and resume remain unverified.
+
+The D04 cache ambiguity follow-up (local artifact `D04-signature-cache-ambiguity-implementation.md` in the 2026-10-11 review collection)
+adds controlled regressions for reused IDs, distinct models, opaque conflicts, exact
+wrapper equivalence, mapper preservation, expiry and clearing. It does not extend the
+earlier live acceptance to the changed cache policy.

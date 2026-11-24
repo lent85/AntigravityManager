@@ -1,14 +1,33 @@
 import { z } from 'zod';
 
 import { TrafficClassSchema } from './traffic-classifier';
+import { UsageRangeWorkerInputSchema } from './usage-range.schema';
+import { UsageTrendsWorkerInputSchema } from './usage-trends.schema';
+import { AuditScopedSessionIdSchema } from './audit-session-export.schema';
+import { UpstreamAttemptTimingSchema } from './upstream-attempt-timing';
 
 const NullableString = z.string().nullable();
 const NullableInteger = z.number().int().nullable();
+const NullableUsageCount = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable();
+export const AuditCaptureGenerationSchema = z.object({
+  trafficClass: TrafficClassSchema,
+  generation: z.number().int().nonnegative(),
+});
+export type AuditCaptureGeneration = z.infer<typeof AuditCaptureGenerationSchema>;
+const AuditGenerationsSchema = z.object({
+  model: z.number().int().nonnegative(),
+  auxiliary: z.number().int().nonnegative(),
+  ipc: z.number().int().nonnegative(),
+  system: z.number().int().nonnegative(),
+});
+export const TrafficAuditMaintenanceResultSchema = z.object({
+  databaseBytes: z.number().int().nonnegative(),
+  moreWorkPending: z.boolean(),
+});
+export type TrafficAuditMaintenanceResult = z.infer<typeof TrafficAuditMaintenanceResultSchema>;
 const RetentionPayloadSchema = z.object({
-  bodyRetentionHours: z.number().nonnegative(),
   maxDiskBytes: z.number().int().nonnegative(),
   maxRows: z.number().int().nonnegative(),
-  summaryRetentionDays: z.number().nonnegative(),
 });
 const FinalizePayloadSchema = z.object({
   completedAt: z.number().int().nonnegative(),
@@ -49,6 +68,7 @@ export const TrafficAuditWorkerCommandSchema = z.discriminatedUnion('operation',
     operation: z.literal('completeParent'),
     payload: z.object({
       cachedTokens: NullableInteger,
+      sessionId: AuditScopedSessionIdSchema.optional(),
       completedAt: z.number().int().nonnegative(),
       durationMs: z.number().int().nonnegative(),
       error: NullableString,
@@ -70,6 +90,19 @@ export const TrafficAuditWorkerCommandSchema = z.discriminatedUnion('operation',
     payload: z.object({
       accountId: NullableString,
       accountIdHash: NullableString,
+      accountGenerationHash: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/u)
+        .nullable(),
+      accountSubjectHash: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/u)
+        .nullable(),
+      accountGrantHash: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/u)
+        .nullable(),
+      usageScope: z.enum(['generation', 'non-generation']).nullable(),
       attemptIndex: z.number().int().positive(),
       endpoint: z.string(),
       id: z.string().min(1),
@@ -83,6 +116,11 @@ export const TrafficAuditWorkerCommandSchema = z.discriminatedUnion('operation',
   z.object({
     operation: z.literal('completeAttempt'),
     payload: z.object({
+      timing: UpstreamAttemptTimingSchema.nullable().optional(),
+      inputTokens: NullableUsageCount,
+      outputTokens: NullableUsageCount,
+      cachedTokens: NullableUsageCount,
+      reasoningTokens: NullableUsageCount,
       completedAt: z.number().int().nonnegative(),
       durationMs: z.number().int().nonnegative(),
       error: NullableString,
@@ -162,6 +200,7 @@ export const TrafficAuditWorkerCommandSchema = z.discriminatedUnion('operation',
       offset: z.number().int().nonnegative(),
       protocol: z.string().optional(),
       requestId: z.string().optional(),
+      sessionId: z.string().trim().min(1).max(512).optional(),
       status: z.number().int().optional(),
       statusMode: z
         .enum(['all', '1xx', '2xx', '3xx', '4xx', '5xx', 'exact', 'unfinished', 'no-status'])
@@ -172,6 +211,12 @@ export const TrafficAuditWorkerCommandSchema = z.discriminatedUnion('operation',
     }),
   }),
   z.object({ operation: z.literal('filterOptions'), payload: z.null() }),
+  z.strictObject({
+    operation: z.literal('sessionSnapshot'),
+    payload: z.strictObject({ sessionId: AuditScopedSessionIdSchema }),
+  }),
+  z.strictObject({ operation: z.literal('usageRange'), payload: UsageRangeWorkerInputSchema }),
+  z.strictObject({ operation: z.literal('usageTrends'), payload: UsageTrendsWorkerInputSchema }),
   z.object({ operation: z.literal('detail'), payload: z.object({ id: z.string().min(1) }) }),
   z.object({
     operation: z.literal('bodyPage'),
@@ -192,7 +237,10 @@ export const TrafficAuditWorkerCommandSchema = z.discriminatedUnion('operation',
   z.object({ operation: z.literal('delete'), payload: z.object({ id: z.string().min(1) }) }),
   z.object({
     operation: z.literal('clear'),
-    payload: z.object({ trafficClass: TrafficClassSchema.nullable() }),
+    payload: z.object({
+      trafficClass: TrafficClassSchema.nullable(),
+      generations: AuditGenerationsSchema.optional(),
+    }),
   }),
   z.object({
     operation: z.literal('resetDropStats'),
@@ -207,6 +255,8 @@ export const TrafficAuditWorkerCommandSchema = z.discriminatedUnion('operation',
 export type TrafficAuditWorkerCommand = z.infer<typeof TrafficAuditWorkerCommandSchema>;
 
 export const TrafficAuditWorkerMessageSchema = z.object({
+  capture: AuditCaptureGenerationSchema.optional(),
+  maxDiskBytes: z.number().int().nonnegative().optional(),
   id: z.number().int().positive(),
   operation: z.string(),
   payload: z.unknown(),

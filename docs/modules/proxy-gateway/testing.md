@@ -12,11 +12,10 @@ mapper/cache compatibility and Responses WebSocket tests. Runtime reporting adds
 core shutdown/startup and RPC coverage. Read-only audit replay and live coding-client/provider
 calls are separate gates. See [Schema conversion](schema-conversion.md#diagnostics-and-acceptance).
 
-`scripts/acceptance/schema/check-history-evidence.mjs` checks controlled missing-result failures
-and anonymous audit-attempt grouping using Node SQLite fixtures. Live history/resubmission and
-signature-recovery checks use the [live Schema workflow](schema-conversion.md#live-schema-acceptance).
-The local history evidence (`artifacts/schema-work-package/history-verification.md`) distinguishes
-client resubmission, observed internal recovery and remaining retry coverage.
+`scripts/acceptance/schema/check-history-evidence.mjs` checks missing tool results, malformed
+signature rejection and anonymous audit-attempt grouping using Node SQLite fixtures. The
+[live Schema workflow](schema-conversion.md#live-schema-acceptance) verifies real
+history resubmission and a single upstream rejection of a corrupted signature.
 
 `node --test scripts/acceptance/schema/check-client-matrix.mjs` checks actual-client declaration
 shapes, read-only forwarding guards, fixed-file MCP behavior, final-answer/result-continuation
@@ -111,6 +110,6 @@ The proxy gateway exposes several compatibility surfaces. Select tests by protoc
 - Management operation audits: [observability controller integration tests](../../../src/tests/unit/observability-controller.integration.test.ts). Verify success-only recording after deferred mutations, exact affected counts including zero, unchanged repair results, and propagation of recorder failures.
 - Stored Responses adapters: [controller HTTP tests](../../../src/tests/unit/openai-responses-store.controller.test.ts) cover replay, delete, missing records, authentication and unexpected store failures. Durable Responses behavior also requires response/session store and durability tests.
 - Legacy Anthropic completion adapter: [controller HTTP tests](../../../src/tests/unit/anthropic-complete.controller.test.ts) cover prompt conversion, stream refusal, complete error envelopes, HTTP 200 and per-request correlation between headers and bodies, including concurrent failures. Guard denials bypass completion error mapping.
-- Gemini model queries: [model HTTP tests](../../../src/tests/unit/gemini-models-http.integration.test.ts) cover complete catalog metadata, known and unknown model projections, authentication and unexpected catalog failures. Existing controller tests cover presets and raw-quota filtering.
+- Model directory queries: [model HTTP tests](../../../src/tests/unit/gemini-models-http.integration.test.ts) cover Gemini local spec limits, exact/unique-folded/ambiguous lookups, native Anthropic list/retrieve metadata, both route guards and unexpected catalog failures. [Anthropic directory tests](../../../src/tests/unit/anthropic-models.test.ts) cover empty pages and exact item equality. Existing controller tests cover presets and raw-quota filtering.
 
 When a change affects both streaming and non-streaming paths, test both. When it changes externally visible protocol output, prefer exact object or event-sequence assertions over checking individual fields independently.

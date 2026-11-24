@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Observable } from 'rxjs';
 
-import { OpenAIOperations } from '@/modules/proxy-gateway/server/modules/openai/openai-operations.service';
-import { proxyModelAvailabilityStore } from '@/modules/proxy-gateway/server/shared/services/model-availability.service';
-import { ProxyRetryService } from '@/modules/proxy-gateway/server/shared/services/proxy-retry.service';
-import { UpstreamRequestError } from '@/modules/proxy-gateway/server/common/exceptions/upstream-request.exception';
+import { OpenAIOperations } from '@/server/gateway/modules/openai/openai-operations.service';
+import {
+  ModelAvailabilityService,
+  proxyModelAvailabilityStore,
+} from '@/server/gateway/shared/services/model-availability.service';
+import { ProxyRetryService } from '@/server/gateway/shared/services/proxy-retry.service';
+import { UpstreamRequestError } from '@/server/gateway/common/exceptions/upstream-request.exception';
+import { AccountLeaseService } from '@/server/gateway/modules/account-lease/account-lease.service';
 import {
   collect,
   createAccount,
@@ -27,7 +31,7 @@ import {
  */
 
 vi.mock(
-  '@/modules/proxy-gateway/server/common/utils/request-user-agent',
+  '@/server/gateway/common/utils/request-user-agent',
   async (importOriginal) => ({
     ...(await importOriginal<Record<string, unknown>>()),
     resolveRequestUserAgent: async () => 'antigravity-parity-harness/0.0.0',
@@ -39,6 +43,85 @@ describe('real request path, OpenAI chat surface', () => {
     proxyModelAvailabilityStore.clearAccount('acc-1');
     proxyModelAvailabilityStore.clearAccount('acc-2');
   });
+
+  it.each([
+    { secondStatus: 429, statusInferred: undefined, expectedStatus: 429 },
+    { secondStatus: 503, statusInferred: undefined, expectedStatus: 503 },
+    { secondStatus: 429, statusInferred: true as const, expectedStatus: 503 },
+  ])(
+    'reports $expectedStatus for a cooled-down pool (upstream status $secondStatus, inferred $statusInferred)',
+    async ({ secondStatus, statusInferred, expectedStatus }) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-01T00:00:00Z'));
+      const accounts = ['acc-1', 'acc-2'].map((id) => createAccount(id));
+      const availability = new ModelAvailabilityService();
+      const lease = new AccountLeaseService(
+        {
+          getAccounts: async () => structuredClone(accounts),
+          getAccount: async (id) => structuredClone(accounts.find((account) => account.id === id)),
+          updateToken: vi.fn(),
+          compareAndUpdateToken: vi.fn(),
+          updateQuota: vi.fn(),
+          mutateHealth: vi.fn(),
+        },
+        {
+          fetchQuota: vi.fn(),
+          refreshAccessToken: vi.fn(),
+          fetchProjectId: vi.fn(),
+          normalizeRefreshedOAuthClientKey: vi.fn(),
+        },
+        undefined,
+        availability,
+        undefined,
+        null,
+      );
+      try {
+        await lease.loadAccounts();
+        await lease.markFromUpstreamError({
+          accountIdOrEmail: 'acc-1',
+          status: 429,
+          body: '{"error":{"code":429,"status":"RESOURCE_EXHAUSTED"}}',
+          model: 'gemini-3-flash-agent',
+        });
+        await lease.markFromUpstreamError({
+          accountIdOrEmail: 'acc-2',
+          status: secondStatus,
+          statusInferred,
+          retryAfter: '30',
+          model: 'gemini-3-flash-agent',
+        });
+        vi.setSystemTime(Date.now() + 1250);
+        const upstream = createUpstream({ generate: geminiTextResponse('ready') });
+        const controller = new OpenAIOperations(
+          createGateway(upstream, lease, undefined, availability).openAIService,
+        );
+        const body = {
+          messages: [{ content: 'Hello', role: 'user' }],
+          model: 'gemini-3-flash',
+          stream: false,
+        } as const;
+        for (const stream of [false, true]) {
+          const reply = createReply();
+          await controller.chatCompletions({ ...body, stream } as never, reply as never);
+          expect(reply.statusCode).toBe(expectedStatus);
+          expect(reply.body).toMatchObject({
+            error: { type: expectedStatus === 429 ? 'rate_limit_error' : 'server_error' },
+          });
+          expect(reply.header).toHaveBeenCalledWith('Retry-After', '4');
+        }
+        expect(upstream.calls).toHaveLength(0);
+
+        vi.setSystemTime(Date.now() + 4000);
+        const recovered = createReply();
+        await controller.chatCompletions(body as never, recovered as never);
+        expect(recovered.statusCode).toBe(200);
+        expect(upstream.calls.map((call) => call.accessToken)).toEqual(['access-acc-1']);
+      } finally {
+        await lease.onModuleDestroy();
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it('answers an OpenAI client from an upstream fixture, through every real layer', async () => {
     const upstream = createUpstream({ generate: geminiTextResponse('The weather is cloudy.') });
@@ -68,7 +151,11 @@ describe('real request path, OpenAI chat surface', () => {
     });
     expect(upstream.calls).toHaveLength(1);
     expect(upstream.calls[0]?.accessToken).toBe('access-acc-1');
-    expect(upstream.calls[0]?.body.request.systemInstruction).toMatchObject({ role: 'user' });
+    expect(upstream.calls[0]?.body.request.systemInstruction).toBeUndefined();
+    expect(upstream.calls[0]?.body.request.contents[0]).toMatchObject({
+      role: 'user',
+      parts: [{ text: 'What is the weather?' }],
+    });
   });
 
   it('carries the client request through the mapper into the upstream body', async () => {
@@ -121,13 +208,69 @@ describe('real request path, OpenAI chat surface', () => {
     expect(upstream.calls[0]?.body.model).toBe('gemini-3.7-flash-high');
     expect(upstream.calls[0]?.body.request.generationConfig).toEqual(
       expect.objectContaining({
-        maxOutputTokens: 65536,
+        maxOutputTokens: 11024,
         thinkingConfig: {
           includeThoughts: true,
           thinkingBudget: 10000,
         },
       }),
     );
+  });
+
+  it('passes a bare-model effort into account selection and physical resolution', async () => {
+    const upstream = createUpstream({ generate: geminiTextResponse('ok') });
+    const lease = createLease([createAccount('acc-1')]);
+    const { openAIService } = createGateway(upstream, lease);
+
+    await openAIService.handleChatCompletions({
+      messages: [{ content: 'Use a small effort.', role: 'user' }],
+      model: 'gemini-3.8-flash',
+      reasoning_effort: 'low',
+      stream: false,
+    });
+
+    expect(lease.getNextToken).toHaveBeenCalledWith(
+      expect.objectContaining({
+        effort: 'low',
+        model: 'gemini-3.8-flash',
+      }),
+    );
+    expect(lease.resolveDynamicModelForAccount).toHaveBeenCalledWith(
+      'acc-1',
+      'gemini-3.8-flash',
+      'low',
+      false,
+    );
+  });
+
+  it('rejects an unknown effort before account selection or an upstream request', async () => {
+    const upstream = createUpstream({ generate: geminiTextResponse('unreachable') });
+    const lease = createLease([createAccount('acc-1')]);
+    const controller = new OpenAIOperations(createGateway(upstream, lease).openAIService);
+    const reply = createReply();
+
+    await controller.chatCompletions(
+      {
+        messages: [{ content: 'Reject this effort.', role: 'user' }],
+        model: 'gemini-3.8-flash',
+        reasoning: { effort: 'not-a-tier' },
+        stream: false,
+      } as never,
+      reply as never,
+    );
+
+    expect(reply.status).toHaveBeenCalledWith(400);
+    expect(reply.body).toEqual({
+      error: {
+        message: expect.stringContaining('Unsupported model effort "not-a-tier"'),
+        type: 'invalid_request_error',
+        code: 'invalid_model_effort',
+        param: null,
+      },
+    });
+    expect(lease.getNextToken).not.toHaveBeenCalled();
+    expect(lease.resolveDynamicModelForAccount).not.toHaveBeenCalled();
+    expect(upstream.calls).toEqual([]);
   });
 
   it('replaces raw OpenAI thinking controls for a direct Gemini agent identity', async () => {
@@ -137,7 +280,7 @@ describe('real request path, OpenAI chat surface', () => {
 
     await openAIService.handleChatCompletions({
       messages: [{ content: 'Use the configured profile.', role: 'user' }],
-      model: 'gemini-pro-agent',
+      model: 'gemini-3-flash-agent',
       stream: false,
       thinking: {
         budget_tokens: 1000,
@@ -146,13 +289,13 @@ describe('real request path, OpenAI chat surface', () => {
       },
     });
 
-    expect(upstream.calls[0]?.body.model).toBe('gemini-pro-agent');
+    expect(upstream.calls[0]?.body.model).toBe('gemini-3-flash-agent');
     expect(upstream.calls[0]?.body.request.generationConfig).toEqual(
       expect.objectContaining({
-        maxOutputTokens: 65_535,
+        maxOutputTokens: 11_024,
         thinkingConfig: {
           includeThoughts: true,
-          thinkingBudget: 10_001,
+          thinkingBudget: 10_000,
         },
       }),
     );
@@ -170,7 +313,12 @@ describe('real request path, OpenAI chat surface', () => {
       stream: false,
     } as never);
 
-    expect(lease.resolveDynamicModelForAccount).toHaveBeenCalledWith('acc-1', 'gemini-3-pro-image');
+    expect(lease.resolveDynamicModelForAccount).toHaveBeenCalledWith(
+      'acc-1',
+      'gemini-3-pro-image',
+      undefined,
+      false,
+    );
     expect(upstream.calls[0]?.body.model).toBe('gemini-3.1-pro-image');
     expect(upstream.calls[0]?.body.request.generationConfig?.imageConfig).toEqual({
       aspectRatio: '16:9',
@@ -349,7 +497,8 @@ describe('real request path, OpenAI chat surface', () => {
       },
     });
     const lease = createLease([createAccount('acc-1')]);
-    const { anthropicService, geminiService } = createGateway(upstream, lease);
+    const { geminiService } = createGateway(upstream, lease);
+    const { anthropicService } = createGateway(upstream, createLease([createAccount('acc-1')]));
     const waitBeforeRetry = vi
       .spyOn(ProxyRetryService.prototype, 'waitBeforeRetry')
       .mockResolvedValue(undefined);

@@ -20,9 +20,59 @@ and do not supply credentials, provider bodies or arbitrary metadata to reportin
 
 The desktop public envelope preserves validated `loginCode`/`switchCode` and the safe diagnostic.
 Standalone management and RPC carry the coordinator's identity; consumers reject mismatched
-identities. Management response version is `2` and owner compatibility is `4`; the handshake envelope
-format and diagnostic schema remain `1`. An incompatible owner fails startup verification before
+identities. Management response version is `2` and owner compatibility is `15`; the handshake envelope
+format and diagnostic schema remain `1`. Compatibility `6` includes the required
+independent Thought Store disk setting and coordinated management contracts.
+An incompatible owner fails startup verification before
 account mutations, with no local owner fallback.
+
+Owner compatibility `10` retains audit archive-usage status and the derived
+`capture_interrupted` read outcome. Audit Worker initialization carries the owning
+process start boundary so replacing a Worker does not terminate current captures.
+The v7 audit schema preserves existing rows and stored outcome vocabulary through an additive migration.
+
+Owner compatibility `11` adds selected-owner HAR file export. Versioned per-attempt
+timing is persisted independently of captured response headers. Existing schema-6
+attempts migrate with unknown timing; the desktop and Core upgrade together. See
+[traffic diagnostics](modules/proxy-gateway/traffic-diagnostics.md).
+
+Owner compatibility `12` adds selected-owner reads, edits and provider discovery
+for a Google account's Project ID. The selected process owns credential use and
+stale-write protection. The desktop and standalone Core upgrade together. See the
+[upgrade guide](upgrade-guides/next/desktop-core-project-id.md).
+
+Owner compatibility `13` adds the Antigravity CLI sign-in file to the local account import source
+enum. The selected owner reads and validates the file. Only the import preview and source status
+cross the transport. See [local Antigravity CLI sign-in](modules/cloud-account/overview.md#local-antigravity-cli-sign-in).
+
+Owner compatibility `14` adds optional model-alias publication to the shared service snapshot.
+Generation and discovery use separate projections of the same configuration. The selected Core
+owns pool-aware target selection; the renderer edits rules through the existing configuration
+transport. Upgrade desktop and standalone Core together using the [same-release guide](upgrade-guides/next/desktop-core-project-id.md).
+
+Owner compatibility `15` admits bounded manual OAuth input through the existing code field.
+The selected session owner parses callback data and checks its state before single-use admission;
+the renderer does not resolve the input or choose a new redirect. See
+[OAuth enrollment](modules/cloud-account/security.md#oauth-enrollment-and-client-selection).
+
+Owner compatibility `10` includes the process-owned local error window, its resolved
+deployment budget and typed metadata/content operations. App/core use separate
+Worker databases and bounded fixed allocations; the shared logger holds only an
+optional sink. Gateway stop/start does not replace those owners. See
+[local error diagnostics](modules/error-diagnostics/overview.md).
+
+The same compatibility `10` snapshot includes an explicit image history strategy.
+The selected configuration owner resolves a missing strategy to `count`; renderer
+controls send partial window updates without changing image scheduler concurrency.
+The protocol adapters apply the shared window to the send view, independently of
+admission and durable originals. See [inline media](modules/proxy-gateway/inline-media-and-thought-history.md).
+
+Owner compatibility `10` supports verified Google identity across account deletion and re-addition
+for retained cycle usage. The account owner resolves a private credential-bound proof;
+the audit Worker aggregates only matching physical-attempt identity. Accounts without
+proof keep current-incarnation scope. Neither private identity digest enters public
+results. Parent totals do not supply physical attempt usage. Older running app/core owners are refused before RPC. See the
+[physical-attempt usage upgrade guide](upgrade-guides/next/physical-attempt-usage.md).
 
 The renderer retains a text snapshot for details and explicit reporting. The CLI prints the
 same safe reference on failure. Account persistence certainty is independent of presentation:
@@ -36,6 +86,22 @@ NO_PROXY. The same abort signal covers the request and proxy handshake; the owne
 the agent after the buffered response or failure. Rejected responses contribute only closed
 connection evidence to diagnostics. There is no automatic direct fallback or added retry.
 
+Owner compatibility `10` also requires the selected-owner client configuration preview/apply/remove
+contracts and manual gateway lifecycle results. Manual runtime effects and persistence are
+reported separately; a save-only retry does not repeat a lifecycle operation. Older app/Core
+owners are refused before these operations.
+
+## Atomic file replacement
+
+Shared asynchronous file persistence writes a sibling temporary file, synchronizes
+and closes it, then atomically replaces the target. On Windows, replacement `EPERM`
+is retried at most five times with 20/40/60/80 ms waits. Every retry uses the same
+completed temporary file and destination; content is not rewritten and the target is
+never deleted as a fallback. Other errors and POSIX replacement failures propagate
+immediately. Exhaustion preserves the final failure and the existing temporary-file
+cleanup contract. This bounded replacement recovery does not change synchronous
+account-index transactions or caller-owned fail-open persistence policy.
+
 ## Gateway Schema admission
 
 OpenAI Chat, effective Responses requests and Anthropic Messages prepare tool parameter schemas
@@ -47,6 +113,38 @@ configuration before publishing prewarm events or replacing socket request state
 its prepared schemas during generation. See the [Schema reference](./modules/proxy-gateway/schema-conversion.md)
 for supported references, bounds and error contracts.
 
+The OpenAI and Anthropic request adapters supply protocol defaults to the shared
+[Antigravity request builder](../src/modules/proxy-gateway/antigravity/AntigravityRequestBuilder.ts).
+The builder takes typed generation input and the current attempt's project and model. It assembles
+the Google request and restores provider signatures for the resolved target. Account rotation and
+project fallback rebuild the request with their own attempt values and reuse prepared schemas.
+
+The [Antigravity generation executor](../src/server/gateway/common/antigravity-generation-executor.ts)
+receives the built request, the selected account's transport inputs, and the current request
+budget. It coordinates unary-to-stream fallback, bounded aggregation, and thinking-only recovery.
+The upstream client owns physical sends and endpoint failover. A request-scoped
+[account execution](../src/server/gateway/common/generation-account-execution.ts) selects
+eligible accounts, applies retry and cooldown policy, and shares recovery budgets across
+attempts. It releases any image permit still held when iteration ends. The protocol services
+choose their same-account fallbacks, lease completion points, and client response events.
+
+Protocol adapters own [streaming usage placement and tool generation compatibility](modules/proxy-gateway/stream-tool-compatibility.md).
+They preserve ordinary tool names and arguments; malformed generation retains valid output,
+adds an explicit assistant explanation and records an upstream audit diagnostic without
+turning the signal into a transport retry.
+
+The Antigravity response decoders translate Google generation payloads before the client adapters
+project unary results and stream events. Chat and Responses consume normalized stream parts and
+token counts. Their adapters own event ordering, tool-call projection and terminal behavior.
+Anthropic Messages projects the shared unary result into its own response and signature format.
+
+Generation ingress owns one configured `generation_timeout` deadline through preparation,
+physical sends, recovery and final consumption. The shared policy separates it from
+non-generation `request_timeout` operations and owns initial-output, activity and transition
+windows. Cancellation wrappers retain the same owner and replay admission count. See the
+[timeout contract](modules/proxy-gateway/compatibility.md) and
+[configuration upgrade](upgrade-guides/next/generation-timeout-policy.md).
+
 Error reporting uses runtime-specific Electron and Node SDK adapters. The logger submits one
 isolated bounded Schema summary per preparation, subject to consent and an available DSN.
 Desktop preference effects are serialized and forwarded to the selected core through a typed
@@ -56,22 +154,205 @@ account selection, quota policy or persisted Responses formats.
 
 ## Thought signature ownership
 
-Provider thought signatures are opaque strings. Response adapters preserve their exact encoding
-through client output, scoped caches and continuation requests; they never decode Base64 as UTF-8.
-ASCII-compatible protobuf bytes are still binary data. Empty signatures are omitted, while
-provider-specific opaque values and the existing validation placeholder remain unchanged.
+Provider thought signatures are opaque strings. Scoped caches and Thought Store retain the
+received value. Generic signature readers never decode Base64 as UTF-8: ASCII-compatible
+protobuf bytes are still binary data. Google internal generation prepares a separate request
+copy after history restoration, wrapping only a recognized raw Claude signature once.
+Anthropic response adapters unwrap only the recognized Google wrapper for client output;
+their caches retain the upstream value. OpenAI non-streaming adapters that reuse that mapper
+receive the same conversion. Other OpenAI response adapters preserve the upstream value.
+Unknown encodings, malformed Base64, additional wrapper layers, surrounding whitespace and
+validation placeholders are unchanged. Known format detection uses canonical standard Base64,
+the Claude marker or known protobuf prefix, with at most two decode layers and a 1 MiB input
+recognition budget. It is a structural heuristic, not cryptographic validation.
+Empty signatures are omitted.
+Generation requests supplying both signature aliases must provide equal values or a recognized
+raw/wrapped equivalent pair. Native Gemini validates before selecting an account; direct
+generation and warmup transports validate before history ingestion, attempt auditing or HTTP.
+Conflicts return a typed 400 naming only the content/part position. Empty versus nonempty is
+a conflict. Equal placeholders retain their existing target-model behavior; this check does
+not establish their validity.
+Known signature formats are checked against the routed model family before account selection
+and again at the internal transport boundary. Recognized Claude material cannot enter a
+Gemini-family history; recognized Gemini material cannot enter a Claude-family history.
+The known placeholder is accepted only for Gemini targets. Unknown opaque values remain
+unchanged, but a recognized signature cannot be used when the target family is unknown.
+These structural checks are not cryptographic verification or proof of provider acceptance.
+Product-facing Google generation validates upstream aliases before response capture or
+mapping. Conflicts produce a safe typed 502 and cannot trigger endpoint failover, protocol
+fallback or account rotation. Streaming generation holds each complete SSE event until
+validation, including a final event without a blank delimiter. It reuses the bounded audit
+parser's original parsed object and frame segments without a second JSON parse, serialization
+or whole-frame concatenation. The existing event cap also bounds this validation; an oversized
+event fails the generation stream and closes its source. Audit observers retain their
+sanitized contract and ordinary audit capture retains its existing behavior. An upstream
+conflict discards the physical round's staged Thought capture; already forwarded
+events retain their transport semantics. Raw diagnostic forwarding and countTokens
+retain their existing contracts.
 Previously corrupted client histories or persisted records are not rewritten. The existing
 targeted invalid-signature recovery remains available where supported. See the
-[encoding decision](../.agents/notes/implemented/bug-fix/2026-10-13-opaque-thought-signatures.md).
+[encoding decision](../.agents/notes/implemented/bug-fix/2026-10-13-opaque-thought-signatures.md)
+and [known-format decision](../.agents/notes/implemented/bug-fix/2026-10-18-known-thought-signature-formats.md).
+
+New complete Thought Store captures use a physical operation ID, with a complete
+canonical business-history prefix as a bounded older-recovery candidate. Independent
+identical replies remain distinct. Streams publish complete recovery state only
+after successful upstream end; original completion controls durable tool-reference
+expiry. Schema 3 adds provenance/references while preserving schema-2 entities and
+the explicit schema-0/1 replacement policy. See
+[diagnostic retention](modules/proxy-gateway/diagnostic-retention.md#reasoning-history-management)
+for limits, legacy ownership and recovery.
+
+Thought client scopes share D03 hint and caller normalization. Explicit deletion
+coordinates the registered signature and Responses owners, including live socket
+transcripts, with per-owner completion receipts. The stores retain separate commit
+boundaries; unavailable owners and failed JSON replacement remain unconfirmed.
+Responses metadata has one lazy selected-process owner across gateway stop/start;
+Nest owns its current private-media facade rather than creating another JSON writer.
+Terminal diagnostic shutdown also closes and strictly flushes this metadata owner.
+
+Legacy Thought Store ingestion matches equivalent non-placeholder signatures before tool IDs and
+fingerprints. Only recognized Claude raw/wrapped forms share a separate comparison
+representation; stored values are not canonicalized. Different nonempty signatures prevent a merge in memory, SQLite and cold
+hydration, even when a tool ID is reused. Restoration with an explicit recognized signature
+requires an equivalent stored value; a missing match leaves that turn unchanged. Signature
+equality establishes association, not provider acceptance. Unsigned history retains its
+signature matching behavior. See the [matching decision](../.agents/notes/implemented/bug-fix/2026-10-18-signed-thought-history-matching.md).
+
+Thought Store applies the same registered model compatibility policy as SignatureStore
+to restoration and every record merge path, including SQLite and cold hydration.
+It derives compatibility from recorded model names and the routed request model.
+Broad legacy family labels cannot authorize a match. Known variants use their canonical
+model; unknown models require exact normalized names, and missing model provenance
+prevents automatic matching. The native `models/` resource prefix is normalized.
+Records remain available for inspection. This model association does not recognize or
+verify a signature's format. See the [model ownership decision](../.agents/notes/implemented/bug-fix/2026-10-18-thought-record-model-ownership.md).
+
+Unresolved tool-history signatures remain absent after scoped recovery. Native Gemini envelopes,
+Claude request mapping and Thought Store restoration do not generate validation placeholders.
+SignatureStore excludes the known placeholder from its session and tool indexes. Native
+function-call aliases are completed only from supplied values. Clients that relied on the
+former fallback should follow the [upgrade guide](upgrade-guides/next/preserve-tool-signatures.md).
+
+Claude request mapping limits fallback from a thinking block to its own message
+and leaves mapped tool results unsigned. Explicit tool-use signatures and scoped
+tool-cache recovery keep their precedence. Thought Store reasoning restoration
+preserves independent supplied function-call signatures in either alias, including
+short opaque values; it does not overwrite them with one record-level value.
+Thought Store retains exact per-part provenance and recovers an unsigned tool only
+from a unique name/argument-digest/call-ID match. Reasoning signatures do not supply
+missing tool signatures. See the
+[part-ownership decision](../.agents/notes/implemented/bug-fix/2026-10-18-thought-signature-part-ownership.md)
+and the [durable part-signature contract](../.agents/notes/implemented/bug-fix/2026-10-18-thought-part-signature-persistence.md).
 
 OpenAI Chat and Anthropic Messages derive an in-memory signature scope from the proxy
 credential digest, a client session hint and a conversation content anchor. Session hints
 come from session/conversation headers, query parameters, then body metadata. The anchor
-contains the initial user content, system instructions and declared tool names, so a shared
+contains the initial user content, leading system/developer instructions and full tool identity, so a shared
 user ID or reused session ID cannot replace conversation ownership. Appended turns retain
 the anchor; changed initial context produces a cache miss. Identical context and hints under
 the same credential produce the same scope; clients that need independent identical
 conversations must supply distinct session IDs.
+
+Chat, Messages and native Gemini use the same bounded client-hint resolver. In-scope product
+headers have a fixed priority, followed by sorted generic session headers, aliases,
+the request URL query, body and metadata. MCP/request/trace/correlation identifiers
+are excluded from generic session headers. Header names are case-insensitive; IDs
+retain case and punctuation, trim outer whitespace and accept at most 128 Unicode
+code points. Invalid or conflicting candidates fall through without truncation or
+character deletion. Scope results include only source/field/count diagnostics, not
+raw hint values. Existing metadata user-ID fallback remains a hint, never a tenant.
+
+The `scope:v5` namespace separates these in-memory protocol signature keys from earlier
+keys without fallback or deletion. Anonymous tenant identity is distinct from a
+credential whose literal value is `anonymous`; equivalent Bearer/API-key credentials
+retain equivalent identity. All initial contiguous system/developer messages
+participate in the Chat anchor; later additions do not. Empty user preambles remain
+ignorable. Equivalent text tasks and ordinary function declarations have a common
+`session:store:v2` identity across Chat, Responses, Messages and Gemini. An explicit stable hint
+produces a separate `session:affinity:v1` account key without the task anchor;
+otherwise affinity uses the store key. Signature keys retain protocol isolation
+until provenance rules explicitly permit reuse. Function names, descriptions and
+complete parameter schemas participate; developer roles remain distinct from
+system roles. Text part boundaries are preserved. Known mixed text/inline-image tasks
+share a logical anchor using normalized image MIME and a bounded fingerprint of the
+complete encoded payload. Part order stays significant. The initial task and current
+instruction/tool context have separate fingerprints, composed into the logical anchor.
+The new namespaces intentionally
+cold-miss older keys. Remote references, non-image media,
+explicit high/low detail, built-in tools and unknown extensions retain protocol-scoped
+structured anchors. Fingerprinting itself does not decode media or serialize full messages.
+Native Gemini passes affinity through unary/streaming text and image selection paths;
+binding still occurs at the existing successful-operation boundary.
+
+Responses HTTP and WebSocket upgrade contexts carry actual credentials, headers and URL.
+Preparation admits/normalizes inline media before fingerprinting; trusted execution reuses
+that admitted request. Initial identity records client/content origin and a fixed-size task
+digest, captured before historical media is reduced. Equivalent hint-free tasks use content
+identity without treating random response IDs as client hints. Owned continuation and restart
+restore the initial task digest and an explicit client root even when a later header is omitted.
+Current initial instructions and tool identity still participate independently, so meaningful
+context changes split the logical store. Public response IDs and signature provenance remain
+under their existing owners.
+
+Persisted Responses history checks the creating caller before read/delete/continuation or
+WebSocket durable cursor admission. The active file remains `openai-responses-sessions.json`.
+The current strict decoder rejects records without caller ownership and initial task identity;
+the first store access drops those records and atomically replaces the active file. Other
+historical filenames are not searched or imported. Missing ownership cannot be claimed through
+the public history API. Earlier cursors are unavailable even when their caller ownership is
+valid. No encryption is added.
+WebSocket completions use the HTTP Responses history writer before completion is delivered.
+New connections can restore an owned saved cursor, including its model and transcript;
+subsequent appends retain that recovered history. Explicit `store: false` keeps only the
+connection-local transcript. Each executing message owns a separate audit parent and upstream
+attempt context, with bounded redacted SSE capture. See the [history security and upgrade contract](modules/proxy-gateway/security.md#responses-history-ownership),
+[client-hint decision](../.agents/notes/implemented/bug-fix/2026-10-17-client-session-hints.md)
+and [initial identity decision](../.agents/notes/implemented/bug-fix/2026-10-17-responses-initial-identity-metadata.md).
+
+Generated Chat/Responses/Messages/Gemini calls pass an explicit upstream identity
+derived from the selected account and tenant-isolated logical store. The internal
+`request.sessionId` is a SHA-256-derived signed 64-bit decimal string; it is stable
+for that account/store at recovery generation zero. The request ID has a stable
+store-derived conversation segment and a fresh timestamp/random trajectory for each
+actual content send, including endpoint failover and explicit-cache rejection.
+Responses composes the saved initial task identity with current context, so reducing
+historical media does not change the task's upstream identity. Explicit client hints retain
+their account-affinity semantics; content-origin requests use their logical store.
+The client owns final envelope decoration and audit/capture uses the actual attempt
+body. It clones only the envelope and inner request wrapper, preserving shared large
+content. Count-token, warmup and raw passthrough callers without explicit identity
+keep their existing transport contract.
+
+The Gemini client retains at most 500 account/store identity records for one hour of
+inactivity using a monotonic clock. An explicit input-token-limit HTTP 400 before a
+response stream is returned permits one additional content send, with a fresh scoped
+session identity and the complete prepared input. Its credential/model stay fixed;
+the lease must still be eligible, the request uncancelled, and the original client-call
+timeout budget unspent. A shared logical-call budget prevents another recovery through
+account, project, signature or aggregation fallbacks. Recovery dispatch itself disables
+endpoint/project fallback. A failed recovery terminates protocol fallbacks and retains
+the first failure as its cause when the final error has no existing cause. It does not
+trigger account penalties through the ordinary retry loop. Actual sends retain their
+existing audit/capture records. Recovery never begins after returning a provider stream.
+Concurrent failures of one identity share one replacement. Evicted/expired in-flight
+records cannot recreate recovery state; a new recovery incarnation avoids reuse of an
+old bumped session. Local history is neither compressed nor cleared. This cache stores
+identities only and is not persisted. Permanent cloud-account deletion also clears that
+account's recovery records in the running gateway, independently of lease cleanup success.
+Late invalidated frames cannot overwrite a newly added record, and ineligible captured
+leases cannot admit new recovery metadata. This does not clear conversation history.
+Targeted session/global Thoughts/Responses cleanup remains separate joint lifecycle work.
+See the [recovery decision](../.agents/notes/implemented/bug-fix/2026-10-17-bounded-upstream-session-recovery.md)
+for limits and the remaining joint lifecycle work.
+
+Anchor fingerprints traverse supported JSON-shaped values iteratively, framing
+types and lengths and sorting object keys. Message/media strings are fed to SHA-256
+in at most 32K UTF-16 code-unit writes, preserving surrogate units without creating
+a complete serialized copy. Array order remains significant; absent object fields
+are not invented. Cycles and non-JSON values fail before account selection. This
+stabilizes object-key order within a protocol; it does not by itself equate different
+protocol content shapes or tool schemas.
 
 Empty user preambles are ignored. Without meaningful user content, the complete available
 history becomes the anchor; an empty history receives a fresh scope and cannot recover a
@@ -178,11 +459,13 @@ Electron Main
 
 The Electron main process is the trusted application host. The renderer is treated as an untrusted UI process and receives only the APIs exposed by [src/preload.ts](../src/preload.ts). The preload creates the MessagePort transport used by the renderer-side ORPC client in [src/ipc/manager.ts](../src/ipc/manager.ts). Main-process RPC handling is installed by [src/ipc/handler.ts](../src/ipc/handler.ts).
 
-An explicitly launched standalone Node core is also available through `pnpm run build:core` and `pnpm run start:core`. [src/core/main.ts](../src/core/main.ts) initializes the existing account persistence and local database, then starts the existing NestJS gateway when the saved proxy configuration enables auto start. It exposes status and shutdown through a Fastify HTTP server bound only to a Unix socket in a private runtime directory or a Windows named pipe. Before either runtime loads profile configuration or opens account/database storage, it claims the same process-lifetime profile ownership endpoint. An existing owner makes the other runtime fail closed with the owner kind and PID. Stale Unix socket recovery uses an exclusive guard so competing starters cannot both claim the endpoint. Desktop-embedded ownership remains the default. The desktop can instead attach to a verified standalone core through the startup composition described below. The service launcher allows a bounded 90-second readiness budget for cold bundled/native module loading; a successful start still requires a running management response and the desktop verifies the same profile, epoch, PID and live lease before selecting the owner. It launches at most one child per invocation while waiting.
+An explicitly launched standalone Node core is also available through `pnpm run build:core` and `pnpm run start:core`. [src/core/main.ts](../src/core/main.ts) initializes the existing account persistence and local database, then starts the existing NestJS gateway when the saved proxy configuration enables auto start. It exposes status and shutdown through a Fastify HTTP server bound only to a Unix socket in a private runtime directory or a Windows named pipe. Unix profiles whose runtime directory would exceed the platform socket-path limit use a private hashed directory under the system temporary directory. Before either runtime loads profile configuration or opens account/database storage, it claims the same process-lifetime profile ownership endpoint. An existing owner makes the other runtime fail closed with the owner kind and PID. Stale Unix socket recovery uses an exclusive guard so competing starters cannot both claim the endpoint. Desktop-embedded ownership remains the default. The desktop can instead attach to a verified standalone core through the startup composition described below. The service launcher allows a bounded 90-second readiness budget for cold bundled/native module loading; a successful start still requires a running management response and the desktop verifies the same profile, epoch, PID and live lease before selecting the owner. It launches at most one child per invocation while waiting.
 
 The same private endpoint hosts a separate [core application RPC router](../src/core/rpc/router.ts) under `/rpc`. Its oRPC client uses the existing local pipe/socket and offers ping, gateway status, context-cache counters, gateway start/stop, credential-free cloud-account summaries, strict cloud-account views, manual quota refresh, proxy replacement/removal and account deletion. Application calls are accepted only while the core is running; shutdown closes admission, cancels and drains warmups, and drains the management server before stopping persistence or releasing profile ownership. Long-running account mutations have a separate bounded client and server timeout because they can call several upstream endpoints. Electron's existing MessagePort router delegates gateway status, context-cache reads, start and stop to an explicitly selected [gateway adapter](../src/modules/proxy-gateway/ipc/gateway-adapter.ts). Default desktop startup selects the desktop-embedded implementation; the standalone-core implementation calls the core RPC client and propagates transport failures without falling back to desktop-embedded state. Both runtimes use the same [gateway lifecycle service](../src/modules/proxy-gateway/services/gateway-lifecycle.service.ts) to serialize start and stop. Core management status follows completed standalone-core lifecycle mutations. The cloud-account list, manual quota refresh, IDE sync, proxy writes, deletion and OAuth-client preference follow the same pattern through a feature-owned [account adapter](../src/modules/cloud-account/ipc/cloud-account-adapter.ts). Its desktop-embedded and core RPC list paths share the [list service](../src/modules/cloud-account/services/cloud-account-list.service.ts), including active-target resolution and the legacy OAuth-client-key backfill. Default Electron startup selects the desktop-embedded account adapter; standalone-core failures do not fall back to local persistence. Legacy local-account operations also follow the selected owner described below; desktop ownership composition follows the startup mode. Configuration key generation uses the selected service adapter. The cloud-account list and account-returning mutations project an explicit [renderer view](../src/modules/cloud-account/services/cloud-account-view.ts) before crossing MessagePort; internal account services retain the full account model.
 
 The Node CLI in [src/cli](../src/cli) builds independently and offers `service status`, `service start`, `service stop`, and `account login`. It uses Commander for command parsing and a typed, version-checked client over the local management endpoint. `service start` checks profile ownership before launching a detached child, rejects a desktop owner and waits for an already starting core to become ready; `service stop` waits for endpoint disappearance after the shutdown acknowledgment. `account login` starts the core if needed, uses the core's active/default OAuth client, prints a Google authorization URL for a browser on the same machine, and polls for a safe account summary. The Node core owns a temporary loopback callback listener and performs the token exchange and local SQLite account enrollment internally. Neither command sends account credentials or API keys through the management protocol or child arguments.
+
+IPC audit captures track RPC matching, input decoding, business execution and output encoding through the standard-handler interceptor. Capture draining waits for admitted business work to finish. Response transmission has its own transport lifetime, so a desktop disconnect cannot retain a completed business operation during Core shutdown.
 
 Detached Core launches retain the parent's uppercase and lowercase `HTTP_PROXY`, `HTTPS_PROXY`,
 `ALL_PROXY` and `NO_PROXY` variables through the existing environment allowlist. Values remain
@@ -215,9 +498,9 @@ Local-account discovery, validation, confirmation, discard and post-import statu
 
 Switch diagnostics follow the selected account adapter and use a strict read-only core RPC. Metrics, switch guards and device-hardening safe-mode state belong to the process performing switches, as indicated by an explicit provenance and volatile process epoch. Restart creates a new epoch without merging counters from Electron. Failed-switch messages are fixed public text; reasons and hardening stages are closed enums. Guard summaries expose at most 128 queued owners while retaining the total pending count. Diagnostic reads do not join account-mutation drain or modify hardening state. An unavailable standalone-core owner produces a stable error instead of desktop-embedded counters.
 
-Configuration uses separate ownership contracts. The selected configuration adapter reads and serializes runtime/proxy changes in the owner, preserves the existing `gui_config.json` durable format, and applies gateway changes only in that process. Persisted changes return `applied` or `restart-required`; application failure does not roll back a successful durable write. Admitted configuration work drains during shutdown. Executable paths and arguments are owner settings; binary patch preparation reads the current owner snapshot.
+Configuration uses separate ownership contracts. The selected configuration adapter reads and serializes runtime/proxy changes in the owner, preserves the existing `gui_config.json` durable format, and applies gateway changes only in that process. Persisted changes return `applied`, `restart-required` or `partial-failure`, including affected fields and safe diagnostic references. Application failure does not roll back a successful durable write. Admitted configuration work drains during shutdown. Executable paths and arguments are owner settings; binary patch preparation reads the current owner snapshot. [Gateway settings and runtime state](modules/proxy-gateway/settings-runtime.md) defines patch, startup-choice, recovery and consumer behavior.
 
-Electron stores desktop preferences in versioned `desktop-preferences.json` under its user-data directory. Its first read seeds only desktop fields from the legacy GUI file; subsequent reads never reseed. Desktop writes have no shared-profile effects and remain available when the standalone-core owner is unavailable. The settings view combines these independent sources for display and sends only changed fields to their owning contract. Alert policy retains its effective SQLite settings source through a separate selected-owner API; stale same-named GUI fields are not promoted into monitoring policy. Startup consent reads use the desktop file when present, with a read-only legacy fallback before its creation.
+Electron stores desktop preferences in versioned `desktop-preferences.json` under its user-data directory. Its first read seeds only desktop fields from the legacy GUI file; subsequent reads never reseed. The interface language defaults to English when neither file supplies a language preference. Desktop writes have no shared-profile effects and remain available when the standalone-core owner is unavailable. The settings view combines these independent sources for display and sends only changed fields to their owning contract. Alert policy retains its effective SQLite settings source through a separate selected-owner API; stale same-named GUI fields are not promoted into monitoring policy. Startup consent reads use the desktop file when present, with a read-only legacy fallback before its creation.
 
 Ordinary owner configuration snapshots exclude API keys and upstream proxy URLs. Dedicated reveal, replace/remove and key-generation operations support explicit user actions. Generation returns safe presence metadata; reveal values stay outside query caches. Standalone-core errors never fall back to desktop-embedded configuration.
 
@@ -251,6 +534,8 @@ for pass limits and partial-state behavior.
 Each `BoundedSqliteWorker` instance closes terminally: new reads/writes and lazy startup are rejected as soon as closing starts. Concurrent closes share one result. Accepted commands and the shutdown acknowledgement share the two-second default deadline; termination is awaited even after timeout. Timeout, acknowledgement and termination failures remain observable through the rejected close result.
 
 Audit and Thought Store services distinguish reusable `close()` from terminal `shutdown()`. Process shutdown rejects new reads, capture, repair and configuration work, stops maintenance and gives accepted body/SSE writes, hydration and repair up to two seconds to drain. Accepted repair may finish replacing its worker during drain; once drain finishes or times out, worker access and recreation are sealed. Both stores are attempted even when the gateway was never started or is already stopped, and failed closure propagates. Core shutdown drains standalone-core IPC capabilities before terminal diagnostics and retains the profile lease on failure. Desktop exit uses the same store teardown under its existing three-second forced-exit bound, which can interrupt cleanup.
+
+Audit payload lifecycle, physical disk reclamation, Thought Store compression failures and queue-pressure semantics are owned by the [diagnostic retention reference](modules/proxy-gateway/diagnostic-retention.md).
 
 The [ownership cutover audit](ownership-cutover-audit.md) is a historical snapshot and is not a
 current readiness report. Desktop bootstrap selects all migrated feature owners together; native
@@ -464,10 +749,14 @@ Native Linux shutdown captures descendants of the verified main processes before
 
 ## Client account storage
 
-Internal Cloud Code generation uses the Daily endpoint first, then the production endpoint.
-Explicit `PROXY_INTERNAL_BASE_URLS` or `ANTIGRAVITY_INTERNAL_BASE_URLS` values retain their
-configured order. Endpoint failover preserves the account and request; account rotation remains
-owned by the existing retry policy. A recovered upstream 429 remains visible in traffic audit.
+Internal Cloud Code generation uses Daily, Sandbox, then production. Explicit
+`PROXY_INTERNAL_BASE_URLS` or `ANTIGRAVITY_INTERNAL_BASE_URLS` values retain their normalized,
+deduplicated order, limited to eight HTTP(S) candidates and 8 KiB without URL credentials,
+query, fragment or control characters. Invalid routing fails before explicit cache creation
+and physical generation, without account rotation or penalty. Blank selected overrides keep
+the defaults; the primary variable takes precedence when present. A request's cache/session
+recovery retains its validated candidate list. Endpoint failover preserves the account and
+request; HTTP 429/499 do not grant regional retries. Account rotation remains with its owner.
 
 Both cloud switches and local snapshot restores use the runtime-owned prepared account writer. Preparation validates a detached credential copy, captures one destination, and checks existing SQLite state before closing the application or updating account state. Reassertion during hot switching reuses that writer. Ordinary Windows and Linux IDE 2.6.0 and later switches synchronize SQLite UnifiedStateSync, the shared `gemini:antigravity` system credential and the standalone fallback, then require a full restart and Agent account confirmation. Older IDEs and IDEs on other platforms retain their platform-specific routing. Linux workspace provisioning retains SQLite. Classic version 2 and later write system credentials, while earlier Classic versions write SQLite UnifiedStateSync. CLI writes only the current operating-system environment's local session and Google OAuth files; it does not write the system credential used by host applications or sessions in WSL distributions. Host credential writes do not synchronize CLI sessions. If Classic's version is unavailable, the resolved installation's existing database selects SQLite; otherwise it selects system credentials. If Windows or Linux IDE version detection fails, switching retains SQLite.
 
@@ -489,15 +778,15 @@ Errors crossing into the renderer must preserve actionable public information wi
 
 The proxy page's service control shows an account-risk notice before the first manual start. Only explicit confirmation records the versioned acknowledgement in the renderer profile's local storage and dispatches startup; dismissing the dialog does neither. Later manual starts reuse that acknowledgement, while stop remains available without it. If preference storage is unavailable, confirmation applies to the mounted control and the notice reappears after remounting. Pending start/stop operations disable the control and display loading. This UI notice does not change gateway IPC contracts or application auto-start behavior.
 
-The Electron main process starts and stops the NestJS/Fastify gateway through [src/server/main.ts](../src/server/main.ts). Protocol controllers, mappers, routing, quotas, retries, streaming state and provider adapters belong under `src/modules/proxy-gateway/server` or another proxy-gateway-owned directory.
+The Electron main process starts and stops the NestJS/Fastify gateway through [src/server/main.ts](../src/server/main.ts). Protocol controllers, mappers, routing, quotas, retries, streaming state and provider adapters belong under `src/server/gateway` or another proxy-gateway-owned directory.
 
 Audit and thought management query/path parameters use their existing Zod schemas
-through the gateway's [Zod parameter Pipe](../src/modules/proxy-gateway/server/common/zod-schema.pipe.ts).
+through the gateway's [Zod parameter Pipe](../src/server/gateway/common/zod-schema.pipe.ts).
 Validation preserves coercion, defaults and bad-request envelopes. Body chunk
 requests validate the path UUID before reporting query errors.
 
 Batch, ordinary Files, OpenAI Uploads and legacy Anthropic completion handlers declare their existing dialect error mapper
-through [ProtocolErrors](../src/modules/proxy-gateway/server/common/protocol-errors.decorator.ts).
+through [ProtocolErrors](../src/server/gateway/common/protocol-errors.decorator.ts).
 Its Interceptor maps handler failures into HTTP exceptions; guard authentication
 failures keep their existing handling. Ordinary methods return protocol objects,
 with POST success explicitly set to 200. Anthropic JSONL results keep manual
@@ -521,7 +810,7 @@ Unexpected store failures retain the framework's error handling. Response
 generation, continuation and durable storage remain service-owned.
 
 Thought management mutations declare their existing success-only administrative
-audit through [AuditAdminOperation](../src/modules/proxy-gateway/server/modules/observability/admin-operation-audit.decorator.ts).
+audit through [AuditAdminOperation](../src/server/gateway/modules/observability/admin-operation-audit.decorator.ts).
 Each single-result handler finishes its mutation before the Interceptor records
 the operation and its affected count. Validation, authentication and mutation
 failures do not generate a successful audit event; recorder failures still
@@ -576,7 +865,7 @@ Route source files live in `src/routes`. TanStack Router generates `src/routeTre
 | --------------------------------------------- | ---------------------------------------------------------------------- |
 | Add feature UI or behavior                    | Owning `src/modules/<feature>` subtree                                 |
 | Add a renderer-to-main operation              | Feature IPC schema/router plus typed renderer client usage             |
-| Add a gateway endpoint or protocol behavior   | `src/modules/proxy-gateway/server` and the owning protocol module      |
+| Add a gateway endpoint or protocol behavior   | `src/server/gateway` and the owning protocol module                    |
 | Add feature persistence                       | Owning feature repository using shared database primitives             |
 | Add reusable database infrastructure          | `src/shared/persistence/database`                                      |
 | Add a generic UI primitive                    | `src/components/ui`                                                    |

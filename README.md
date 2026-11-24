@@ -42,7 +42,7 @@
 
 ---
 
-Antigravity Manager is a desktop application for managing the Google accounts used by Antigravity clients (including Classic, Antigravity IDE and `agy` CLI). View model quota in real time, switch client accounts seamlessly, and connect AI coding tools like Claude Code, Codex and OpenCode through a high-performance local API gateway.
+Antigravity Manager is a desktop application for managing the Google accounts used by Antigravity clients (including Classic, Antigravity IDE and `agy` CLI). View model quota in real time, switch client accounts, and connect coding tools through the local API gateway.
 
 ## Contents
 
@@ -117,13 +117,36 @@ Then apply its overlay in a NixOS module with `inputs` available:
 
 For Home Manager, use `home.packages` and configure the overlay and unfree policy on its owning nixpkgs instance. The flake pins a release and may lag behind the latest assets. See [Nix integration](docs/development.md#nix-integration) for details and development-shell configuration.
 
+### Use the installed CLI
+
+Desktop packages include the standalone CLI and its Node.js runtime. Start with `--help` to list the available commands.
+
+On Windows, open PowerShell in the folder containing `antigravity-manager.exe`:
+
+```powershell
+& .\resources\standalone\node\node.exe .\resources\standalone\cli\main.cjs --help
+```
+
+On macOS, use the app bundle in `/Applications`:
+
+```bash
+cd '/Applications/Antigravity Manager.app/Contents/Resources/standalone'
+./node/node ./cli/main.cjs --help
+```
+
+On Linux, open a terminal in the folder containing the packaged desktop executable. For an AppImage, use its mounted or extracted contents.
+
+```bash
+./resources/standalone/node/node ./resources/standalone/cli/main.cjs --help
+```
+
 ---
 
 ## First use
 
 ### Add accounts and switch clients
 
-1. Open Manager and add a Google account through browser authorization. To discover existing local accounts, use **Import from this computer**, review the preview, and confirm the accounts to import.
+1. Open Manager and add a Google account through browser authorization. To discover existing local accounts, choose **Import / Export** → **Import from this computer**, review the preview, and confirm the accounts to import.
 2. Refresh quota and inspect the available models, remaining quota and reset times. Model access depends on the account and upstream service. Gemini and Claude entries describe models available through those Google accounts.
 3. Select the intended Antigravity client target: **Antigravity (Classic)**, **Antigravity IDE** or **agy CLI**. Save work in a desktop client before switching; switching can close and relaunch it.
 4. Switch to the selected account, then verify the signed-in identity in the official client. Complete any official first-use setup or terms confirmation shown there.
@@ -135,7 +158,7 @@ See the [account and quota guide](docs/modules/cloud-account/overview.md) for au
 
 1. Add a usable Google account and refresh its quota.
 2. Open **API Proxy**, review the [account risks](#data-and-account-risks), and confirm the warning when starting the service for the first time.
-3. Use the tool configuration cards for **Claude Code**, **Codex** or **OpenCode**. Select an available model and review settings before applying them. For another API client, use the gateway address and API key shown in Manager.
+3. Choose your client on the **API Proxy** page, select an available model and review the settings before applying them. For manual setup, use the gateway address and API key shown in Manager.
 4. Reopen the configured tool and send a small request. Confirm the request and result in **Traffic Monitor**; saved configuration alone does not establish that the connection works.
 
 Tool configuration changes local client settings. Read the [configuration and recovery guide](docs/modules/proxy-gateway/agent-tools.md) for backup, removal and restoration behavior.
@@ -150,7 +173,7 @@ Tool configuration changes local client settings. Read the [configuration and re
 | **Quota views**                   | Five-hour, weekly or combined views; model visibility controls, sorting and manual or periodic refresh                   |
 | **Client account switching**      | Manual switching for Classic, IDE and agy CLI, with optional automatic switching based on account quota and rate limits  |
 | **Local API gateway**             | OpenAI Chat Completions and Responses, Anthropic Messages and native Gemini interfaces, with model routing and streaming |
-| **Coding tool setup**             | Configure Claude Code, Codex and OpenCode connections, with tool-specific backup and recovery                            |
+| **Coding tool setup**             | Configure local gateway connections for supported clients, with settings backup and recovery                           |
 | **Model Playground**              | Interactive prompt testing, dual-model comparison, multi-account parallel testing and benchmarks with TTFT and speed metrics |
 | **Backups and identity profiles** | Local account snapshots and restoration, plus optional client identity-profile management                                |
 | **Diagnostics**                   | Traffic inspection, error details, diagnostic references for supported operations and a user-reviewed GitHub report flow |
@@ -182,10 +205,10 @@ Expand each section to view the screens by feature. Long pages are captured in s
   <img src="docs/assets/screenshot-proxy.png" alt="Service status and basic configuration" width="90%" />
 </p>
 
-**Complete Claude Code, Codex and OpenCode controls**
+**Coding tool configuration**
 
 <p align="center">
-  <img src="docs/assets/screenshot-proxy-tools.png" alt="Complete Claude Code, Codex and OpenCode controls" width="90%" />
+  <img src="docs/assets/screenshot-proxy-tools.png" alt="Coding tool configuration cards" width="90%" />
 </p>
 
 **Model mapping**

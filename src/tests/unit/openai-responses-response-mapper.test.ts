@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { MISSING_COMMAND_FALLBACK } from '@/modules/proxy-gateway/antigravity/CommandToolAdapter';
 import { MALFORMED_FUNCTION_CALL_RECOVERY_TEXT } from '@/modules/proxy-gateway/antigravity/GeminiFinishReason';
-import { toOpenAIResponsesResponse } from '../../modules/proxy-gateway/antigravity/OpenAIResponsesResponseMapper';
+import { toOpenAIResponsesResponse } from '@/server/gateway/modules/openai/responses/OpenAIResponsesResponseMapper';
 
 describe('OpenAI Responses non-stream mapper', () => {
   it('emits safety feedback as a Responses refusal content part', () => {
@@ -117,16 +116,9 @@ describe('OpenAI Responses non-stream mapper', () => {
     ]);
   });
 
-  it('repairs apply_patch input in a non-stream Responses tool call', () => {
-    const patch = [
-      '*** Begin Patch',
-      '--- a/src/example.ts',
-      '+++ b/src/example.ts',
-      '@@ -1 +1 @@',
-      '-const value = 1;',
-      '+const value = 2;',
-      '*** End Patch',
-    ].join('\n');
+  it('maps the explicit custom payload and an ordinary same-name function without rewriting', () => {
+    const patch = '--- a/example.ts\r\n+++ b/example.ts\r\n@@ -1 +1 @@\r\n-x\r\n+y\r\n';
+    const args = JSON.stringify({ command: ['apply_patch', patch], paths: ['example.ts'] });
     const response = toOpenAIResponsesResponse({
       id: 'resp_patch',
       object: 'chat.completion',
@@ -141,85 +133,37 @@ describe('OpenAI Responses non-stream mapper', () => {
             content: null,
             tool_calls: [
               {
-                id: 'call_patch',
+                id: 'call_function',
                 type: 'function',
-                function: {
-                  name: 'apply_patch',
-                  arguments: JSON.stringify({ command: ['apply_patch', patch] }),
-                },
+                function: { name: 'apply_patch', arguments: args },
               },
+              { id: 'call_custom', type: 'custom', custom: { name: 'apply_patch', input: patch } },
             ],
           },
         },
       ],
-      usage: {
-        prompt_tokens: 1,
-        completion_tokens: 1,
-        total_tokens: 2,
-      },
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
     });
-
     expect(response.output).toEqual([
-      expect.objectContaining({
-        input: [
-          '*** Begin Patch',
-          '*** Update File: src/example.ts',
-          '@@',
-          '-const value = 1;',
-          '+const value = 2;',
-          '*** End Patch',
-        ].join('\n'),
+      {
+        arguments: args,
+        call_id: 'call_function',
+        id: 'call_function',
         name: 'apply_patch',
-        type: 'custom_tool_call',
-      }),
-    ]);
-  });
-
-  it('emits a diagnostic instead of an invalid non-stream apply_patch tool call', () => {
-    const response = toOpenAIResponsesResponse({
-      id: 'resp_patch_invalid',
-      object: 'chat.completion',
-      created: 1,
-      model: 'gpt-5-codex',
-      choices: [
-        {
-          index: 0,
-          finish_reason: 'tool_calls',
-          message: {
-            role: 'assistant',
-            content: null,
-            tool_calls: [
-              {
-                id: 'call_patch_invalid',
-                type: 'function',
-                function: {
-                  name: 'apply_patch',
-                  arguments: JSON.stringify({ input: 'this is not a patch' }),
-                },
-              },
-            ],
-          },
-        },
-      ],
-      usage: {
-        prompt_tokens: 1,
-        completion_tokens: 1,
-        total_tokens: 2,
+        status: 'completed',
+        type: 'function_call',
       },
-    });
-
-    expect(response.output).toEqual([
-      expect.objectContaining({
-        content: [
-          expect.objectContaining({
-            text: expect.stringContaining('apply_patch rejected'),
-            type: 'output_text',
-          }),
-        ],
-        type: 'message',
-      }),
+      {
+        input: patch,
+        call_id: 'call_custom',
+        id: 'call_custom',
+        name: 'apply_patch',
+        status: 'completed',
+        type: 'custom_tool_call',
+      },
     ]);
   });
+
   it('reports a truncated answer as incomplete instead of completed', () => {
     const response = toOpenAIResponsesResponse({
       id: 'resp_truncated',
@@ -281,7 +225,7 @@ describe('OpenAI Responses non-stream mapper', () => {
     ]);
   });
 
-  it('normalizes an incomplete shell tool call in a non-stream Responses response', () => {
+  it('preserves an incomplete shell tool call without injecting arguments', () => {
     const response = toOpenAIResponsesResponse({
       id: 'resp_missing_command',
       object: 'chat.completion',
@@ -327,7 +271,6 @@ describe('OpenAI Responses non-stream mapper', () => {
       throw new Error('Responses mapper did not serialize function-call arguments');
     }
     expect(JSON.parse(argumentsValue)).toEqual({
-      command: MISSING_COMMAND_FALLBACK,
       description: 'sensitive tool detail',
     });
   });

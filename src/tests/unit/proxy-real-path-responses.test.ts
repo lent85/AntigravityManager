@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Observable } from 'rxjs';
 import { z } from 'zod';
+import { PIXEL_PNG, PIXEL_GIF } from '../fixtures/image-content';
 
-import { OpenAIOperations } from '@/modules/proxy-gateway/server/modules/openai/openai-operations.service';
-import { OpenAIResponsesSessionStore } from '@/modules/proxy-gateway/server/modules/openai/responses/openai-responses-session.store';
-import { proxyModelAvailabilityStore } from '@/modules/proxy-gateway/server/shared/services/model-availability.service';
+import { OpenAIOperations } from '@/server/gateway/modules/openai/openai-operations.service';
+import { OpenAIResponsesSessionStore } from '@/server/gateway/modules/openai/responses/openai-responses-session.store';
+import { proxyModelAvailabilityStore } from '@/server/gateway/shared/services/model-availability.service';
 import {
   collect,
   createAccount,
@@ -17,7 +18,7 @@ import {
 } from './proxy-real-path.harness';
 
 vi.mock(
-  '@/modules/proxy-gateway/server/common/utils/request-user-agent',
+  '@/server/gateway/common/utils/request-user-agent',
   async (importOriginal) => ({
     ...(await importOriginal<Record<string, unknown>>()),
     resolveRequestUserAgent: async () => 'antigravity-parity-harness/0.0.0',
@@ -40,6 +41,62 @@ describe('real request path, Responses input compatibility', () => {
     proxyModelAvailabilityStore.clearAccount('acc-1');
     OpenAIResponsesSessionStore.clear();
   });
+
+  it.each(['system input', 'instructions', 'custom opening'])(
+    'preserves Codex rules and tools on the Gemini request with %s',
+    async (source) => {
+      const role =
+        'You are a coding agent running in the Codex CLI, a terminal-based coding assistant.';
+      const attribution = ' Codex CLI is an open source project led by OpenAI.';
+      const guidance = ' You are expected to be precise, safe, and helpful.';
+      const opening = role + attribution + guidance;
+      const firstBlock =
+        (source === 'custom opening' ? role + attribution + ' Follow the local role.' : opening) +
+        '\n\nKeep the project rules.';
+      const skillBlock = '# Skills\nUse the log-reading skill.';
+      const ruleBlock = 'Only read the named log.';
+      const message = (role: string, text: string) => ({
+        type: 'message',
+        role,
+        content: [{ type: 'input_text', text }],
+      });
+      const upstream = createUpstream({ generate: geminiTextResponse('ok') });
+      const lease = createLease([createAccount('acc-1')]);
+      const controller = new OpenAIOperations(createGateway(upstream, lease).openAIService);
+      const reply = createReply();
+
+      await controller.responses(
+        {
+          model: 'gemini-3-flash',
+          ...(source === 'instructions' ? { instructions: firstBlock } : {}),
+          input: [
+            ...(source === 'instructions' ? [] : [message('system', firstBlock)]),
+            message('developer', skillBlock),
+            message('developer', ruleBlock),
+            message('user', opening),
+          ],
+          tools: [{ type: 'function', name: 'read_log', parameters: { type: 'object' } }],
+          stream: false,
+          store: false,
+        },
+        reply as never,
+      );
+
+      const expectedFirstBlock =
+        source === 'custom opening'
+          ? firstBlock
+          : 'You are a coding assistant.' + firstBlock.slice(role.length);
+      expect(reply.statusCode).toBe(200);
+      expect(upstream.calls).toHaveLength(1);
+      expect(upstream.calls[0]?.body.request).toMatchObject({
+        systemInstruction: {
+          parts: [{ text: [expectedFirstBlock, skillBlock, ruleBlock].join('\n') }],
+        },
+        contents: [{ role: 'user', parts: [{ text: opening }] }],
+        tools: [{ functionDeclarations: [{ name: 'read_log' }] }],
+      });
+    },
+  );
 
   it.each(['direct', 'stream aggregation'])(
     'normalizes candidates, text blocks and absent usage via %s',
@@ -336,7 +393,10 @@ describe('real request path, Responses input compatibility', () => {
       const lease = createLease([createAccount('acc-1')]);
       const controller = new OpenAIOperations(createGateway(upstream, lease).openAIService);
       const reply = createReply();
-      const image = { type: 'input_image', image_url: 'data:image/png;base64,AA==' };
+      const image = {
+        type: 'input_image',
+        image_url: `data:image/png;base64,${PIXEL_PNG.toString('base64')}`,
+      };
 
       await controller.responses(
         {
@@ -351,7 +411,10 @@ describe('real request path, Responses input compatibility', () => {
       expect(reply.statusCode).toBe(200);
       expect(upstream.calls).toHaveLength(1);
       expect(upstream.calls[0]?.body.request.contents).toEqual([
-        { role: 'user', parts: [{ inlineData: { mimeType: 'image/png', data: 'AA==' } }] },
+        {
+          role: 'user',
+          parts: [{ inlineData: { mimeType: 'image/png', data: PIXEL_PNG.toString('base64') } }],
+        },
       ]);
     },
   );
@@ -464,7 +527,7 @@ describe('real request path, Responses input compatibility', () => {
                 { type: 'input_text', text: 'image generated' },
                 {
                   type: 'input_image',
-                  image_url: 'data:image/webp;name=source;BASE64,AQ==',
+                  image_url: `data:image/gif;name=source;BASE64,${PIXEL_GIF.toString('base64')}`,
                 },
               ],
             },
@@ -488,7 +551,7 @@ describe('real request path, Responses input compatibility', () => {
             id: 'call_image',
           },
         }),
-        { inlineData: { mimeType: 'image/webp', data: 'AQ==' } },
+        { inlineData: { mimeType: 'image/gif', data: PIXEL_GIF.toString('base64') } },
       ]);
       expect(JSON.stringify(toolParts?.[0])).not.toContain('data:image/');
     },
@@ -648,9 +711,12 @@ describe('real request path, Responses input compatibility', () => {
       );
       expect(JSON.stringify(upstream.calls[1]?.body.request.tools)).toContain('lookup');
       expect(OpenAIResponsesSessionStore.get(transientResponseId)).toBeNull();
+      const initialSessionKey = z
+        .object({ sessionKey: z.string().min(1) })
+        .parse(lease.getNextToken.mock.calls[0]?.[0]).sessionKey;
       expect(lease.getNextToken).toHaveBeenNthCalledWith(
         2,
-        expect.objectContaining({ sessionKey: `openai:${rootResponseId}` }),
+        expect.objectContaining({ sessionKey: initialSessionKey }),
       );
     },
   );

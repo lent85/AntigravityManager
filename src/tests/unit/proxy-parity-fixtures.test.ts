@@ -4,7 +4,12 @@ import { EventEmitter } from 'events';
 import { describe, expect, it, vi } from 'vitest';
 import { Observable } from 'rxjs';
 
-import { OpenAIService as ProxyService } from '../../modules/proxy-gateway/server/modules/openai/openai.service';
+import { OpenAIService as ProxyService } from '../../server/gateway/modules/openai/openai.service';
+import { decodeAntigravityGenerationResult } from '@/modules/proxy-gateway/antigravity/AntigravityResponseDecoder';
+import type { GeminiResponse } from '@/modules/proxy-gateway/antigravity/types';
+import type { OpenAIChatRequest } from '@/server/gateway/common/interfaces/request-interfaces';
+import { toOpenAIGenerationInput } from '@/server/gateway/modules/openai/chat/openai-claude-conversion';
+import { toOpenAIChatResponse } from '@/server/gateway/modules/openai/chat/openai-chat-response';
 
 const mockAccountLeaseService = {
   getNextToken: vi.fn(),
@@ -28,14 +33,6 @@ class TestableProxyService extends ProxyService {
     );
   }
 
-  public toAnthropic(request: any): any {
-    return (this as any).convertOpenAIToClaude(request);
-  }
-
-  public toOpenAI(response: any, model: string, clientToolNames?: ReadonlySet<string>): any {
-    return (this as any).convertClaudeToOpenAIResponse(response, model, clientToolNames);
-  }
-
   public streamToOpenAI(upstreamStream: any, model: string): Observable<string> {
     return (this as any).processStreamResponse(upstreamStream, model);
   }
@@ -47,36 +44,37 @@ function readFixture<T>(relativePath: string): T {
 }
 
 describe('Proxy Parity Fixtures', () => {
-  it('maps OpenAI request fixture to expected Anthropic request semantics', () => {
-    const service = new TestableProxyService();
-    const input = readFixture<any>('request/openai.chat-tools.input.json');
+  it('maps the OpenAI request fixture to expected generation semantics', () => {
+    const input = readFixture<OpenAIChatRequest>('request/openai.chat-tools.input.json');
     const expected = readFixture<any>('request/openai.chat-tools.expected.json');
 
-    const actual = service.toAnthropic(input);
+    const actual = toOpenAIGenerationInput(input);
 
     expect(actual.model).toBe(expected.model);
     expect(actual.system).toBe(expected.system);
-    expect(actual.temperature).toBe(expected.temperature);
-    expect(actual.max_tokens).toBe(expected.max_tokens);
+    expect(actual.parameters.temperature).toBe(expected.temperature);
+    expect(actual.parameters.maxOutputTokens).toBe(expected.max_tokens);
     expect(actual.tools?.[0]?.name).toBe(expected.tools[0].name);
     expect(actual.messages[0]).toEqual(expected.messages[0]);
     expect(actual.messages[1].content[1]).toEqual(expected.messages[1].content[1]);
     expect(actual.messages[2].content[0]).toEqual(expected.messages[2].content[0]);
   });
 
-  it('keeps developer instructions in the system prompt and removes duplicates', () => {
-    const service = new TestableProxyService();
-    const actual = service.toAnthropic({
+  it('keeps developer instructions, explicit repeats and their whitespace in source order', () => {
+    const actual = toOpenAIGenerationInput({
       model: 'gpt-5-codex',
       messages: [
         { role: 'system', content: 'Shared policy.' },
         { role: 'developer', content: '  Shared   policy.  ' },
         { role: 'developer', content: 'Developer-only policy.' },
+        { role: 'developer', content: 'Shared policy.' },
         { role: 'user', content: 'Implement the requested change.' },
       ],
     });
 
-    expect(actual.system).toBe('Shared policy.\nDeveloper-only policy.');
+    expect(actual.system).toBe(
+      'Shared policy.\n  Shared   policy.  \nDeveloper-only policy.\nShared policy.',
+    );
     expect(actual.messages).toEqual([
       {
         role: 'user',
@@ -86,8 +84,7 @@ describe('Proxy Parity Fixtures', () => {
   });
 
   it('removes Codex-injected tools from function parameter schemas', () => {
-    const service = new TestableProxyService();
-    const input = {
+    const input: OpenAIChatRequest = {
       model: 'claude-sonnet-4-5',
       tools: [
         {
@@ -111,18 +108,16 @@ describe('Proxy Parity Fixtures', () => {
       messages: [{ role: 'user', content: 'Find API key docs' }],
     };
 
-    const actual = service.toAnthropic(input);
+    const actual = toOpenAIGenerationInput(input);
 
     expect(actual.tools?.[0]?.input_schema).not.toHaveProperty('tools');
-    expect(actual.tools?.[0]?.input_schema.properties.query).not.toHaveProperty('tools');
+    expect(actual.tools?.[0]?.input_schema?.properties?.query).not.toHaveProperty('tools');
   });
 
-  it('maps Anthropic response fixture to expected OpenAI response semantics', () => {
-    const service = new TestableProxyService();
-    const input = readFixture<any>('response/anthropic.tool-use.input.json');
-    const expected = readFixture<any>('response/anthropic.tool-use.expected.json');
-
-    const actual = service.toOpenAI(input, expected.model);
+  it('maps the Antigravity response fixture to expected OpenAI response semantics', () => {
+    const input = readFixture<GeminiResponse>('response/antigravity.tool-use.input.json');
+    const expected = readFixture<any>('response/openai.tool-use.expected.json');
+    const actual = toOpenAIChatResponse(decodeAntigravityGenerationResult(input), expected.model);
 
     expect(actual.model).toBe(expected.model);
     expect(actual.choices[0].message.content).toBe(expected.message.content);
@@ -132,68 +127,51 @@ describe('Proxy Parity Fixtures', () => {
     expect(actual.usage).toEqual(expected.usage);
   });
 
-  it('returns the shell tool name declared by the OpenAI client', () => {
-    const service = new TestableProxyService();
-
-    const actual = service.toOpenAI(
-      {
-        content: [
+  it('preserves the upstream shell tool name', () => {
+    const actual = toOpenAIChatResponse(
+      decodeAntigravityGenerationResult({
+        candidates: [
           {
-            type: 'tool_use',
-            id: 'call_shell',
-            name: 'shell',
-            input: { command: 'pwd' },
+            content: {
+              role: 'model',
+              parts: [
+                { functionCall: { id: 'call_shell', name: 'shell', args: { command: 'pwd' } } },
+              ],
+            },
+            finishReason: 'STOP',
           },
         ],
-        stop_reason: 'tool_use',
-        usage: { input_tokens: 1, output_tokens: 1 },
-      },
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+      }),
       'gpt-5-codex',
-      new Set(['bash']),
     );
 
-    expect(actual.choices[0].message.tool_calls[0].function.name).toBe('bash');
+    expect(actual.choices[0].message.tool_calls?.[0]?.function?.name).toBe('shell');
   });
 
-  it('normalizes non-stream apply_patch arguments to repaired freeform input', () => {
-    const service = new TestableProxyService();
-    const patch = [
-      '*** Begin Patch',
-      '--- a/src/example.ts',
-      '+++ b/src/example.ts',
-      '@@ -1 +1 @@',
-      '-const value = 1;',
-      '+const value = 2;',
-      '*** End Patch',
-    ].join('\n');
-    const repairedPatch = [
-      '*** Begin Patch',
-      '*** Update File: src/example.ts',
-      '@@',
-      '-const value = 1;',
-      '+const value = 2;',
-      '*** End Patch',
-    ].join('\n');
-
-    const actual = service.toOpenAI(
-      {
-        content: [
+  it('passes declared custom tool input through the Chat response unchanged', () => {
+    const patch = '--- a/example.ts\r\n+++ b/example.ts\r\n@@ -1 +1 @@\r\n-x\r\n+y\r\n';
+    const actual = toOpenAIChatResponse(
+      decodeAntigravityGenerationResult({
+        candidates: [
           {
-            type: 'tool_use',
-            id: 'call_patch',
-            name: 'apply_patch',
-            input: { command: ['apply_patch', patch] },
+            content: {
+              role: 'model',
+              parts: [
+                { functionCall: { id: 'call_patch', name: 'apply_patch', args: { input: patch } } },
+              ],
+            },
+            finishReason: 'STOP',
           },
         ],
-        stop_reason: 'tool_use',
-        usage: { input_tokens: 1, output_tokens: 1 },
-      },
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+      }),
       'gpt-5-codex',
+      [{ type: 'custom', custom: { name: 'apply_patch' } }],
     );
-
-    expect(actual.choices[0].message.tool_calls[0].function.arguments).toBe(
-      JSON.stringify({ input: repairedPatch }),
-    );
+    expect(actual.choices[0].message.tool_calls).toEqual([
+      { id: 'call_patch', type: 'custom', custom: { name: 'apply_patch', input: patch } },
+    ]);
   });
 
   it('maps upstream stream fixture into expected OpenAI SSE semantics', async () => {

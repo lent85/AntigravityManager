@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -171,8 +171,8 @@ export function ProxyServiceCard({
             {/* Start/Stop Button directly in Header with risk acknowledgement */}
             <div className="flex items-center">
               <ProxyServiceControl
-                config={proxyConfig}
-                onConfigChange={updateProxyConfig}
+                config={proxyConfig as any}
+                running={false}
                 onError={setGatewayError}
               />
             </div>

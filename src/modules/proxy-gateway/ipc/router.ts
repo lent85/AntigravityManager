@@ -1,8 +1,15 @@
 import { getOpenCodeAdapter } from './opencode-adapter';
 import { getAgentToolsAdapter } from './agent-tools-adapter';
+import { getDshAdapter } from './dsh-adapter';
+import { getClientConfigAdapter } from './client-config-adapter';
+import { getConnectionProfilesAdapter } from './connection-profiles-adapter';
+import { createConnectionProfilesRouter } from '../connection-profiles/connection-profiles.router';
+import { createClientConfigOwnerRouter } from '../agent-tools/client-config-owner.router';
 import { createAgentToolsRouter } from '../agent-tools/agent-tools.router';
 import type { AgentToolsOperations } from '../agent-tools/agent-tools.service';
 import { getAuditAdapter } from './audit-adapter';
+import { UsageRangeInputSchema, UsageRangeResultSchema } from '../audit/usage-range.schema';
+import { UsageTrendsInputSchema, UsageTrendsResultSchema } from '../audit/usage-trends.schema';
 import { AuditIdInputSchema } from '../audit/audit-owner.schema';
 import { createOpenCodeOwnerRouter } from '../opencode-sync/opencode-owner.router';
 import type { OpenCodeOperations } from '../opencode-sync/opencode-owner.service';
@@ -20,7 +27,7 @@ import {
   clearProxyUsageStats,
 } from './handlers';
 import { getGatewayAdapter } from './gateway-adapter';
-import { proxyModelAvailabilityStore } from '../server/shared/services/model-availability.service';
+import { proxyModelAvailabilityStore } from '../../../server/gateway/shared/services/model-availability.service';
 import { ipcAuditRecorder } from '../audit/ipc-audit-recorder';
 import { TrafficClassSchema } from '../audit/traffic-classifier';
 import {
@@ -29,6 +36,7 @@ import {
   TrafficAuditListInputSchema,
 } from '../audit/traffic-audit.types';
 import { getThoughtAdapter, readSelectedThoughtRecord } from './thought-adapter';
+import { ThoughtRecordPageInputSchema } from '../thought-store/thought-management.schema';
 import {
   ThoughtSessionsInputSchema,
   ThoughtSessionInputSchema,
@@ -37,6 +45,9 @@ import {
 } from '../thought-store/thought-owner.schema';
 import { copyAuditCurl } from '../traffic-monitor/copy-audit-curl';
 import { createPlaygroundRouter } from '../playground/playground.router';
+import { createDshOwnerRouter } from '../dsh-sync/dsh-owner.router';
+import type { DshOperations } from '../dsh-sync/dsh-owner.service';
+import { GatewayRememberChoiceSchema, GatewayManualStartResultSchema, GatewayManualStopResultSchema, GatewayChoicePersistenceSchema } from '../services/gateway-management.schema';
 export const gatewayAuditMiddleware = os.middleware(({ next, path }, input) =>
   ipcAuditRecorder.run(path, input, () => next({})),
 );
@@ -50,6 +61,13 @@ const selectedOpenCode: OpenCodeOperations = {
   revokeKey: () => getOpenCodeAdapter().revokeKey(),
 };
 const openCodeRouter = createOpenCodeOwnerRouter(selectedOpenCode);
+const selectedDsh: DshOperations = {
+  status: (input) => getDshAdapter().status(input),
+  preview: (input) => getDshAdapter().preview(input),
+  sync: (input) => getDshAdapter().sync(input),
+  remove: (input) => getDshAdapter().remove(input),
+};
+const dshRouter = createDshOwnerRouter(selectedDsh);
 const selectedAgentTools: AgentToolsOperations = {
   status: (tool, baseUrl) => getAgentToolsAdapter().status(tool, baseUrl),
   configure: (input) => getAgentToolsAdapter().configure(input),
@@ -59,7 +77,26 @@ const selectedAgentTools: AgentToolsOperations = {
 };
 
 export const gatewayRouter = os.prefix('/gateway').router({
+  manualStart: os.input(z.strictObject({ port: z.number().int().min(1024).max(65535) }))
+    .output(GatewayManualStartResultSchema)
+    .handler(({ input }) => getGatewayAdapter().manualStart(input.port)),
+  manualStop: os.output(GatewayManualStopResultSchema)
+    .handler(() => getGatewayAdapter().manualStop()),
+  retrySaveChoice: os.input(GatewayRememberChoiceSchema).output(GatewayChoicePersistenceSchema)
+    .handler(({ input }) => getGatewayAdapter().retrySaveChoice(input)),
   agentTools: createAgentToolsRouter(selectedAgentTools),
+  connectionProfiles: createConnectionProfilesRouter({
+    list: () => getConnectionProfilesAdapter().list(),
+    save: (input) => getConnectionProfilesAdapter().save(input),
+    preview: (input) => getConnectionProfilesAdapter().preview(input),
+    mutate: (input) => getConnectionProfilesAdapter().mutate(input),
+    delete: (input) => getConnectionProfilesAdapter().delete(input),
+  }),
+  clientConfig: createClientConfigOwnerRouter({
+    status: (input) => getClientConfigAdapter().status(input),
+    preview: (input) => getClientConfigAdapter().preview(input),
+    mutate: (input) => getClientConfigAdapter().mutate(input),
+  }),
   start: os
     .input(z.object({ port: z.number().int().min(1024).max(65535) }))
     .handler(async ({ input }) => {
@@ -143,6 +180,7 @@ export const gatewayRouter = os.prefix('/gateway').router({
   restoreOpenCode: openCodeRouter.restore,
   clearOpenCode: openCodeRouter.clear,
   revokeOpenCodeKey: openCodeRouter.revokeKey,
+  dsh: dshRouter,
 
   modelAvailability: os
     .output(
@@ -173,6 +211,14 @@ export const gatewayRouter = os.prefix('/gateway').router({
   }),
 
   auditFilterOptions: os.handler(async () => getAuditAdapter().filterOptions()),
+  auditUsageTrends: os
+    .input(UsageTrendsInputSchema)
+    .output(UsageTrendsResultSchema)
+    .handler(({ input }) => getAuditAdapter().usageTrends(input)),
+  auditUsageRange: os
+    .input(UsageRangeInputSchema)
+    .output(UsageRangeResultSchema)
+    .handler(({ input }) => getAuditAdapter().usageRange(input)),
 
   auditDetail: os.input(AuditIdInputSchema).handler(async ({ input }) => {
     return getAuditAdapter().detail(input);
@@ -227,7 +273,7 @@ export const gatewayRouter = os.prefix('/gateway').router({
     return getThoughtAdapter().sessions(input);
   }),
 
-  thoughtRecords: os.input(ThoughtSessionInputSchema).handler(async ({ input }) => {
+  thoughtRecords: os.input(ThoughtRecordPageInputSchema).handler(async ({ input }) => {
     return getThoughtAdapter().records(input);
   }),
 

@@ -17,6 +17,7 @@ import { CloudAccountRefreshService } from '@/modules/cloud-account/services/Clo
 import { localAccountPostImportService } from '@/modules/cloud-account/local-import/local-account-post-import.service';
 import { CLOUD_ACCOUNT_IMPORT_MAX_BYTES } from '@/modules/cloud-account/services/cloud-account-file.schema';
 import type { CloudAccount } from '@/modules/cloud-account/types';
+import { mockCoreGatewayLifecycle } from '../support/core-gateway-lifecycle';
 
 vi.mock('electron', () => ({ dialog: { showOpenDialog: vi.fn(), showSaveDialog: vi.fn() } }));
 vi.mock('@/modules/cloud-account/ipc/handler', () => ({}));
@@ -85,7 +86,7 @@ async function startRemote() {
     process.platform === 'win32'
       ? `\\\\.\\pipe\\agm-file-${path.basename(directory)}`
       : path.join(directory, 'core.sock');
-  const operations = createCoreRpcOperations({ startGateway: vi.fn(), stopGateway: vi.fn() });
+  const operations = createCoreRpcOperations(mockCoreGatewayLifecycle());
   server = new ManagementServer({
     endpoint,
     getStatus: () => ({ state: 'running', pid: 123, gateway: { running: false, port: null } }),
@@ -222,6 +223,7 @@ describe.each(['desktop-embedded', 'standalone-core'] as const)(
       expect(accounts[0].status_reason).toBeUndefined();
       expect(CloudAccountRefreshService.clearFailureState).toHaveBeenCalledExactlyOnceWith(
         account.id,
+        expect.any(Function),
       );
     });
 

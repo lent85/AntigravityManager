@@ -134,6 +134,14 @@ describe('Electron gateway read adapter', () => {
         })),
       },
       diagnosticLogs: vi.fn(),
+      errorDiagnostics: {
+        status: vi.fn(),
+        query: vi.fn(),
+        open: vi.fn(),
+        readContent: vi.fn(),
+        closeContent: vi.fn(),
+        clear: vi.fn(),
+      },
       errorReporting: { setEnabled: vi.fn() },
       auditFile: auditFileOwner,
       ipcCapture: ipcCaptureOwner,
@@ -158,6 +166,11 @@ describe('Electron gateway read adapter', () => {
       accountSecurityStatus: vi.fn(() => ({ state: 'secure' as const })),
       accountValidationUrl: vi.fn(async () => ({ url: 'https://accounts.google.com/verify' })),
       accountSyncFromIde: vi.fn(async () => null),
+      accountProjectId: {
+        getAccountProjectId: vi.fn(),
+        setAccountProjectId: vi.fn(),
+        fetchAccountProjectId: vi.fn(),
+      },
       localImport: {
         preview: vi.fn(),
         confirm: vi.fn(),
@@ -240,6 +253,17 @@ describe('Electron gateway read adapter', () => {
         base_url: `http://localhost:${port}`,
       })),
       gatewayStop: vi.fn(async () => ({ success: true as const })),
+      gatewayManualStart: vi.fn(),
+      gatewayManualStop: vi.fn(),
+      gatewayRetrySaveChoice: vi.fn(),
+      clientConfig: { status: vi.fn(), preview: vi.fn(), mutate: vi.fn() },
+      connectionProfiles: {
+        list: vi.fn(),
+        save: vi.fn(),
+        preview: vi.fn(),
+        mutate: vi.fn(),
+        delete: vi.fn(),
+      },
     };
     const server = new ManagementServer({
       endpoint: socketPath,
@@ -338,6 +362,9 @@ describe('Electron gateway read adapter', () => {
           stopGateway: vi.fn(async () => {
             throw error;
           }),
+          manualStartGateway: vi.fn().mockRejectedValue(error),
+          manualStopGateway: vi.fn().mockRejectedValue(error),
+          retryGatewaySaveChoice: vi.fn().mockRejectedValue(error),
         },
       });
 

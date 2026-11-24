@@ -1,30 +1,42 @@
-import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import axios, { AxiosError } from 'axios';
 import { EventEmitter } from 'events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PassThrough, Readable } from 'node:stream';
-import { AnthropicService } from '../../modules/proxy-gateway/server/modules/anthropic/anthropic.service';
-import { GeminiService } from '../../modules/proxy-gateway/server/modules/gemini/gemini.service';
-import { OpenAIService } from '../../modules/proxy-gateway/server/modules/openai/openai.service';
+import { AnthropicService } from '../../server/gateway/modules/anthropic/anthropic.service';
+import { GeminiService } from '../../server/gateway/modules/gemini/gemini.service';
+import { OpenAIService } from '../../server/gateway/modules/openai/openai.service';
+import { decodeAntigravityGenerationResult } from '@/modules/proxy-gateway/antigravity/AntigravityResponseDecoder';
+import { toOpenAIGenerationInput } from '@/server/gateway/modules/openai/chat/openai-claude-conversion';
+import { toOpenAIChatResponse } from '@/server/gateway/modules/openai/chat/openai-chat-response';
 import { Observable } from 'rxjs';
-import { GeminiClient } from '../../modules/proxy-gateway/server/modules/gemini/gemini-client.service';
-import { Upstream4xxCaptureService } from '../../modules/proxy-gateway/server/common/upstream-4xx-capture.service';
-import { UpstreamRequestError } from '../../modules/proxy-gateway/server/common/exceptions/upstream-request.exception';
+import { GeminiClient } from '../../server/gateway/modules/gemini/gemini-client.service';
+import { Upstream4xxCaptureService } from '../../server/gateway/common/upstream-4xx-capture.service';
+import { UpstreamRequestError } from '../../server/gateway/common/exceptions/upstream-request.exception';
+import { UpstreamProxyConfigurationError } from '@/modules/config/upstream-proxy.schema';
+import { UpstreamEndpointConfigurationError } from '@/server/gateway/common/exceptions/upstream-endpoint-configuration.exception';
 import { setServerConfig } from '../../server/server-config';
 import { DEFAULT_APP_CONFIG, ProxyConfig } from '@/modules/config/types';
 import { SignatureStore } from '@/modules/proxy-gateway/antigravity/SignatureStore';
-import { resolveOpenAISessionScope } from '@/modules/proxy-gateway/server/common/signature-session-scope';
-import { GenerationConstraintsService } from '../../modules/proxy-gateway/server/shared/services/generation-constraints.service';
-import { ModelRoutingService } from '../../modules/proxy-gateway/server/shared/services/model-routing.service';
-import { ProxyRetryService } from '../../modules/proxy-gateway/server/shared/services/proxy-retry.service';
-import { proxyModelAvailabilityStore } from '../../modules/proxy-gateway/server/shared/services/model-availability.service';
-import type { OpenAIChatRequest } from '@/modules/proxy-gateway/server/common/interfaces/request-interfaces';
+import {
+  resolveOpenAISessionScope,
+  resolveLineageAccountAffinity,
+} from '@/server/gateway/common/signature-session-scope';
+import { GenerationConstraintsService } from '../../server/gateway/shared/services/generation-constraints.service';
+import { ModelRoutingService } from '../../server/gateway/shared/services/model-routing.service';
+import { ProxyRetryService } from '../../server/gateway/shared/services/proxy-retry.service';
+import { proxyModelAvailabilityStore } from '../../server/gateway/shared/services/model-availability.service';
+import type { OpenAIChatRequest } from '@/server/gateway/common/interfaces/request-interfaces';
+import type { GeminiInternalRequest } from '@/modules/proxy-gateway/antigravity/types';
 import {
   runWithTrafficAuditRequestContext,
   type TrafficAuditRequestContext,
 } from '@/modules/proxy-gateway/audit/traffic-audit-context';
+import { MAX_SSE_EVENT_BYTES } from '@/modules/proxy-gateway/antigravity/internal-sse';
+import { collectAntigravityResponse } from '@/server/gateway/common/antigravity-generation-executor';
+import { PIXEL_PNG } from '../fixtures/image-content';
 
 // The three services the protocol services used to build for themselves. Real instances:
 // these tests drive the retry path, so a placeholder would change what is under test.
@@ -46,7 +58,15 @@ function sharedProxyServices(): [
 
 // Mock dependencies
 const mockAccountLeaseService = {
+  isLeaseCurrent: vi.fn(() => true),
+  isLeaseEligible: vi.fn(() => true),
+  acceptLeaseCompletion: vi.fn(() => true),
+  commitSession: vi.fn(),
+  rejectSession: vi.fn(),
   getNextToken: vi.fn(),
+  getEligibleRetryAccountCount: vi.fn().mockReturnValue(0),
+  getRetryAccountPoolSize: vi.fn().mockResolvedValue(1),
+  getOrdinaryRetryWaitMs: vi.fn().mockReturnValue(0),
   markAsRateLimited: vi.fn(),
   markModelSuccess: vi.fn(),
   markAsForbidden: vi.fn(),
@@ -92,6 +112,24 @@ class TestableOpenAIService extends OpenAIService {
   public testModelHeaders(model: string): Record<string, string> {
     return (this as any).createModelSpecificHeaders(model);
   }
+
+  public testCreateProtocolStream(
+    stream: any,
+    protocol: 'chat' | 'responses',
+    accountId?: string,
+  ): Observable<string> {
+    return (this as any).createOpenAIProtocolStream(
+      stream,
+      'gpt-4o-mini',
+      protocol,
+      undefined,
+      undefined,
+      'gemini-3-flash',
+      undefined,
+      undefined,
+      accountId ? createToken(accountId) : undefined,
+    ) as Observable<string>;
+  }
 }
 
 class TestableAnthropicService extends AnthropicService {
@@ -109,8 +147,18 @@ class TestableGeminiService extends GeminiService {
     super(mockAccountLeaseService as any, mockGeminiClient as any, ...sharedProxyServices());
   }
 
-  public testPassthroughStream(stream: any): Observable<string> {
-    return (this as any).passthroughSseStream(stream) as Observable<string>;
+  public testPassthroughStream(
+    stream: any,
+    imagePermit?: { release: () => void },
+    accountId?: string,
+    model?: string,
+  ): Observable<string> {
+    return (this as any).passthroughSseStream(
+      stream,
+      accountId ? createToken(accountId) : undefined,
+      model,
+      imagePermit,
+    ) as Observable<string>;
   }
 }
 
@@ -131,8 +179,14 @@ function createToken(id: string = 'acc-1') {
 }
 
 describe('ProxyService Empty Stream Retry Logic', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGeminiClient.generateInternal.mockReset();
+    mockGeminiClient.streamGenerateInternal.mockReset();
     setServerConfig(createProxyConfig());
   });
 
@@ -167,6 +221,41 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     });
   });
 
+  it('surfaces invalid proxy configuration without switching or penalising an account', async () => {
+    const service = new TestableGeminiService();
+    mockAccountLeaseService.getNextToken.mockResolvedValue(createToken());
+    mockGeminiClient.generateInternal.mockRejectedValueOnce(new UpstreamProxyConfigurationError());
+
+    await expect(
+      service.handleGeminiGenerateContent('gemini-3-flash', {
+        contents: [{ role: 'user', parts: [{ text: 'hello' }] }],
+      }),
+    ).rejects.toBeInstanceOf(UpstreamProxyConfigurationError);
+
+    expect(mockAccountLeaseService.getNextToken).toHaveBeenCalledOnce();
+    expect(mockAccountLeaseService.markAsForbidden).not.toHaveBeenCalled();
+    expect(mockAccountLeaseService.markAsRateLimited).not.toHaveBeenCalled();
+    expect(mockAccountLeaseService.markFromUpstreamError).not.toHaveBeenCalled();
+  });
+
+  it('surfaces invalid endpoint configuration without switching or penalising an account', async () => {
+    const service = new TestableGeminiService();
+    mockAccountLeaseService.getNextToken.mockResolvedValue(createToken());
+    const error = new UpstreamEndpointConfigurationError();
+    mockGeminiClient.generateInternal.mockRejectedValueOnce(error);
+
+    await expect(
+      service.handleGeminiGenerateContent('gemini-3-flash', {
+        contents: [{ role: 'user', parts: [{ text: 'hello' }] }],
+      }),
+    ).rejects.toBe(error);
+
+    expect(mockAccountLeaseService.getNextToken).toHaveBeenCalledOnce();
+    expect(mockAccountLeaseService.markAsForbidden).not.toHaveBeenCalled();
+    expect(mockAccountLeaseService.markAsRateLimited).not.toHaveBeenCalled();
+    expect(mockAccountLeaseService.markFromUpstreamError).not.toHaveBeenCalled();
+  });
+
   it('builds Claude-specific beta headers consistently', () => {
     const service = new TestableOpenAIService();
     const claudeHeaders = service.testModelHeaders('claude-sonnet-4-5');
@@ -181,14 +270,29 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     mockAccountLeaseService.getNextToken.mockResolvedValue(createToken());
     mockGeminiClient.generateInternal
       .mockRejectedValueOnce(
-        new Error('Google Cloud Project lacks a Gemini Code Assist license (#3501)'),
+        new UpstreamRequestError({
+          status: 403,
+          message:
+            'You are currently configured to use a Google Cloud Project but lack a Gemini Code Assist license. (#3501)',
+        }),
       )
-      .mockResolvedValueOnce({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] });
+      .mockResolvedValueOnce({
+        candidates: [{ content: { parts: [{ text: 'ok' }] }, finishReason: 'STOP' }],
+      });
     await service.handleChatCompletions({
       model: 'gpt-4o',
       messages: [{ role: 'user', content: 'hello' }],
     } as any);
     expect(mockGeminiClient.generateInternal).toHaveBeenCalledTimes(2);
+    const [primary, fallback] = mockGeminiClient.generateInternal.mock.calls.map(([body]) => body);
+    expect(primary?.project).toBe('project-1');
+    expect(fallback?.project).toBeUndefined();
+    expect(fallback?.request).toEqual(primary?.request);
+    expect(primary?.requestId).toMatch(/^agent\/\d+\/[0-9a-f]{8}$/);
+    expect(fallback?.requestId).toMatch(/^agent\/\d+\/[0-9a-f]{8}$/);
+    const configKeys = Object.keys(primary?.request.generationConfig ?? {});
+    expect(configKeys).toContain('temperature');
+    expect(configKeys.indexOf('thinkingConfig')).toBeGreaterThan(configKeys.indexOf('temperature'));
     const headers = mockGeminiClient.generateInternal.mock.calls.map((call) => call[3]);
     expect(headers[0]).not.toHaveProperty('x-machine-id');
     expect(headers[1]).toEqual(headers[0]);
@@ -219,7 +323,7 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     mockAccountLeaseService.getNextToken.mockResolvedValue(createToken());
     mockGeminiClient.streamGenerateInternal.mockRejectedValue(new Error('socket hang up'));
     mockGeminiClient.generateInternal.mockResolvedValue({
-      candidates: [{ content: { parts: [{ text: 'ok' }] } }],
+      candidates: [{ content: { parts: [{ text: 'ok' }] }, finishReason: 'STOP' }],
     });
     await service.handleChatCompletions({
       model: 'gpt-4o',
@@ -231,7 +335,7 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     expect(mockGeminiClient.generateInternal.mock.calls[0][3]).toEqual(headers);
   });
 
-  it('recovers a clean empty Anthropic stream with the compatibility text', async () => {
+  it('fails a clean empty Anthropic stream without compatibility text', async () => {
     const service = new TestableAnthropicService();
     const stream = new EventEmitter();
 
@@ -257,8 +361,9 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     await promise;
 
     expect(errorReceived).toBeUndefined();
-    expect(receivedChunks.join('')).toContain('"content_block":{"type":"text","text":"."}');
-    expect(receivedChunks.join('')).toContain('message_stop');
+    expect(receivedChunks.join('')).toContain('event: error');
+    expect(receivedChunks.join('')).toContain('without a finish reason');
+    expect(receivedChunks.join('')).not.toContain('message_stop');
   });
 
   it('should NOT emit error when stream has data', async () => {
@@ -385,7 +490,7 @@ describe('ProxyService Empty Stream Retry Logic', () => {
 
   it('aggregates a wrapped stream when the non-stream Gemini response is empty', async () => {
     const service = new TestableGeminiService();
-    const stream = new EventEmitter();
+    const stream = new Readable({ read() {} });
 
     mockAccountLeaseService.getNextToken.mockResolvedValue(createToken());
     mockGeminiClient.generateInternal.mockResolvedValueOnce({ candidates: [] });
@@ -407,9 +512,9 @@ describe('ProxyService Empty Stream Retry Logic', () => {
           usageMetadata: { totalTokenCount: 5 },
         },
       });
-      stream.emit('data', Buffer.from('data: not json\n\n'));
-      stream.emit('data', Buffer.from(`data: ${payload}\n\n`));
-      stream.emit('end');
+      stream.push(Buffer.from(': upstream-heartbeat\n\n'));
+      stream.push(Buffer.from(`data: ${payload}\n\n`));
+      stream.push(null);
     }, 10);
 
     const result = await promise;
@@ -423,11 +528,154 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     expect(candidate.finishReason).toBe('STOP');
   });
 
+  it('does not let upstream SSE comments extend the Gemini aggregation idle deadline', async () => {
+    vi.useFakeTimers();
+    const stream = new PassThrough();
+    const result = collectAntigravityResponse(stream, { error: vi.fn() });
+    const rejection = expect(result).rejects.toThrow('Stream idle timeout');
+
+    await vi.advanceTimersByTimeAsync(299_999);
+    stream.write(': upstream-heartbeat\n\n');
+    await vi.advanceTimersByTimeAsync(1);
+    stream.end();
+
+    await rejection;
+    expect(stream.destroyed).toBe(true);
+  });
+
+  it('rejects Gemini aggregation when upstream closes before end', async () => {
+    const stream = new PassThrough();
+    const result = collectAntigravityResponse(stream, { error: vi.fn() });
+
+    stream.emit('close');
+
+    await expect(result).rejects.toThrow('closed before completion');
+  });
+
+  it('does not let upstream SSE comments extend the Gemini passthrough idle deadline', async () => {
+    vi.useFakeTimers();
+    const service = new TestableGeminiService();
+    const stream = new PassThrough();
+    const release = vi.fn();
+    const chunks: string[] = [];
+    let completed = false;
+    const done = new Promise<void>((resolve) => {
+      service.testPassthroughStream(stream, { release }).subscribe({
+        next: (chunk) => chunks.push(chunk),
+        error: resolve,
+        complete: () => {
+          completed = true;
+          resolve();
+        },
+      });
+    });
+
+    await vi.advanceTimersByTimeAsync(299_999);
+    stream.write(': upstream-heartbeat\n\n');
+    await vi.advanceTimersByTimeAsync(1);
+    await done;
+
+    expect(completed).toBe(true);
+    expect(stream.destroyed).toBe(true);
+    const output = chunks.join('');
+    expect(output).toBe(
+      ': upstream-heartbeat\n\n' +
+        `data: ${JSON.stringify({
+          error: {
+            code: 502,
+            message: 'Upstream response stream timed out.',
+            status: 'UPSTREAM_STREAM_ERROR',
+          },
+        })}\n\n`,
+    );
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it('extends the Gemini passthrough idle deadline after a valid response event', async () => {
+    vi.useFakeTimers();
+    const service = new TestableGeminiService();
+    const stream = new PassThrough();
+    const chunks: string[] = [];
+    let completed = false;
+    const done = new Promise<void>((resolve) => {
+      service.testPassthroughStream(stream).subscribe({
+        next: (chunk) => chunks.push(chunk),
+        error: resolve,
+        complete: () => {
+          completed = true;
+          resolve();
+        },
+      });
+    });
+
+    await vi.advanceTimersByTimeAsync(299_999);
+    stream.write(
+      'data: {"response":{"candidates":[{"content":{"parts":[{"text":"partial"}]}}]}}\n\n',
+    );
+    await vi.advanceTimersByTimeAsync(299_999);
+    expect(completed).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await done;
+
+    expect(completed).toBe(true);
+    expect(stream.destroyed).toBe(true);
+    expect(chunks).toHaveLength(2);
+    expect(chunks[0]).toContain('"text":"partial"');
+    expect(chunks[1]).toContain('"gatewayInterrupted":true');
+    expect(chunks[1]).toContain('"finishReason":"MAX_TOKENS"');
+  });
+
+  it('releases Gemini passthrough resources once on unsubscribe and ignores late data', () => {
+    vi.useFakeTimers();
+    const service = new TestableGeminiService();
+    const stream = new PassThrough();
+    const release = vi.fn();
+    const chunks: string[] = [];
+    const subscription = service
+      .testPassthroughStream(stream, { release })
+      .subscribe((chunk) => chunks.push(chunk));
+
+    subscription.unsubscribe();
+    stream.emit(
+      'data',
+      Buffer.from(
+        'data: {"response":{"candidates":[{"content":{"parts":[{"text":"late"}]}}]}}\n\n',
+      ),
+    );
+
+    expect(stream.destroyed).toBe(true);
+    expect(release).toHaveBeenCalledOnce();
+    expect(chunks).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('joins multiline Gemini data fields and accepts a complete EOF tail', async () => {
+    const service = new TestableGeminiService();
+    const stream = Readable.from([
+      Buffer.from('data: {"response":\n'),
+      Buffer.from(
+        'data: {"candidates":[{"content":{"parts":[{"text":"multiline tail"}]},"finishReason":"STOP"}]}}',
+      ),
+    ]);
+    mockAccountLeaseService.getNextToken.mockResolvedValue(createToken());
+    mockGeminiClient.generateInternal.mockResolvedValueOnce({ candidates: [] });
+    mockGeminiClient.streamGenerateInternal.mockResolvedValueOnce(stream);
+
+    const result = await service.handleGeminiGenerateContent('models/gemini-2.5-flash', {
+      contents: [{ role: 'user', parts: [{ text: 'hello' }] }],
+    });
+
+    expect(mockGeminiClient.streamGenerateInternal).toHaveBeenCalledOnce();
+    expect(result.candidates?.[0]?.content?.parts[0]?.text).toBe('multiline tail');
+    expect(result.candidates?.[0]?.finishReason).toBe('STOP');
+  });
+
   it('injects Claude beta headers when handling Gemini-compatible Claude models', async () => {
     const service = new TestableGeminiService();
     mockAccountLeaseService.getNextToken.mockResolvedValue(createToken());
     mockGeminiClient.generateInternal.mockResolvedValue({
-      candidates: [{ content: { parts: [{ text: 'ok' }] } }],
+      candidates: [{ content: { parts: [{ text: 'ok' }] }, finishReason: 'STOP' }],
     });
 
     await service.handleGeminiGenerateContent('models/claude-sonnet-4-5', {
@@ -506,12 +754,13 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     expect(errorMessage).toBe('Empty response stream');
   });
 
-  it('accepts a clean Gemini EOF after a content frame without a finish reason', async () => {
+  it('fails a clean Gemini EOF after a content frame without a finish reason', async () => {
     const service = new TestableGeminiService();
     const stream = new EventEmitter();
+    const release = vi.fn();
     const chunks: string[] = [];
     const finished = new Promise<void>((resolve, reject) => {
-      service.testPassthroughStream(stream).subscribe({
+      service.testPassthroughStream(stream, { release }).subscribe({
         next: (chunk) => chunks.push(chunk),
         error: reject,
         complete: resolve,
@@ -527,7 +776,99 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     await finished;
 
     expect(chunks[0]).toContain('partial');
-    expect(chunks).toHaveLength(1);
+    expect(chunks[1]).toContain('"gatewayInterrupted":true');
+    expect(chunks[1]).toContain('"finishReason":"MAX_TOKENS"');
+    expect(chunks).toHaveLength(2);
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it('marks a Gemini account successful only after a finish reason', async () => {
+    const service = new TestableGeminiService();
+    const stream = new EventEmitter();
+    const finished = new Promise<void>((resolve, reject) => {
+      service
+        .testPassthroughStream(stream, undefined, 'acc-success', 'gemini-3-flash')
+        .subscribe({ error: reject, complete: resolve });
+    });
+
+    stream.emit(
+      'data',
+      Buffer.from(
+        'data: {"response":{"candidates":[{"content":{"parts":[{"text":"done"}]},"finishReason":"STOP"}]}}\n\n',
+      ),
+    );
+    stream.emit('end');
+    await finished;
+
+    expect(mockAccountLeaseService.markModelSuccess).toHaveBeenCalledWith(
+      'acc-success',
+      'gemini-3-flash',
+    );
+  });
+
+  it('joins multiline Gemini SSE fields and emits the unwrapped native response', async () => {
+    const service = new TestableGeminiService();
+    const stream = new PassThrough();
+    const chunks: string[] = [];
+    const finished = new Promise<void>((resolve, reject) => {
+      service.testPassthroughStream(stream).subscribe({
+        next: (chunk) => chunks.push(chunk),
+        error: reject,
+        complete: resolve,
+      });
+    });
+
+    stream.write('data: {"response":\n');
+    stream.end(
+      Buffer.from(
+        'data: {"candidates":[{"content":{"parts":[{"text":"multiline answer"}]},"finishReason":"STOP"}]}}\n\n',
+      ),
+    );
+    await finished;
+
+    expect(chunks.join('')).toBe(
+      'data: {"candidates":[{"content":{"parts":[{"text":"multiline answer"}]},"finishReason":"STOP"}]}\n\n',
+    );
+  });
+
+  it.each([
+    ['incomplete UTF-8', Buffer.from([0xe2, 0x82])],
+    ['oversized unterminated line', Buffer.from(`data: ${'x'.repeat(MAX_SSE_EVENT_BYTES)}`)],
+  ])('fails Gemini passthrough for %s', async (_label, bytes) => {
+    const service = new TestableGeminiService();
+    const stream = new PassThrough();
+    const release = vi.fn();
+    const chunks: string[] = [];
+    const completed = new Promise<void>((resolve, reject) => {
+      service.testPassthroughStream(stream, { release }).subscribe({
+        next: (chunk) => chunks.push(chunk),
+        error: reject,
+        complete: resolve,
+      });
+    });
+
+    stream.end(bytes);
+    await completed;
+
+    expect(chunks.join('')).toContain('UPSTREAM_STREAM_ERROR');
+    expect(chunks.filter((chunk) => chunk.length > 0)).toHaveLength(1);
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['incomplete UTF-8', Buffer.from([0xe2, 0x82]), /incomplete UTF-8 sequence/],
+    [
+      'oversized unterminated line',
+      Buffer.from(`data: ${'x'.repeat(MAX_SSE_EVENT_BYTES)}`),
+      /Upstream SSE line exceeds decode budget/,
+    ],
+  ])('rejects Gemini aggregation for %s', async (_label, bytes, error) => {
+    const stream = new PassThrough();
+    const result = collectAntigravityResponse(stream, { error: vi.fn() });
+
+    stream.end(bytes);
+
+    await expect(result).rejects.toThrow(error);
   });
 
   it('propagates Anthropic stream interruption errors', async () => {
@@ -556,7 +897,8 @@ describe('ProxyService Empty Stream Retry Logic', () => {
   it('propagates Gemini passthrough interruption errors', async () => {
     const service = new TestableGeminiService();
     const stream = new EventEmitter();
-    const observable = service.testPassthroughStream(stream);
+    const release = vi.fn();
+    const observable = service.testPassthroughStream(stream, { release });
     let errorMessage = '';
 
     const done = new Promise<void>((resolve) => {
@@ -574,6 +916,33 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     await done;
 
     expect(errorMessage).toBe('connection reset by peer');
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it('terminates Gemini passthrough when upstream closes before end', async () => {
+    const service = new TestableGeminiService();
+    const stream = new PassThrough();
+    const release = vi.fn();
+    const chunks: string[] = [];
+    const done = new Promise<void>((resolve, reject) => {
+      service.testPassthroughStream(stream, { release }).subscribe({
+        complete: resolve,
+        error: reject,
+        next: (chunk) => chunks.push(chunk),
+      });
+    });
+
+    stream.write(
+      'data: {"response":{"candidates":[{"content":{"parts":[{"text":"partial"}]}}]}}\n\n',
+    );
+    stream.emit('close');
+    await done;
+
+    expect(chunks[0]).toContain('partial');
+    expect(chunks[1]).toContain('"gatewayInterrupted":true');
+    expect(chunks[1]).toContain('"finishReason":"MAX_TOKENS"');
+    expect(chunks.join('')).not.toContain('[DONE]');
+    expect(release).toHaveBeenCalledOnce();
   });
 
   it('retries OpenAI flow with the same error classification matrix', async () => {
@@ -598,10 +967,13 @@ describe('ProxyService Empty Stream Retry Logic', () => {
 
     expect(mockAccountLeaseService.getNextToken).toHaveBeenCalledTimes(2);
     expect(mockAccountLeaseService.markFromUpstreamError).toHaveBeenCalledWith({
+      isCurrent: expect.any(Function),
       accountIdOrEmail: 'acc-1',
       status: 429,
       body: '429 quota exceeded',
-      model: 'gemini-3-flash',
+      model: 'gemini-3-flash-agent',
+      effort: undefined,
+      statusInferred: true,
     });
     expect((result as any).choices?.[0]?.message?.content).toBeDefined();
   });
@@ -620,7 +992,7 @@ describe('ProxyService Empty Stream Retry Logic', () => {
       messages: [
         {
           role: 'user',
-          content: 'Inspect ![screen](data:image/png;base64,AAAABBBB) carefully.',
+          content: `Inspect ![screen](data:image/png;base64,${PIXEL_PNG.toString('base64')}) carefully.`,
         },
       ],
     });
@@ -628,7 +1000,7 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     const internalRequest = mockGeminiClient.generateInternal.mock.calls[0][0];
     expect(internalRequest.request.contents[0].parts).toEqual([
       { text: 'Inspect ' },
-      { inlineData: { mimeType: 'image/png', data: 'AAAABBBB' } },
+      { inlineData: { mimeType: 'image/png', data: PIXEL_PNG.toString('base64') } },
       { text: ' carefully.' },
     ]);
   });
@@ -650,7 +1022,10 @@ describe('ProxyService Empty Stream Retry Logic', () => {
       messages: [
         {
           role: 'user',
-          content: [{ type: 'video_url', video_url: { url: videoPath } }],
+          content: [
+            { type: 'text', text: 'Analyze this clip.' },
+            { type: 'video_url', video_url: { url: videoPath } },
+          ],
         },
       ],
     };
@@ -658,7 +1033,7 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     try {
       await service.handleChatCompletions(request);
       expect(mockGeminiClient.generateInternal.mock.calls[0][0].request.contents).toEqual([
-        { role: 'user', parts: [{ text: 'Continue' }] },
+        { role: 'user', parts: [{ text: 'Analyze this clip.' }] },
       ]);
 
       mockGeminiClient.generateInternal.mockClear();
@@ -671,6 +1046,7 @@ describe('ProxyService Empty Stream Retry Logic', () => {
         {
           role: 'user',
           parts: [
+            { text: 'Analyze this clip.' },
             {
               inlineData: {
                 mimeType: 'video/webm',
@@ -724,6 +1100,12 @@ describe('ProxyService Empty Stream Retry Logic', () => {
           tool_calls: [
             { id: 'call_old', type: 'function', function: { name: 'lookup', arguments: '{}' } },
           ],
+        },
+        {
+          role: 'tool',
+          tool_call_id: 'call_old',
+          name: 'lookup',
+          content: 'Historical lookup result.',
         },
       ],
       tools: [{ type: 'web_search_20250305' }],
@@ -826,6 +1208,12 @@ describe('ProxyService Empty Stream Retry Logic', () => {
                 },
               ],
             },
+            {
+              role: 'tool',
+              tool_call_id: 'call_parent',
+              name: 'lookup',
+              content: 'Parent lookup result.',
+            },
           ],
         } as any,
         'responses',
@@ -834,6 +1222,11 @@ describe('ProxyService Empty Stream Retry Logic', () => {
           requestSessionId: 'resp_parent',
           responseId: 'resp_child',
           routingSessionId: 'routing_root',
+          identity: {
+            version: 1,
+            origin: 'client',
+            initialTaskFingerprint: '0'.repeat(64),
+          },
         },
       );
 
@@ -844,7 +1237,7 @@ describe('ProxyService Empty Stream Retry Logic', () => {
       expect(internalRequest).not.toHaveProperty('sessionId');
       expect(historicalToolCall?.thoughtSignature).toBe(parentSignature);
       expect(mockAccountLeaseService.getNextToken).toHaveBeenCalledWith(
-        expect.objectContaining({ sessionKey: 'openai:routing_root' }),
+        expect.objectContaining({ sessionKey: resolveLineageAccountAffinity('routing_root') }),
       );
       expect(
         SignatureStore.getAt({
@@ -892,6 +1285,9 @@ describe('ProxyService Empty Stream Retry Logic', () => {
       status: 429,
       body: '429 rate limit exceeded',
       model: 'claude-sonnet-4-6-thinking',
+      effort: undefined,
+      isCurrent: expect.any(Function),
+      statusInferred: true,
     });
     expect((result as any).type).toBe('message');
   });
@@ -920,6 +1316,9 @@ describe('ProxyService Empty Stream Retry Logic', () => {
       status: 429,
       body: '429 quota exceeded',
       model: 'gemini-3-flash-agent',
+      effort: undefined,
+      isCurrent: expect.any(Function),
+      statusInferred: true,
     });
     expect(
       mockAccountLeaseService.getNextToken.mock.calls.map(([options]) => options.model),
@@ -947,7 +1346,7 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     expect(internalPayload).not.toHaveProperty('sessionId');
   });
 
-  it('resolves the Gemini 3.1 preview alias through the high variant for leasing and upstream', async () => {
+  it('preserves Pro Low through leasing and upstream', async () => {
     const service = new TestableGeminiService();
     mockAccountLeaseService.getNextToken.mockResolvedValue(createToken('acc-1'));
     mockGeminiClient.generateInternal.mockResolvedValue({
@@ -955,16 +1354,16 @@ describe('ProxyService Empty Stream Retry Logic', () => {
       usageMetadata: { totalTokenCount: 5 },
     });
 
-    await service.handleGeminiGenerateContent('models/gemini-3.1-pro-preview', {
+    await service.handleGeminiGenerateContent('models/gemini-3.1-pro-low', {
       contents: [{ role: 'user', parts: [{ text: 'hello' }] }],
     } as any);
 
     const internalPayload = mockGeminiClient.generateInternal.mock.calls[0][0];
-    expect(mockAccountLeaseService.getNextToken.mock.calls[0][0].model).toBe('gemini-pro-agent');
+    expect(mockAccountLeaseService.getNextToken.mock.calls[0][0].model).toBe('gemini-3.1-pro-low');
     expect(internalPayload).toMatchObject({
-      model: 'gemini-pro-agent',
+      model: 'gemini-3.1-pro-low',
       request: {
-        generationConfig: { thinkingConfig: { includeThoughts: true, thinkingBudget: 10001 } },
+        generationConfig: { thinkingConfig: { includeThoughts: true, thinkingBudget: 1001 } },
       },
     });
   });
@@ -1064,6 +1463,29 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     expect(mockAccountLeaseService.getNextToken).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    'Deployment project route not found',
+    'Resource projects/other-project could not be found',
+  ])('does not remove project for an unrelated provider error: %s', async (message) => {
+    const service = new TestableGeminiService();
+    mockAccountLeaseService.getNextToken.mockResolvedValue(createToken('acc-1'));
+    const failure = new Error(message);
+    mockGeminiClient.generateInternal.mockRejectedValueOnce(failure).mockResolvedValueOnce({
+      candidates: [{ content: { parts: [{ text: 'ordinary retry' }] }, finishReason: 'STOP' }],
+    });
+    await expect(
+      service.handleGeminiGenerateContent('gemini-3-flash', {
+        contents: [{ role: 'user', parts: [{ text: 'Controlled project request.' }] }],
+      }),
+    ).resolves.toMatchObject({
+      candidates: [{ content: { parts: [{ text: 'ordinary retry' }] } }],
+    });
+    expect(mockGeminiClient.generateInternal.mock.calls.map(([body]) => body.project)).toEqual([
+      'project-1',
+      'project-1',
+    ]);
+  });
+
   it('rotates accounts when the no-project retry still lacks a Code Assist license', async () => {
     const service = new TestableGeminiService();
     const licenseMessage =
@@ -1094,9 +1516,15 @@ describe('ProxyService Empty Stream Retry Logic', () => {
     expect(mockGeminiClient.generateInternal.mock.calls[2][0].project).toBe('project-1');
     expect(mockAccountLeaseService.markAsForbidden).toHaveBeenCalledWith('acc-1');
     expect(mockAccountLeaseService.getNextToken).toHaveBeenNthCalledWith(2, {
-      sessionKey: undefined,
+      sessionKey: expect.stringMatching(/^session:store:v2:[a-f0-9]{64}$/),
       excludeAccountIds: ['acc-1'],
       model: 'gemini-3-flash-agent',
+      physicalTarget: true,
+      effort: undefined,
+      allowSelectionWait: false,
+      signal: mockAccountLeaseService.getNextToken.mock.calls[0][0].signal,
+      selectionDeadlineMs:
+        mockAccountLeaseService.getNextToken.mock.calls[0][0].selectionDeadlineMs,
     });
     expect(mockGeminiClient.generateInternal.mock.calls.map(([body]) => body.model)).toEqual([
       'gemini-3-flash-agent',
@@ -1104,6 +1532,31 @@ describe('ProxyService Empty Stream Retry Logic', () => {
       'gemini-3-flash-agent',
     ]);
     expect((result as any).candidates?.[0]?.content?.parts?.[0]?.text).toBe('ok');
+  });
+
+  it('does not renew the generation project downgrade after rotating accounts', async () => {
+    const service = new TestableGeminiService();
+    const failure = new UpstreamRequestError({
+      status: 403,
+      message:
+        'You are currently configured to use a Google Cloud Project but lack a Gemini Code Assist license. (#3501)',
+    });
+    mockAccountLeaseService.getNextToken
+      .mockResolvedValueOnce(createToken('acc-1'))
+      .mockResolvedValueOnce(createToken('acc-2'))
+      .mockResolvedValueOnce(null);
+    mockGeminiClient.generateInternal.mockRejectedValue(failure);
+    await expect(
+      service.handleGeminiGenerateContent('gemini-3-flash', {
+        contents: [{ role: 'user', parts: [{ text: 'Controlled project request.' }] }],
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(mockGeminiClient.generateInternal.mock.calls.map(([body]) => body.project)).toEqual([
+      'project-1',
+      undefined,
+      'project-1',
+      'project-1',
+    ]);
   });
 
   it('rotates immediately on location ineligibility without a payload project retry', async () => {
@@ -1172,6 +1625,13 @@ describe('ProxyService Empty Stream Retry Logic', () => {
 });
 
 describe('GeminiClient internal request parity', () => {
+  const generationRequest: GeminiInternalRequest = {
+    project: 'project-1',
+    model: 'gemini-3-flash',
+    requestId: 'synthetic-parity',
+    userAgent: 'synthetic-parity',
+    request: { contents: [{ role: 'user', parts: [{ text: 'Check the transport envelope.' }] }] },
+  };
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -1179,15 +1639,15 @@ describe('GeminiClient internal request parity', () => {
   it('uses fixed-length JSON body for non-stream internal requests', async () => {
     const postSpy = vi.spyOn(axios, 'post').mockResolvedValue({
       data: {
-        candidates: [{ content: { parts: [{ text: 'ok' }] } }],
+        candidates: [{ content: { parts: [{ text: 'ok' }] }, finishReason: 'STOP' }],
       },
     });
     const client = new GeminiClient(new Upstream4xxCaptureService());
 
-    await client.generateInternal({ project: 'project-1', request: {} } as any, 'access-token');
+    await client.generateInternal(structuredClone(generationRequest), 'access-token');
 
     expect(postSpy).toHaveBeenCalledOnce();
-    expect(postSpy.mock.calls[0][1]).toBe(JSON.stringify({ project: 'project-1', request: {} }));
+    expect(postSpy.mock.calls[0][1]).toBe(JSON.stringify(generationRequest));
     expect(postSpy.mock.calls[0][1]).not.toBeInstanceOf(Readable);
     expect(postSpy.mock.calls[0][2]?.headers).not.toHaveProperty('x-goog-user-project');
     expect(postSpy.mock.calls[0][2]?.headers).not.toHaveProperty('X-Goog-Api-Client');
@@ -1195,16 +1655,21 @@ describe('GeminiClient internal request parity', () => {
   });
 
   it('uses stream body only for streamGenerateContent internal requests', async () => {
-    const responseStream = new EventEmitter();
+    const responseStream = Readable.from([
+      'data: {"response":{"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"STOP"}]}}\n\n',
+    ]);
     const postSpy = vi.spyOn(axios, 'post').mockResolvedValue({
       data: responseStream,
     });
     const client = new GeminiClient(new Upstream4xxCaptureService());
 
-    await client.streamGenerateInternal(
-      { project: 'project-1', request: {} } as any,
+    const response = await client.streamGenerateInternal(
+      structuredClone(generationRequest),
       'access-token',
     );
+    for await (const _chunk of response) {
+      // Consume the response to finish its real stream/audit lifecycle.
+    }
 
     expect(postSpy).toHaveBeenCalledOnce();
     expect(postSpy.mock.calls[0][1]).toBeInstanceOf(Readable);
@@ -1229,11 +1694,11 @@ describe('GeminiClient internal request parity', () => {
     const client = new GeminiClient(new Upstream4xxCaptureService());
 
     await expect(
-      client.generateInternal({ project: 'project-1', request: {} } as any, 'access-token'),
+      client.generateInternal(structuredClone(generationRequest), 'access-token'),
     ).rejects.toMatchObject({ status: 403 });
 
     expect(postSpy).toHaveBeenCalledOnce();
-    expect(postSpy.mock.calls[0][1]).toBe(JSON.stringify({ project: 'project-1', request: {} }));
+    expect(postSpy.mock.calls[0][1]).toBe(JSON.stringify(generationRequest));
     expect(postSpy.mock.calls[0][2]?.headers).not.toHaveProperty('x-goog-user-project');
   });
 
@@ -1251,7 +1716,7 @@ describe('GeminiClient internal request parity', () => {
     const postSpy = vi.spyOn(axios, 'post').mockRejectedValue(forbidden);
     const client = new GeminiClient(new Upstream4xxCaptureService());
     await expect(
-      client.streamGenerateInternal({ project: 'project-1', request: {} } as any, 'access-token'),
+      client.streamGenerateInternal(structuredClone(generationRequest), 'access-token'),
     ).rejects.toMatchObject({
       status: 403,
       details: [expect.objectContaining({ reason: 'TOS_VIOLATION' })],
@@ -1262,21 +1727,16 @@ describe('GeminiClient internal request parity', () => {
   it('removes case-insensitive quota-project reinjection while preserving other extra headers', async () => {
     const postSpy = vi.spyOn(axios, 'post').mockResolvedValue({
       data: {
-        candidates: [{ content: { parts: [{ text: 'ok' }] } }],
+        candidates: [{ content: { parts: [{ text: 'ok' }] }, finishReason: 'STOP' }],
       },
     });
     const client = new GeminiClient(new Upstream4xxCaptureService());
 
-    await client.generateInternal(
-      { project: 'project-1', request: {} } as any,
-      'access-token',
-      undefined,
-      {
-        'anthropic-beta': 'prompt-caching-2024-07-31',
-        'X-Goog-User-Project': 'reinjected-project',
-        'x-goog-user-project': 'second-reinjection',
-      },
-    );
+    await client.generateInternal(structuredClone(generationRequest), 'access-token', undefined, {
+      'anthropic-beta': 'prompt-caching-2024-07-31',
+      'X-Goog-User-Project': 'reinjected-project',
+      'x-goog-user-project': 'second-reinjection',
+    });
 
     const headers = postSpy.mock.calls[0][2]?.headers as Record<string, string>;
     expect(Object.keys(headers).map((name) => name.toLowerCase())).not.toContain(
@@ -1292,7 +1752,7 @@ describe('GeminiClient internal request parity', () => {
     const client = new GeminiClient(new Upstream4xxCaptureService());
 
     await expect(
-      client.warmupInternal({ project: 'project-1', request: {} } as any, 'access-token'),
+      client.warmupInternal(structuredClone(generationRequest), 'access-token'),
     ).rejects.toThrow('Weekly warmup rejected with HTTP 403');
 
     expect(postSpy).toHaveBeenCalledOnce();
@@ -1317,7 +1777,7 @@ describe('GeminiClient internal request parity', () => {
     const client = new GeminiClient(new Upstream4xxCaptureService());
 
     await expect(
-      client.warmupInternal({ project: 'project-1', request: {} } as any, 'access-token'),
+      client.warmupInternal(structuredClone(generationRequest), 'access-token'),
     ).rejects.toMatchObject({ status: 403 });
 
     expect(postSpy).toHaveBeenCalledOnce();
@@ -1332,7 +1792,20 @@ describe('GeminiClient internal request parity', () => {
       undefined,
       undefined,
       {
-        data: { error: { message: 'PERMISSION_DENIED' } },
+        data: {
+          error: {
+            code: 403,
+            status: 'PERMISSION_DENIED',
+            details: [
+              {
+                '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                domain: 'googleapis.com',
+                reason: 'USER_PROJECT_DENIED',
+                metadata: { consumer: 'projects/project-1' },
+              },
+            ],
+          },
+        },
         status: 403,
         statusText: 'Forbidden',
         headers: {},
@@ -1379,12 +1852,24 @@ describe('GeminiClient internal request parity', () => {
     expect(postSpy).toHaveBeenCalledOnce();
   });
 
-  it('retains downgrade for an accepted ordinary 403', async () => {
+  it('retains downgrade for an accepted project consumer denial', async () => {
     const postSpy = vi
       .spyOn(axios, 'post')
       .mockResolvedValueOnce({
         status: 403,
-        data: '{"error":{"message":"PERMISSION_DENIED"}}',
+        data: {
+          error: {
+            status: 'PERMISSION_DENIED',
+            details: [
+              {
+                '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                domain: 'googleapis.com',
+                reason: 'USER_PROJECT_DENIED',
+                metadata: { consumer: 'projects/project-1' },
+              },
+            ],
+          },
+        },
         headers: {},
       })
       .mockResolvedValueOnce({ status: 200, data: '{}', headers: {} });
@@ -1398,10 +1883,8 @@ describe('GeminiClient internal request parity', () => {
 });
 
 describe('ProxyService Protocol Parity Fixtures', () => {
-  it('maps OpenAI request to Anthropic request with tools and tool result', () => {
-    const service = new TestableOpenAIService();
-
-    const openaiRequest = {
+  it('maps an OpenAI request to generation input with a tool call and result', () => {
+    const openaiRequest: OpenAIChatRequest = {
       model: 'claude-sonnet-4-5',
       stream: false,
       temperature: 0.2,
@@ -1447,45 +1930,43 @@ describe('ProxyService Protocol Parity Fixtures', () => {
       ],
     };
 
-    const anthropicRequest = (service as any).convertOpenAIToClaude(openaiRequest);
+    const generationInput = toOpenAIGenerationInput(openaiRequest);
 
-    expect(anthropicRequest.system).toContain('You are a precise assistant.');
-    expect(anthropicRequest.tools?.[0]?.name).toBe('search_docs');
-    expect(anthropicRequest.messages.length).toBe(3);
+    expect(generationInput.system).toContain('You are a precise assistant.');
+    expect(generationInput.tools?.[0]?.name).toBe('search_docs');
+    expect(generationInput.messages.length).toBe(3);
 
-    const assistantMessage = anthropicRequest.messages[1];
-    expect(Array.isArray(assistantMessage.content)).toBe(true);
-    expect(assistantMessage.content.some((block: any) => block.type === 'tool_use')).toBe(true);
+    const assistantMessage = generationInput.messages[1];
+    expect(assistantMessage.content).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'tool_use', id: 'call_1' })]),
+    );
 
-    const toolResultMessage = anthropicRequest.messages[2];
+    const toolResultMessage = generationInput.messages[2];
     expect(toolResultMessage.role).toBe('user');
-    expect(Array.isArray(toolResultMessage.content)).toBe(true);
-    expect(toolResultMessage.content[0].type).toBe('tool_result');
+    expect(toolResultMessage.content[0]).toMatchObject({
+      type: 'tool_result',
+      tool_use_id: 'call_1',
+    });
   });
 
-  it('maps Anthropic response to OpenAI response with reasoning and tool_calls', () => {
-    const service = new TestableOpenAIService();
-
-    const anthropicResponse = {
-      content: [
-        { type: 'thinking', thinking: 'Need to call tool first.' },
-        {
-          type: 'tool_use',
-          id: 'tool-1',
-          name: 'search_docs',
-          input: { query: 'api key' },
-        },
-        { type: 'text', text: 'Here are the docs.' },
-      ],
-      stop_reason: 'tool_use',
-      usage: {
-        input_tokens: 20,
-        output_tokens: 30,
-      },
-    };
-
-    const openaiResponse = (service as any).convertClaudeToOpenAIResponse(
-      anthropicResponse,
+  it('maps upstream reasoning and tool calls into an OpenAI response', () => {
+    const openaiResponse = toOpenAIChatResponse(
+      decodeAntigravityGenerationResult({
+        candidates: [
+          {
+            content: {
+              role: 'model',
+              parts: [
+                { thought: true, text: 'Need to call tool first.' },
+                { functionCall: { id: 'tool-1', name: 'search_docs', args: { query: 'api key' } } },
+                { text: 'Here are the docs.' },
+              ],
+            },
+            finishReason: 'STOP',
+          },
+        ],
+        usageMetadata: { promptTokenCount: 20, candidatesTokenCount: 30 },
+      }),
       'gpt-4o-mini',
     );
 
@@ -1498,15 +1979,19 @@ describe('ProxyService Protocol Parity Fixtures', () => {
 
   it('retains reasoning when a non-stream response is emitted as Chat or Responses SSE', async () => {
     const service = new TestableOpenAIService();
-    const response = (service as any).convertClaudeToOpenAIResponse(
-      {
-        content: [
-          { type: 'thinking', thinking: 'Check the input.' },
-          { type: 'text', text: 'The answer.' },
+    const response = toOpenAIChatResponse(
+      decodeAntigravityGenerationResult({
+        candidates: [
+          {
+            content: {
+              role: 'model',
+              parts: [{ thought: true, text: 'Check the input.' }, { text: 'The answer.' }],
+            },
+            finishReason: 'STOP',
+          },
         ],
-        stop_reason: 'end_turn',
-        usage: { input_tokens: 4, output_tokens: 8 },
-      },
+        usageMetadata: { promptTokenCount: 4, candidatesTokenCount: 8 },
+      }),
       'gpt-4o-mini',
     );
     const collect = async (stream: Observable<string>): Promise<string[]> => {
@@ -1590,8 +2075,8 @@ describe('ProxyService Protocol Parity Fixtures', () => {
         },
       });
 
-      stream.emit('data', Buffer.from('data: not json\n'));
-      stream.emit('data', Buffer.from(`data: ${payload}\n`));
+      stream.emit('data', Buffer.from(': upstream-heartbeat\n\n'));
+      stream.emit('data', Buffer.from(`data: ${payload}\n\n`));
       stream.emit('end');
     });
 
@@ -1618,7 +2103,7 @@ describe('ProxyService Protocol Parity Fixtures', () => {
     expect(chunks.filter((chunk) => chunk.includes('data: [DONE]'))).toHaveLength(1);
   });
 
-  it('synthesizes a Chat finish on clean EOF after content', async () => {
+  it('preserves Chat output and closes with length on an interrupted stream', async () => {
     const service = new TestableOpenAIService();
     const stream = new EventEmitter();
     const chunks: string[] = [];
@@ -1643,8 +2128,46 @@ describe('ProxyService Protocol Parity Fixtures', () => {
     await finished;
 
     expect(chunks.some((chunk) => chunk.includes('Partial answer'))).toBe(true);
-    expect(chunks.at(-2)).toContain('"finish_reason":"stop"');
+    expect(chunks.join('')).toContain('"finish_reason":"length"');
+    expect(chunks.join('')).not.toContain('"finish_reason":"stop"');
     expect(chunks.at(-1)).toBe('data: [DONE]\n\n');
+  });
+
+  it('marks OpenAI Chat and Responses accounts successful only after completion', async () => {
+    const service = new TestableOpenAIService();
+    for (const protocol of ['chat', 'responses'] as const) {
+      const stream = new PassThrough();
+      const chunks: string[] = [];
+      const finished = new Promise<void>((resolve, reject) => {
+        service.testCreateProtocolStream(stream, protocol, `acc-${protocol}`).subscribe({
+          next: (chunk) => chunks.push(chunk),
+          error: reject,
+          complete: resolve,
+        });
+      });
+
+      stream.emit(
+        'data',
+        Buffer.from(
+          `data: ${JSON.stringify({
+            response: {
+              candidates: [{ content: { parts: [{ text: 'done' }] }, finishReason: 'STOP' }],
+            },
+          })}\n\n`,
+        ),
+      );
+      await finished;
+      expect(chunks.length).toBeGreaterThan(0);
+    }
+
+    expect(mockAccountLeaseService.markModelSuccess).toHaveBeenCalledWith(
+      'acc-chat',
+      'gemini-3-flash',
+    );
+    expect(mockAccountLeaseService.markModelSuccess).toHaveBeenCalledWith(
+      'acc-responses',
+      'gemini-3-flash',
+    );
   });
 
   it('processes a final Chat SSE event without a trailing newline', async () => {
@@ -1678,9 +2201,9 @@ describe('ProxyService Protocol Parity Fixtures', () => {
     expect(chunks.some((chunk) => chunk.includes('upstream_interrupted'))).toBe(false);
   });
 
-  it('completes a Responses stream on clean EOF after output', async () => {
+  it('fails a Responses stream on clean EOF after output without a finish reason', async () => {
     const service = new TestableOpenAIService();
-    const stream = new EventEmitter();
+    const stream = new PassThrough();
     const chunks: string[] = [];
     const finished = new Promise<void>((resolve, reject) => {
       (service as any).processResponsesStreamResponse(stream, 'gpt-4o-mini').subscribe({
@@ -1706,16 +2229,16 @@ describe('ProxyService Protocol Parity Fixtures', () => {
       .flatMap((chunk) => chunk.split('\n').filter((line) => line.startsWith('data: ')))
       .map((line) => JSON.parse(line.slice('data: '.length)));
     expect(events.at(-1)).toMatchObject({
-      type: 'response.completed',
-      response: { status: 'completed' },
+      type: 'response.failed',
+      response: { status: 'failed' },
     });
-    expect(events.some((event) => event.type === 'response.failed')).toBe(false);
+    expect(events.some((event) => event.type === 'response.completed')).toBe(false);
   });
 
   it('keeps empty OpenAI streams as failures', async () => {
     const service = new TestableOpenAIService();
-    const collectEmpty = async (create: (stream: EventEmitter) => Observable<string>) => {
-      const stream = new EventEmitter();
+    const collectEmpty = async (create: (stream: PassThrough) => Observable<string>) => {
+      const stream = new PassThrough();
       const chunks: string[] = [];
       const finished = new Promise<void>((resolve, reject) => {
         create(stream).subscribe({
@@ -1741,14 +2264,10 @@ describe('ProxyService Protocol Parity Fixtures', () => {
     expect(responses.at(-1)).toContain('"type":"response.failed"');
   });
 
-  it('normalizes shell argument aliases in Chat Completions SSE output', async () => {
+  it('preserves shell names and arguments in Chat Completions SSE output', async () => {
     const service = new TestableOpenAIService();
     const stream = new EventEmitter();
-    const observable = (service as any).processStreamResponse(
-      stream,
-      'gpt-4o-mini',
-      new Set(['PowerShell']),
-    );
+    const observable = (service as any).processStreamResponse(stream, 'gpt-4o-mini');
     const chunks: string[] = [];
 
     await new Promise<void>((resolve, reject) => {
@@ -1797,8 +2316,8 @@ describe('ProxyService Protocol Parity Fixtures', () => {
       .flatMap((choice: { delta: { tool_calls?: unknown[] } }) => choice.delta.tool_calls ?? [])
       .at(0) as { function?: { arguments?: string; name?: string } } | undefined;
 
-    expect(toolCall?.function?.name).toBe('PowerShell');
-    expect(JSON.parse(toolCall?.function?.arguments ?? '{}')).toEqual({ command: 'Get-Location' });
+    expect(toolCall?.function?.name).toBe('powershell');
+    expect(JSON.parse(toolCall?.function?.arguments ?? '{}')).toEqual({ input: 'Get-Location' });
   });
 
   it('emits one neutral recovery message and stop for a malformed function call in Chat Completions SSE', async () => {
@@ -1842,7 +2361,7 @@ describe('ProxyService Protocol Parity Fixtures', () => {
       .map((choice: { finish_reason?: unknown }) => choice.finish_reason)
       .filter((finishReason: unknown): finishReason is string => typeof finishReason === 'string');
 
-    expect(contentDeltas).toEqual([expect.stringMatching(/could not complete a tool call/i)]);
+    expect(contentDeltas).toEqual([expect.stringMatching(/tool call could not be generated/i)]);
     expect(finishReasons).toEqual(['stop']);
     expect(chunks.filter((chunk) => chunk.includes('data: [DONE]'))).toHaveLength(1);
   });
@@ -1856,7 +2375,6 @@ describe('ProxyService Protocol Parity Fixtures', () => {
     const observable = (service as any).processStreamResponse(
       stream,
       'gpt-4o-mini',
-      undefined,
       sessionKey,
       6,
       'gemini-3-flash',

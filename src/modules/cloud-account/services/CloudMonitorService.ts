@@ -1,40 +1,43 @@
+import { mergeQuotaWindows } from '../utils/quota-windows';
 import fs from 'fs';
 import { z } from 'zod';
-import { CloudAccountRepo } from '@/modules/cloud-account/persistence/cloudHandler';
+import {
+  CloudAccountRepo,
+  type CloudAccountWriteGuard,
+} from '@/modules/cloud-account/persistence/cloudHandler';
 import { isAccountOAuthRecoveryBlocked } from '@/modules/cloud-account/persistence/oauth-recovery-service';
 import { CloudAccountSettingsStore } from '@/modules/cloud-account/persistence/cloud-account-settings-store';
 import { FamilyGroupStore } from '@/modules/cloud-account/persistence/family-group-store';
-import { GoogleAPIService, type QuotaData, type TokenResponse } from './GoogleAPIService';
+import { GoogleAPIService, type QuotaData } from './GoogleAPIService';
 import {
-  CLOUD_ACCOUNT_REAUTH_REQUIRED_REASON,
-  CloudAccountRefreshBlockedError,
   CloudAccountRefreshService,
   createCloudAccountRefreshRequest,
   isRetryableInvalidGrantRefreshError,
 } from './CloudAccountRefreshService';
-import {
-  CloudAccountHealthService,
-  clearValidationHealthAfterSuccessfulProbe,
-  evictAccountFromActiveLeaseCache,
-  quarantineAccountInActiveLeaseCache,
-} from './CloudAccountHealthService';
-import { classifyForbiddenUpstreamError } from '@/modules/proxy-gateway/server/common/google-error-details';
+import { clearValidationHealthAfterSuccessfulProbe } from './CloudAccountHealthService';
+import { persistServiceDisabledFromQuotaFailure } from './cloud-account-quota-refresh.service';
+import { proxyModelAvailabilityStore } from '@/server/gateway/shared/services/model-availability.service';
 import { AutoSwitchService } from './AutoSwitchService';
 import { logger } from '@/shared/logging/logger';
-import {
-  classifyAccountStatusFromError,
-  isServiceDisabledReason,
-} from '@/modules/cloud-account/utils/account-status';
+import { classifyAccountStatusFromError } from '@/modules/cloud-account/utils/account-status';
 import type { CloudAccount } from '@/modules/cloud-account/types';
 import { AntigravityAppTargetSchema } from '@/shared/platform/antigravityAppTarget';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
 import { getAntigravityStoragePaths } from '@/shared/platform/paths';
 import { detectAgyCliExecutablePath } from '@/modules/antigravity-runtime/binary-patch/agyCliPathDetection';
 import { ConfigManager } from '@/modules/config/ipc/manager';
-import { proxyModelAvailabilityStore } from '@/modules/proxy-gateway/server/shared/services/model-availability.service';
 import { WeeklyWarmupService } from './WeeklyWarmupService';
 import type { WeeklyWarmupExecutor } from './weekly-warmup-contract';
 import { cloudAccountWeeklyWarmupRunner } from './cloud-account-weekly-warmup-runner';
+import {
+  persistMonitorAccountStatusFromError,
+  mergeRefreshedToken,
+  hasReusableCachedQuota,
+  isUnauthorizedError,
+} from './cloud-monitor-refresh-state';
+import { CloudAccountRefreshWriteback } from './cloud-account-refresh-writeback';
+import { CloudAccountRefreshContextChangedError } from './cloud-account-refresh-context';
+import { CloudAccountQuotaObservation } from './cloud-account-quota-observation';
 
 const AUTO_SWITCH_CANDIDATE_TARGETS: AntigravityAppTarget[] = [
   ...AntigravityAppTargetSchema.options,
@@ -74,94 +77,14 @@ function resolveAutoSwitchTargets(): AntigravityAppTarget[] {
 }
 const BooleanSettingSchema = z.boolean();
 
-async function persistMonitorAccountStatusFromError(
-  accountId: string,
+function persistMonitorFailure(
+  account: CloudAccount,
   error: unknown,
+  guard: CloudAccountWriteGuard,
 ): Promise<void> {
-  if (isRetryableInvalidGrantRefreshError(error)) {
-    return;
-  }
-  if (error instanceof CloudAccountRefreshBlockedError) {
-    await CloudAccountRepo.setAccountStatus(
-      accountId,
-      'expired',
-      CLOUD_ACCOUNT_REAUTH_REQUIRED_REASON,
-    );
-    return;
-  }
-
-  const classified = classifyAccountStatusFromError(error);
-  if (classified) {
-    if (isServiceDisabledReason(classified.reason)) {
-      const classification = classifyForbiddenUpstreamError({ message: classified.reason });
-      if (classification.kind === 'service_disabled') {
-        await quarantineAccountInActiveLeaseCache(accountId);
-      }
-    }
-    await CloudAccountRepo.setAccountStatus(accountId, classified.status, classified.reason);
-    if (isServiceDisabledReason(classified.reason)) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      const forbiddenClassification = classifyForbiddenUpstreamError({
-        body: errorMsg,
-        message: errorMsg,
-      });
-      if (forbiddenClassification.kind === 'service_disabled') {
-        const detectedAt = Date.now();
-        await CloudAccountHealthService.mutateHealth(accountId, (health) => ({
-          ...health,
-          service_disabled: {
-            status: 'disabled',
-            reason: forbiddenClassification.reason ?? 'TOS_VIOLATION',
-            detected_at_ms: detectedAt,
-            appeal_url: forbiddenClassification.appealUrl,
-            appeal_url_link_text: forbiddenClassification.appealLinkText,
-            message: errorMsg.slice(0, 1000),
-          },
-        }));
-        await evictAccountFromActiveLeaseCache(accountId);
-      }
-    } else if (classified.status === 'paused' || classified.status === 'expired') {
-      await evictAccountFromActiveLeaseCache(accountId);
-    }
-  }
-}
-
-function hasReusableCachedQuota(account: {
-  quota?: { models?: Record<string, unknown> };
-}): boolean {
-  if (!account.quota || !account.quota.models) {
-    return false;
-  }
-  return Object.keys(account.quota.models).length > 0;
-}
-
-function isUnauthorizedError(error: unknown): boolean {
-  return error instanceof Error && error.message === 'UNAUTHORIZED';
-}
-
-function mergeRefreshedToken(
-  currentToken: CloudAccount['token'],
-  newToken: TokenResponse,
-  now: number,
-): CloudAccount['token'] {
-  return {
-    ...currentToken,
-    access_token: newToken.access_token,
-    refresh_token: newToken.refresh_token ?? currentToken.refresh_token,
-    expires_in: newToken.expires_in,
-    expiry_timestamp: now + newToken.expires_in,
-    id_token: newToken.id_token ?? currentToken.id_token,
-    oauth_client_key: GoogleAPIService.normalizeRefreshedOAuthClientKey(
-      currentToken,
-      newToken.oauth_client_key,
-    ),
-  };
-}
-
-class MonitorTokenConflictError extends Error {
-  constructor() {
-    super('Account token changed during monitor refresh');
-  }
+  return persistServiceDisabledFromQuotaFailure(account, error, guard, () =>
+    persistMonitorAccountStatusFromError(account.id, error, guard),
+  );
 }
 
 export class CloudMonitorService {
@@ -526,20 +449,22 @@ export class CloudMonitorService {
     const epoch = this.stopEpoch;
     const roundStartTime = Date.now();
     const intervalMs = Math.max(1, this.getPollIntervalMinutes()) * 60 * 1000;
-    try {
-      const refreshedAccounts: CloudAccount[] = [];
-      logger.info('CloudMonitor: Polling quotas...');
-      const accounts = await CloudAccountRepo.getAccounts();
-      const accountIds = new Set(accounts.map((account) => account.id));
-      for (const id of this.lastPolledAtByAccountId.keys()) {
-        if (!accountIds.has(id)) {
-          this.lastPolledAtByAccountId.delete(id);
-        }
+    const refreshedAccounts: CloudAccount[] = [];
+    const staleAccountIds = new Set<string>();
+    logger.info('CloudMonitor: Polling quotas...');
+    const accounts = await CloudAccountRepo.getAccounts();
+    const accountIds = new Set(accounts.map((account) => account.id));
+    for (const id of this.lastPolledAtByAccountId.keys()) {
+      if (!accountIds.has(id)) {
+        this.lastPolledAtByAccountId.delete(id);
       }
-      const familyGroups = FamilyGroupStore.getFamilyGroups();
-      const polledFamilyGroupIds = new Set<string>();
-      let now = Math.floor(Date.now() / 1000);
+    }
+    const familyGroups = FamilyGroupStore.getFamilyGroups();
+    const polledFamilyGroupIds = new Set<string>();
+    let now = Math.floor(Date.now() / 1000);
+    const observations = new Map<string, CloudAccountQuotaObservation>();
 
+    try {
       for (let i = 0; i < accounts.length; i++) {
         const account = accounts[i];
         if (this.stopped || epoch !== this.stopEpoch) {
@@ -568,15 +493,20 @@ export class CloudMonitorService {
           continue;
         }
 
+        const observation = new CloudAccountQuotaObservation(account.id);
+        observations.set(account.id, observation);
+        const writeback = new CloudAccountRefreshWriteback(account, observation);
+
         this.setSyncingAccountId(account.id);
         try {
           if (account.status === 'paused') {
             continue;
           }
-          if (account.health?.oauth?.refresh_blocked) {
-            continue;
-          }
-          if (account.health?.service_disabled || isAccountOAuthRecoveryBlocked(account.id)) {
+          if (
+            account.health?.oauth?.refresh_blocked ||
+            account.health?.service_disabled ||
+            isAccountOAuthRecoveryBlocked(account.id)
+          ) {
             continue;
           }
           if (
@@ -586,16 +516,18 @@ export class CloudMonitorService {
             continue;
           }
           now = Math.floor(Date.now() / 1000);
-          // 1. Check/Refresh Token if needed (give it a 10 min buffer here for safety)
           let accessToken = account.token.access_token;
           if (account.token.expiry_timestamp < now + 600) {
             if (!account.token.refresh_token) {
               if (account.token.expiry_timestamp <= now) {
+                await writeback.assertCurrent();
+                observation.accept();
                 logger.warn(`Monitor: Token expired without refresh token for ${account.email}`);
                 await CloudAccountRepo.setAccountStatus(
                   account.id,
                   'expired',
                   'Access token expired and no refresh token is available',
+                  writeback.guard,
                 );
                 continue;
               }
@@ -609,21 +541,20 @@ export class CloudMonitorService {
                 const newToken = await CloudAccountRefreshService.refreshAccessToken(
                   createCloudAccountRefreshRequest(account),
                 );
-                const updated = mergeRefreshedToken(account.token, newToken, now);
-                if (
-                  !(await CloudAccountRepo.compareAndUpdateToken(
-                    account.id,
-                    account.token,
-                    updated,
-                  ))
-                ) {
-                  throw new MonitorTokenConflictError();
-                }
-                account.token = updated;
+                await writeback.updateToken(mergeRefreshedToken(account.token, newToken, now));
                 accessToken = newToken.access_token;
               } catch (refreshError) {
+                if (refreshError instanceof CloudAccountRefreshContextChangedError) {
+                  throw refreshError;
+                }
                 logger.error(`Monitor: Token refresh failed for ${account.email}`, refreshError);
-                await persistMonitorAccountStatusFromError(account.id, refreshError);
+                await writeback.assertCurrent(refreshError);
+                observation.accept(refreshError);
+                await persistMonitorFailure(
+                  account,
+                  refreshError,
+                  writeback.guardFor(refreshError),
+                );
                 continue;
               }
             }
@@ -635,8 +566,12 @@ export class CloudMonitorService {
             break;
           }
 
+          const current = await CloudAccountRepo.getAccount(account.id);
+          writeback.guard(current);
+          account.quota = current?.quota;
+
           let quota: QuotaData;
-          const previousAICredits = account.quota?.ai_credits;
+          const previousAICredits = current?.quota?.ai_credits;
 
           try {
             const fetchedQuota = await GoogleAPIService.fetchQuota(
@@ -644,6 +579,8 @@ export class CloudMonitorService {
               account.proxy_url,
               signal,
             );
+            await writeback.assertCurrent();
+            observation.accept();
             quota = { ...fetchedQuota };
 
             try {
@@ -659,6 +596,7 @@ export class CloudMonitorService {
               }
             } catch (creditError) {
               signal.throwIfAborted();
+              await writeback.assertCurrent(creditError);
               if (isUnauthorizedError(creditError) && account.token.refresh_token) {
                 logger.warn(
                   `Monitor: Received 401 Unauthorized while fetching credits for ${account.email}; forcing token refresh and retry`,
@@ -668,17 +606,9 @@ export class CloudMonitorService {
                     createCloudAccountRefreshRequest(account),
                   );
                   now = Math.floor(Date.now() / 1000);
-                  const updated = mergeRefreshedToken(account.token, refreshedToken, now);
-                  if (
-                    !(await CloudAccountRepo.compareAndUpdateToken(
-                      account.id,
-                      account.token,
-                      updated,
-                    ))
-                  ) {
-                    throw new MonitorTokenConflictError();
-                  }
-                  account.token = updated;
+                  await writeback.updateToken(
+                    mergeRefreshedToken(account.token, refreshedToken, now),
+                  );
                   accessToken = refreshedToken.access_token;
 
                   const retriedAICredits = await GoogleAPIService.fetchAICredits(
@@ -693,14 +623,15 @@ export class CloudMonitorService {
                   }
                 } catch (retryError) {
                   signal.throwIfAborted();
-                  if (retryError instanceof MonitorTokenConflictError) {
+                  if (retryError instanceof CloudAccountRefreshContextChangedError) {
                     throw retryError;
                   }
                   logger.warn(
                     `Monitor: Failed to fetch credits for ${account.email} after token refresh`,
                     retryError,
                   );
-                  await persistMonitorAccountStatusFromError(account.id, retryError);
+                  await writeback.assertCurrent(retryError);
+                  await persistMonitorFailure(account, retryError, writeback.guardFor(retryError));
                   if (previousAICredits) {
                     quota.ai_credits = previousAICredits;
                   }
@@ -714,6 +645,7 @@ export class CloudMonitorService {
             }
           } catch (fetchError: unknown) {
             signal.throwIfAborted();
+            await writeback.assertCurrent(fetchError);
             if (isUnauthorizedError(fetchError) && account.token.refresh_token) {
               logger.warn(
                 `Monitor: Received 401 Unauthorized for ${account.email}; forcing token refresh and retry`,
@@ -722,13 +654,7 @@ export class CloudMonitorService {
                 createCloudAccountRefreshRequest(account),
               );
               now = Math.floor(Date.now() / 1000);
-              const updated = mergeRefreshedToken(account.token, refreshedToken, now);
-              if (
-                !(await CloudAccountRepo.compareAndUpdateToken(account.id, account.token, updated))
-              ) {
-                throw new MonitorTokenConflictError();
-              }
-              account.token = updated;
+              await writeback.updateToken(mergeRefreshedToken(account.token, refreshedToken, now));
               accessToken = refreshedToken.access_token;
 
               const retriedQuota = await GoogleAPIService.fetchQuota(
@@ -736,6 +662,8 @@ export class CloudMonitorService {
                 account.proxy_url,
                 signal,
               );
+              await writeback.assertCurrent();
+              observation.accept();
               quota = { ...retriedQuota };
 
               try {
@@ -768,18 +696,18 @@ export class CloudMonitorService {
             break;
           }
 
-          // 3. Update DB & clear failures
-          await CloudAccountRepo.updateQuota(account.id, quota);
-          account.quota = quota;
-          this.lastPolledAtByAccountId.set(account.id, Date.now());
-
           if (quota.is_forbidden || quota.isForbidden) {
             logger.warn(
               `Monitor: Account ${account.email} is forbidden / ineligible for quota summary; auto-pausing account.`,
             );
             const pauseReason =
               'Google account forbidden or ineligible for Cloud Code Assist (no weekly quota)';
-            await CloudAccountRepo.setAccountStatus(account.id, 'paused', pauseReason);
+            await CloudAccountRepo.setAccountStatus(
+              account.id,
+              'paused',
+              pauseReason,
+              writeback.guard,
+            );
             account.status = 'paused';
             account.status_reason = pauseReason;
             const { evictAccountFromActiveLeaseCache } =
@@ -788,12 +716,20 @@ export class CloudMonitorService {
             continue;
           }
 
-          await CloudAccountRepo.setAccountStatus(account.id, 'active', null);
-          await clearValidationHealthAfterSuccessfulProbe(account);
+          quota = mergeQuotaWindows(account.quota, quota);
+          await CloudAccountRepo.updateQuota(account.id, quota, writeback.guard);
+          account.quota = quota;
+          this.lastPolledAtByAccountId.set(account.id, Date.now());
+          await CloudAccountRepo.setAccountStatus(account.id, 'active', null, writeback.guard);
+          await clearValidationHealthAfterSuccessfulProbe(account, writeback.guard);
+          await writeback.assertCurrent();
+          proxyModelAvailabilityStore.clearCapabilityFailures(
+            account.id,
+            Object.keys(quota.models),
+          );
           account.status = 'active';
           account.status_reason = undefined;
           refreshedAccounts.push(account);
-          proxyModelAvailabilityStore.clearCapabilityFailures(account.id);
 
           if (familyGroup) {
             polledFamilyGroupIds.add(familyGroup.id);
@@ -821,24 +757,33 @@ export class CloudMonitorService {
             }
           }
         } catch (error) {
+          logger.error(`Monitor: Failed to update ${account.email}`, error);
           if (signal.aborted || epoch !== this.stopEpoch) {
             break;
           }
-          if (error instanceof MonitorTokenConflictError) {
-            logger.warn('Monitor: Account token changed during refresh; skipping stale result');
+          if (error instanceof CloudAccountRefreshContextChangedError) {
+            staleAccountIds.add(account.id);
             continue;
           }
-          logger.error(`Monitor: Failed to update ${account.email}`, error);
-          await persistMonitorAccountStatusFromError(account.id, error);
+          try {
+            await writeback.assertCurrent(error);
+            observation.accept(error);
+            await persistMonitorFailure(account, error, writeback.guardFor(error));
+          } catch (statusError) {
+            if (statusError instanceof CloudAccountRefreshContextChangedError) {
+              staleAccountIds.add(account.id);
+              logger.warn('Monitor: Skipped status write for a changed account', statusError);
+              continue;
+            }
+            throw statusError;
+          }
           const classified = isRetryableInvalidGrantRefreshError(error)
             ? null
             : classifyAccountStatusFromError(error);
-          if (classified) {
-            if (classified.status === 'rate_limited' && hasReusableCachedQuota(account)) {
-              logger.warn(
-                `Monitor: Quota request rate-limited for ${account.email}, keeping cached quota as fallback.`,
-              );
-            }
+          if (classified?.status === 'rate_limited' && hasReusableCachedQuota(account)) {
+            logger.warn(
+              `Monitor: Quota request rate-limited for ${account.email}, keeping cached quota as fallback.`,
+            );
           }
         } finally {
           this.setSyncingAccountId(null);
@@ -862,8 +807,11 @@ export class CloudMonitorService {
       if (this.stopped || epoch !== this.stopEpoch) {
         return;
       }
+
+      const isCurrent = (account: CloudAccount) =>
+        !staleAccountIds.has(account.id) && observations.get(account.id)?.isCurrent() === true;
       try {
-        this.effects.onQuotaUpdated(accounts);
+        this.effects.onQuotaUpdated(accounts.filter(isCurrent));
       } catch {
         logger.warn('Cloud monitor presentation effect failed');
       }
@@ -883,9 +831,13 @@ export class CloudMonitorService {
       }
 
       if (epoch === this.stopEpoch) {
-        await this.runWeeklyWarmups(refreshedAccounts);
+        await this.runWeeklyWarmups(refreshedAccounts.filter(isCurrent));
       }
     } finally {
+      for (const observation of observations.values()) {
+        observation.close();
+      }
+
       const roundDuration = Date.now() - roundStartTime;
       logger.info(`CloudMonitor: Poll round completed in ${Math.round(roundDuration / 1000)}s`);
 

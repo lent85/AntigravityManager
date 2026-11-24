@@ -38,8 +38,10 @@ Run all nine cases for each platform and owner:
 | `image-edit`                         | OpenAI Images editing    | Decodable image with predominantly blue rather than red colored pixels |
 
 Anthropic video is a gateway extension, not a claim about the official Anthropic API.
-The input model defaults to `gemini-3.1-pro-high`; generation/editing default to
+The input model defaults to `gemini-3.8-flash-high`; generation/editing default to
 `gemini-3.1-flash-image`. `--model` explicitly selects another available model.
+Recognition requests allow 1,024 output tokens for reasoning and the visible answer.
+The runner rejects responses that report truncation even when they name the expected colors.
 
 ```powershell
 pnpm run test:acceptance multimodal request --case chat-video --owner cli --gateway http://127.0.0.1:PORT --profile-home C:\path\to\isolated-profile --output C:\path\to\results
@@ -82,7 +84,7 @@ A pass requires two completed HTTP 200 audit records, observable public reasonin
 positive reported reasoning tokens, the correct final answer and a healthy Thought Store with
 no additional write failures. Reports retain thought block/byte counts, per-turn tokens and
 retry statuses, never thought text or signatures. A worker being alive alone cannot prove thinking.
-The default model is `gemini-3.1-pro-high`; a pass using it does not certify Claude quota or every
+The default model is `gemini-3.8-flash-high`; a pass using it does not certify Claude quota or every
 model family. These calls are non-streaming; streaming is covered separately by agent tasks and
 focused protocol tests.
 

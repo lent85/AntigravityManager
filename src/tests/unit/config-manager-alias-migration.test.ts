@@ -26,6 +26,7 @@ vi.mock('@/modules/antigravity-runtime/utils/autoStart', () => ({
 }));
 // This configuration test needs only the listening state, not the account-cache status query.
 vi.mock('@/server/main', () => ({
+  getNestServerRestartFields: () => [],
   getNestServerStatus: async () => ({ running: false, port: 0 }),
 }));
 
@@ -135,6 +136,32 @@ describe('ConfigManager alias migration', () => {
     expect(written.proxy.anthropic_mapping).toEqual({});
   });
 
+  it('retains hidden publication across a save and reload without dropping generation mappings', async () => {
+    writeLegacyConfig();
+    const { ConfigManager } = await import('@/modules/config/ipc/manager');
+    const { getConfiguredModelMapping, getPublishedModelMapping } =
+      await import('@/modules/config/model-aliases');
+    const loaded = ConfigManager.loadConfig();
+    loaded.proxy.model_aliases = [
+      { alias: 'private-fast', target: 'gemini-3-flash', enabled: true, published: false },
+      { alias: 'adaptive-fast', target: 'auto:gemini-flash-low', enabled: true, published: true },
+    ];
+    loaded.proxy.custom_mapping = {};
+    loaded.proxy.anthropic_mapping = {};
+    await ConfigManager.saveConfig(loaded);
+    vi.resetModules();
+    const { ConfigManager: ReloadedConfigManager } = await import('@/modules/config/ipc/manager');
+    const reloaded = ReloadedConfigManager.loadConfig();
+    expect(reloaded.proxy.model_aliases).toEqual(loaded.proxy.model_aliases);
+    expect(getConfiguredModelMapping(reloaded.proxy)).toEqual({
+      'private-fast': 'gemini-3-flash',
+      'adaptive-fast': 'auto:gemini-flash-low',
+    });
+    expect(getPublishedModelMapping(reloaded.proxy)).toEqual({
+      'adaptive-fast': 'auto:gemini-flash-low',
+    });
+  });
+
   it('keeps one pre-migration backup, and does not take a second on the next save', async () => {
     writeLegacyConfig();
     const backupPath = `${configPath}.pre-alias-migration.bak`;
@@ -161,6 +188,39 @@ describe('ConfigManager alias migration', () => {
     expect(fs.readdirSync(agentDir.value).filter((name) => name.endsWith('.tmp'))).toEqual([]);
     // The config still parses -- a rename either happened or did not, never halfway.
     expect(() => JSON.parse(fs.readFileSync(configPath, 'utf-8'))).not.toThrow();
+  });
+
+  it('treats blank files as recoverable defaults but preserves corrupt JSON in strict mode', async () => {
+    const { ConfigLoadError, ConfigManager } = await import('@/modules/config/ipc/manager');
+
+    fs.writeFileSync(configPath, ' \r\n\t', 'utf8');
+    expect(ConfigManager.loadConfig(true).proxy.port).toBeGreaterThanOrEqual(1024);
+
+    fs.writeFileSync(configPath, '{broken', 'utf8');
+    expect(() => ConfigManager.loadConfig(true)).toThrowError(ConfigLoadError);
+    expect(() => ConfigManager.loadConfig(true)).toThrow('Configuration JSON is invalid');
+    expect(fs.readFileSync(configPath, 'utf8')).toBe('{broken');
+  });
+
+  it('rejects schema-invalid configuration instead of exposing unvalidated values', async () => {
+    fs.writeFileSync(configPath, JSON.stringify({ proxy: { port: 'not-a-port' } }), 'utf8');
+    const { ConfigLoadError, ConfigManager } = await import('@/modules/config/ipc/manager');
+
+    expect(() => ConfigManager.loadConfig(true)).toThrowError(ConfigLoadError);
+    expect(ConfigManager.getCachedConfig()).toBeNull();
+  });
+
+  it('fills the network policy defaults for configurations from before D23', async () => {
+    writeLegacyConfig();
+    const { ConfigManager } = await import('@/modules/config/ipc/manager');
+    expect(ConfigManager.loadConfig(true).proxy.network).toEqual({
+      lan_access: false,
+      ip_filter_mode: 'off',
+      ip_allowlist: [],
+      ip_blocklist: [],
+      allowlist_takes_precedence: true,
+      trusted_proxy_cidrs: [],
+    });
   });
 
   it('migrates a config handed straight to save without a load', async () => {

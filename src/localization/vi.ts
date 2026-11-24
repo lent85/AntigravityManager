@@ -1,4 +1,36 @@
+import { errorDiagnosticsEnglish } from '@/modules/error-diagnostics/localization';
+import { imageSendWindowEnglish } from '@/modules/proxy-gateway/settings/localization';
 const vi = {
+  'image-send-window': imageSendWindowEnglish,
+  'error-diagnostics': errorDiagnosticsEnglish,
+  'account-evidence': {
+    'subscription-unavailable':
+      'Làm mới gói đăng ký thất bại; chưa có cấp đăng ký nào được xác nhận trước đó.',
+    'observed-at': 'Quan sát gần nhất: {{time}}',
+    'checked-at': 'Kiểm tra gần nhất: {{time}}',
+    'unknown-time': 'Chưa ghi nhận',
+    'invalid-data': 'Dữ liệu hạn mức không hợp lệ; hãy làm mới để kiểm tra.',
+    'reset-unknown': 'Chưa rõ thời gian đặt lại.',
+    'exhausted-unknown-reset': 'Hạn mức cửa sổ đã hết; chưa rõ thời gian đặt lại.',
+    'recheck-required': 'Cửa sổ đã hết hạn mức và kết thúc; cần làm mới để xác nhận khôi phục.',
+    'window-ended': 'Cửa sổ đã kết thúc; số dư chưa được xác nhận lại.',
+    'weekly-exhausted': 'Hạn mức tuần đã hết; số dư của cửa sổ khác không gỡ bỏ giới hạn này.',
+    'window-exhausted': 'Hạn mức cửa sổ đã hết.',
+    'group-restrictions': 'Giới hạn theo nhóm hạn mức',
+    'group-limited':
+      'Cửa sổ đã hết hạn mức. Lần đặt lại muộn nhất đã biết: {{time}}; vẫn cần xác nhận khôi phục.',
+    'subscription-failed':
+      'Làm mới gói đăng ký thất bại hoặc thiếu thông tin; đang hiển thị bản ghi trước.',
+    'subscription-unrecognized': 'Không nhận diện được cấp đăng ký; đang dùng mức cơ sở Free.',
+    'subscription-missing': 'Không nhận được thông tin đăng ký; đang dùng mức cơ sở Free.',
+    'subscription-observed': 'Đã ghi nhận thông tin đăng ký.',
+    'subscription-unknown': 'Chưa ghi nhận nguồn đăng ký.',
+    'source-paid': 'Nguồn: gói đăng ký trả phí',
+    'source-current': 'Nguồn: gói đăng ký hiện tại',
+    'source-free': 'Nguồn: cấp miễn phí được xác định rõ',
+    'source-unknown': 'Nguồn: chưa rõ',
+    'small-positive': 'Vẫn còn một ít số dư dương; cửa sổ này chưa hết hạn mức.',
+  },
   'agent-tools': {
     title: 'Kết nối công cụ lập trình',
     description: 'Chọn công cụ để dùng mô hình qua Antigravity Manager.',
@@ -60,7 +92,6 @@ const vi = {
       'key-missing': 'Hãy tạo khóa kết nối ở trang proxy trước.',
       'review-route-disabled': 'Tuyến kiểm tra Codex bị tắt. Hãy bật trong ánh xạ mô hình.',
     },
-
     'address-help': 'Giữ địa chỉ Manager hiện tại, trừ khi dịch vụ chạy trên máy tính khác.',
     'invalid-address':
       'Dùng địa chỉ Manager bắt đầu bằng http:// hoặc https://, không chứa thông tin đăng nhập hay tham số bổ sung.',
@@ -110,7 +141,6 @@ const vi = {
     unknown: 'Không rõ',
     notAvailable: 'Không có',
     openMenu: 'Mở menu',
-
     'dismiss-notification': 'Đóng thông báo',
     'reading-settings': 'Đang đọc cài đặt của bạn…',
   },
@@ -425,6 +455,195 @@ const vi = {
     },
   },
   settings: {
+    'defaults-writeback-failed':
+      'Đang dùng các giá trị mặc định độc lập trong bộ nhớ. Chưa lưu được tệp cài đặt ban đầu. Kiểm tra quyền truy cập rồi thử lại.',
+    'partial-save-failed':
+      'Một số cài đặt chưa được lưu. Các thay đổi đã lưu được giữ lại, phần lỗi vẫn ở bản nháp.',
+    'service-apply-failed':
+      'Đã lưu cài đặt nhưng một số dịch vụ đang chạy chưa áp dụng được thay đổi.',
+    'save-owner-service': 'Cài đặt dịch vụ',
+    'save-owner-desktop': 'Tùy chọn máy tính',
+    'save-owner-accountAlertPolicy': 'Chính sách cảnh báo tài khoản',
+    'save-state-saved': 'Đã lưu',
+    'save-state-failed': 'Chưa lưu',
+    'retry-unsaved': 'Thử lại thay đổi chưa lưu',
+    'apply-step-gateway-config': 'Cài đặt cổng',
+    'apply-step-audit': 'Kho kiểm toán',
+    'apply-step-thought-store': 'Lịch sử suy luận',
+    'apply-step-error-diagnostics': 'Chẩn đoán lỗi',
+    'apply-step-runtime-status': 'Trạng thái hoạt động',
+    'affected-fields': 'Cài đặt bị ảnh hưởng: {{fields}}',
+    'restart-fields': 'Khởi động lại dịch vụ để áp dụng: {{fields}}',
+    'cowork-runtime': {
+      'operation-description':
+        'Kiểm tra môi trường chạy Claude Cowork cục bộ và quản lý thay đổi trên các gói được hỗ trợ.',
+      'capability-note':
+        'Chỉ các gói đã xác minh mới cho phép thay đổi và điều khiển tiến trình. Các môi trường khác chỉ có thể được kiểm tra.',
+      path: 'Đường dẫn',
+      package: 'Gói',
+      eligible: 'Gói đã được xác minh để thay đổi và điều khiển tiến trình.',
+      mutating: 'Đang thực hiện thao tác…',
+      'interrupted-help':
+        'Thao tác trước đã bị gián đoạn. Hãy xem trước quá trình khôi phục môi trường này trước khi áp dụng thay đổi.',
+      'preview-restore': 'Xem trước khôi phục',
+      'process-status': 'Trạng thái tiến trình',
+      'refresh-process': 'Làm mới trạng thái tiến trình',
+      'write-blocked':
+        'Hãy xác minh trạng thái tiến trình của thực thể đã chọn trước khi tiếp tục.',
+      'review-apply': 'Xem lại và áp dụng',
+      'review-restore': 'Xem lại và khôi phục',
+      'read-error': 'Không thể đọc môi trường này. Hãy quét lại hoặc kiểm tra đường dẫn tùy chỉnh.',
+      'backup-state': 'Sao lưu và khôi phục',
+      'preview-ready': 'Đã có bản xem trước. Hãy xem lại thao tác trước khi xác nhận.',
+      action: 'Thao tác',
+      'backup-id': 'ID bản sao lưu',
+      'backup-create': 'Sẽ được tạo khi áp dụng thay đổi',
+      'backup-unavailable': 'Không có',
+      signature: 'Ký mã',
+      lifecycle: 'Điều khiển tiến trình',
+      'confirm-process': 'Thao tác này chỉ ảnh hưởng đến thực thể đã chọn.',
+      'confirm-write':
+        'Nếu thực thể đã chọn đang chạy, hệ thống sẽ dừng phiên bản đó rồi ghi và xác minh thay đổi.',
+      'confirm-restore':
+        'Quá trình khôi phục có thể chỉ cập nhật nhật ký khôi phục. Nếu cần khôi phục tệp, hệ thống sẽ dừng thực thể đã chọn nếu đang chạy.',
+      'restart-option': 'Khởi động thực thể đã chọn sau khi ghi thành công',
+      'restart-plan': 'Phiên bản đã chọn sẽ khởi động sau khi xác minh nội dung ghi.',
+      'leave-stopped-plan':
+        'Nếu phiên bản bị dừng để ghi, phiên bản đó sẽ tiếp tục ở trạng thái dừng.',
+      'operation-result': 'Kết quả thao tác',
+      'unknown-outcome':
+        'Không thể xác nhận kết quả thao tác «{{action}}». Hãy quét lại rồi kiểm tra môi trường và trạng thái tiến trình trước khi thử lại.',
+      'write-effect': 'Ảnh hưởng đến tệp môi trường',
+      'rollback-result': 'Kết quả khôi phục',
+      'restart-result': 'Kết quả khởi động lại',
+      'operation-id': 'ID thao tác',
+      'recovery-location': 'Vị trí dữ liệu khôi phục',
+      'rollback-error': 'Không thể khôi phục ({{reason}}).',
+      'recovery-required':
+        'Cần khôi phục. Hãy kiểm tra môi trường và xem chi tiết khôi phục trước khi thử lại.',
+      'restart-failed-help':
+        'Hãy làm mới trạng thái tiến trình trước khi thử khởi động lại thực thể đã chọn.',
+      'fresh-preview':
+        'Hãy quét lại trước khi thực hiện thao tác khác. Tạo bản xem trước mới trước khi áp dụng thay đổi hoặc khôi phục.',
+      backups: {
+        'not-inspected': 'Chưa kiểm tra',
+        none: 'Không có bản sao lưu',
+        available: 'Có bản sao lưu',
+        interrupted: 'Cần khôi phục',
+      },
+      actions: {
+        apply: 'Áp dụng thay đổi',
+        restore: 'Khôi phục',
+        stop: 'Dừng tiến trình đã chọn',
+        start: 'Khởi động tiến trình đã chọn',
+      },
+      signatures: {
+        'not-required': 'Không cần',
+        unsupported: 'Không được hỗ trợ',
+      },
+      lifecycles: {
+        'selected-instance': 'Chỉ thực thể đã chọn',
+        unsupported: 'Không được hỗ trợ',
+      },
+      'process-states': {
+        running: 'Đang chạy',
+        stopped: 'Đã dừng',
+        unknown: 'Không rõ',
+        unsupported: 'Không được hỗ trợ',
+      },
+      outcomes: {
+        applied: 'Đã áp dụng thay đổi',
+        restored: 'Đã khôi phục môi trường',
+        'already-current': 'Đã ở trạng thái yêu cầu',
+        failed: 'Thao tác thất bại',
+      },
+      effects: {
+        none: 'Không có thay đổi',
+        committed: 'Đã ghi thay đổi',
+        'rolled-back': 'Đã hoàn tác thay đổi',
+        uncertain: 'Không thể xác nhận trạng thái tệp',
+      },
+      recoveries: {
+        'not-needed': 'Không cần',
+        verified: 'Đã xác minh khôi phục',
+        failed: 'Khôi phục thất bại',
+      },
+      restarts: {
+        'not-requested': 'Không được yêu cầu',
+        'not-attempted': 'Chưa thử',
+        verified: 'Đã xác minh khởi động',
+        failed: 'Khởi động thất bại',
+      },
+      failures: {
+        'selection-expired': 'Lựa chọn đã hết hạn. Hãy quét lại.',
+        'stale-target': 'Môi trường đã thay đổi sau khi kiểm tra. Hãy quét lại.',
+        'unsupported-target': 'Môi trường này không hỗ trợ thao tác đã yêu cầu.',
+        'unavailable-preview': 'Bản xem trước không có sẵn. Hãy tạo bản xem trước mới.',
+        busy: 'Một thao tác khác đang diễn ra.',
+        'process-state-unknown': 'Không thể xác minh trạng thái tiến trình của thực thể đã chọn.',
+        'stop-failed': 'Không thể dừng thực thể đã chọn.',
+        'write-failed': 'Không thể ghi thay đổi.',
+        'verification-failed': 'Không thể xác minh thay đổi.',
+        'backup-invalid': 'Không thể xác thực bản sao lưu.',
+        'recovery-required': 'Hãy khôi phục môi trường này trước khi thực hiện thay đổi khác.',
+        'lifecycle-failed': 'Không thể hoàn tất thao tác trên tiến trình.',
+      },
+      'before-hash': 'SHA-256 hiện tại',
+      'after-hash': 'SHA-256 bản xem trước',
+      'byte-range': 'Phạm vi byte mã nguồn',
+      'native-payload': 'Dữ liệu nhúng Bun (Mach-O arm64)',
+      'native-module-count': 'Số mô-đun được đóng gói',
+      'native-entry-point': 'Điểm vào trong gói',
+      'native-payload-range': 'Từ byte {{start}} đến byte {{end}} (không tính byte cuối)',
+      'native-payload-scope':
+        'Chỉ dùng để kiểm tra. Đã phát hiện vùng chứa. Gói và hàm JavaScript chưa được xác minh.',
+      title: 'Runtime Claude Cowork',
+      description: 'Kiểm tra runtime cục bộ và xem trước thay đổi mà không sửa tệp hay tiến trình.',
+      'history-note':
+        'Chính sách 8k là lượng lịch sử gần đây tối thiểu giữ lại khi nén, không phải giới hạn tổng prompt hay ngữ cảnh mô hình.',
+      'custom-path': 'Đường dẫn runtime tùy chỉnh (không bắt buộc)',
+      'path-help':
+        'Để trống để quét vị trí macOS thông thường. Trên nền tảng khác, nhập tệp hoặc thư mục. Tối đa 32 kết quả.',
+      scan: 'Quét runtime',
+      targets: 'Chọn runtime',
+      working: 'Đang đọc runtime…',
+      empty: 'Không tìm thấy runtime. Thử đường dẫn tệp hoặc thư mục tùy chỉnh.',
+      state: 'Trạng thái phát hiện',
+      version: 'Phiên bản',
+      matches: 'Hàm khớp',
+      'read-only':
+        'Chỉ cho phép kiểm tra. Chưa có chức năng áp dụng, khôi phục hay điều khiển tiến trình.',
+      inspect: 'Kiểm tra lại',
+      preview: 'Xem trước thay đổi',
+      error: 'Không thể kiểm tra runtime. Quét lại để cập nhật lựa chọn hoặc kiểm tra đường dẫn.',
+      states: {
+        original: 'Chính sách gốc',
+        'legacy-return0': 'Chính sách cũ trả về 0',
+        'legacy-35k': 'Chính sách cũ 35k',
+        'current-8k': 'Phát hiện chính sách 8k',
+        unsupported: 'Runtime không được nhận diện',
+        ambiguous: 'Nhiều vị trí khớp',
+        unreadable: 'Không đọc được runtime',
+      },
+      reasons: {
+        'windows-recipe-unverified':
+          'Chưa xác minh quy trình cho gói Windows. Chỉ kiểm tra, không sửa hoặc điều khiển tiến trình.',
+        'native-payload-unverified':
+          'Chưa xác minh hỗ trợ mã nhị phân gốc. Không sửa hoặc điều khiển tiến trình.',
+        'bundle-recovery-unverified':
+          'Chưa xác minh khôi phục và ký gói ứng dụng. Không sửa hoặc điều khiển tiến trình.',
+        'package-ownership-unverified':
+          'Chưa xác minh danh tính gói và quyền sở hữu tiến trình. Không sửa hoặc điều khiển tiến trình.',
+      },
+      previews: {
+        ready: 'Đã tạo bản xem trước. Mục này vẫn chỉ đọc; chưa áp dụng thay đổi.',
+        'inspection-only':
+          'Có thể xem trước thay đổi mã nguồn, nhưng chưa hỗ trợ sửa gói này. Chưa áp dụng thay đổi.',
+        'already-current':
+          'Mã nguồn đã có chính sách 8k. Điều này không chứng minh gói được hỗ trợ hoặc thao tác thành công.',
+        unavailable: 'Không có bản xem trước thay đổi an toàn. Chưa áp dụng thay đổi.',
+      },
+    },
     'service-unavailable':
       'Hiện không thể mở hoặc lưu cài đặt. Hãy thử lại. Nếu vẫn gặp lỗi, hãy đóng rồi mở lại Antigravity Manager.',
     'service-retry': 'Thử lại',
@@ -442,6 +661,32 @@ const vi = {
       enabled: 'Bật làm nóng hạn mức hàng tuần',
       groups: 'Nhóm hạn mức cần làm nóng',
       group: { claude: 'Nhóm hạn mức Claude', gemini: 'Nhóm hạn mức Gemini' },
+    },
+    thinkingBudget: {
+      title: 'Ngân sách suy nghĩ',
+      description: 'Chọn ai quyết định mức độ suy nghĩ của mô hình và ngân sách cho từng cấp độ.',
+      controlSource: 'Nguồn điều khiển',
+      controlSourceHint:
+        'Gateway áp dụng các ngân sách bên dưới. Client chuyển tiếp ngân sách hoặc cấp độ effort từ yêu cầu.',
+      gatewayHint:
+        'Nhập -1 hoặc ngân sách dương. Flash Low và Medium dùng ngân sách mặc định khi nhập -1; các trường khác giữ chế độ thích ứng. Nguồn điều khiển và ngân sách được áp dụng cùng nhau khi lưu.',
+      clientHint:
+        'Yêu cầu tự quyết định ngân sách suy nghĩ hoặc cấp độ effort. Các ngân sách gateway bên dưới không được áp dụng.',
+      adaptiveHint: '-1 để mô hình quyết định',
+      'flash-low-default-hint': '-1 dùng ngân sách mặc định Flash Low là 1000 token',
+      'flash-medium-default-hint': '-1 dùng ngân sách mặc định Flash Medium là 4000 token',
+      invalid: 'Nhập -1 hoặc số nguyên từ 1 đến 131072. Sửa các giá trị 0 đã lưu trước khi lưu.',
+      'configuration-invalid':
+        'Các giá trị ngân sách suy nghĩ này bị từ chối. Hãy nhập -1 hoặc số nguyên từ 1 đến 131072.',
+      source: { gateway: 'Gateway', client: 'Client' },
+      family: { flash: 'Gemini Flash', pro: 'Gemini Pro', claude: 'Claude' },
+      level: {
+        low: 'Thấp',
+        medium: 'Trung bình',
+        high: 'Cao',
+        tiered: 'Phân tầng',
+        default: 'Mặc định',
+      },
     },
     title: 'Cài đặt',
     description: 'Quản lý tùy chọn ứng dụng.',
@@ -467,6 +712,10 @@ const vi = {
       light: 'Sáng',
       dark: 'Tối',
     },
+    'interface-zoom': 'Thu phóng giao diện',
+    'appearance-saving': 'Đang lưu tùy chọn…',
+    'appearance-save-failed': 'Không thể lưu tùy chọn.',
+    'appearance-retry': 'Thử lại',
     language: {
       title: 'Ngôn ngữ',
       description: 'Chọn ngôn ngữ bạn muốn sử dụng.',
@@ -479,10 +728,7 @@ const vi = {
       portuguese: 'Tiếng Bồ Đào Nha (Brazil)',
       japanese: 'Tiếng Nhật',
     },
-    about: {
-      title: 'Thông tin',
-      description: 'Thông tin ứng dụng.',
-    },
+    about: { title: 'Thông tin', description: 'Thông tin ứng dụng.' },
     cache: {
       title: 'Bộ nhớ đệm Antigravity',
       description:
@@ -500,7 +746,6 @@ const vi = {
       clearedDescription: 'Đã xóa {{size}} MB khỏi các thư mục bộ nhớ đệm Antigravity.',
       failedTitle: 'Không thể xóa bộ nhớ đệm',
       notFoundTitle: 'Không tìm thấy bộ nhớ đệm Antigravity',
-
       'paths-failed': 'Không thể tìm vị trí bộ nhớ đệm',
       'paths-retry-description': 'Vui lòng thử lại trước khi xóa bộ nhớ đệm.',
       'partial-title': 'Không thể xóa một phần bộ nhớ đệm',
@@ -515,13 +760,8 @@ const vi = {
     auto_update_disabled_desc: 'Đã tắt (khuyên dùng cho bản tùy biến)',
     openLogDir: 'Mở',
     toast: {
-      saved: {
-        title: 'Đã lưu cài đặt',
-        description: 'Cấu hình của bạn đã được cập nhật.',
-      },
-      saveFailed: {
-        title: 'Không thể lưu cài đặt',
-      },
+      saved: { title: 'Đã lưu cài đặt', description: 'Cấu hình của bạn đã được cập nhật.' },
+      saveFailed: { title: 'Không thể lưu cài đặt' },
     },
     account: {
       'client-setup': 'Vị trí và cách khởi chạy ứng dụng',
@@ -660,18 +900,18 @@ const vi = {
       saving: 'Đang lưu...',
     },
     autoSwitchModels: {
-      title: 'Auto-Switch Models Config',
+      title: 'Quy tắc tự động chuyển tài khoản',
       description:
-        'Configure which models trigger auto-switch when depleted, and prioritize specific models when selecting the next active account.',
-      searchPlaceholder: 'Search models...',
-      noModels: 'No models found.',
-      noModelsFound: 'No models found.',
-      includeLabel: 'Include',
-      priorityLabel: 'Priority',
-      save: 'Lưu cấu hình',
-      saving: 'Đang lưu...',
-      saved: 'Đã lưu cấu hình tự động chuyển đổi mô hình.',
-      saveFailed: 'Lưu cấu hình tự động chuyển đổi thất bại.',
+        'Chọn các mô hình có hạn mức được xét khi tự động chuyển tài khoản và các mô hình được ưu tiên khi chọn tài khoản tiếp theo.',
+      searchPlaceholder: 'Tìm mô hình…',
+      noModels: 'Không có mô hình khả dụng.',
+      noModelsFound: 'Không tìm thấy mô hình phù hợp.',
+      includeLabel: 'Đưa vào',
+      priorityLabel: 'Ưu tiên',
+      save: 'Lưu quy tắc',
+      saving: 'Đang lưu…',
+      saved: 'Đã lưu quy tắc tự động chuyển tài khoản.',
+      saveFailed: 'Không thể lưu quy tắc tự động chuyển tài khoản.',
       noRestartTitle: 'Live Sync liền mạch (Không restart IDE/App)',
       noRestartDesc:
         'Đồng bộ token trực tiếp vào OS Credential Store mà không tắt/mở lại cửa sổ IDE.',
@@ -739,32 +979,156 @@ const vi = {
     save: 'Lưu cài đặt',
   },
   toast: {
-    backupSuccess: {
-      title: 'Thành công',
-      description: 'Đã tạo bản sao lưu tài khoản.',
-    },
-    backupError: {
-      title: 'Lỗi',
-      description: 'Không thể tạo bản sao lưu: {{error}}',
-    },
-    switchSuccess: {
-      title: 'Thành công',
-      description: 'Chuyển tài khoản thành công.',
-    },
-    switchError: {
-      title: 'Lỗi',
-      description: 'Không thể chuyển tài khoản: {{error}}',
-    },
-    deleteSuccess: {
-      title: 'Thành công',
-      description: 'Đã xóa bản sao lưu tài khoản.',
-    },
-    deleteError: {
-      title: 'Lỗi',
-      description: 'Không thể xóa bản sao lưu: {{error}}',
-    },
+    backupSuccess: { title: 'Thành công', description: 'Đã tạo bản sao lưu tài khoản.' },
+    backupError: { title: 'Lỗi', description: 'Không thể tạo bản sao lưu: {{error}}' },
+    switchSuccess: { title: 'Thành công', description: 'Chuyển tài khoản thành công.' },
+    switchError: { title: 'Lỗi', description: 'Không thể chuyển tài khoản: {{error}}' },
+    deleteSuccess: { title: 'Thành công', description: 'Đã xóa bản sao lưu tài khoản.' },
+    deleteError: { title: 'Lỗi', description: 'Không thể xóa bản sao lưu: {{error}}' },
+  },
+  'client-config': {
+    'profiles-title': 'Hồ sơ kết nối',
+    'profiles-help':
+      'Lưu kết nối và tham chiếu khóa riêng biệt. Lưu hồ sơ không đổi cài đặt máy khách. Xem trước khi áp dụng.',
+    'profile-new': 'Hồ sơ mới',
+    'profile-name': 'Tên hồ sơ',
+    'profile-client': 'Máy khách',
+    'profile-credential': 'Nguồn thông tin xác thực',
+    'profile-key-keep': 'Giữ khóa đã lưu của hồ sơ này',
+    'profile-key-manager': 'Khóa proxy Manager hiện tại',
+    'profile-key-opencode': 'Khóa OpenCode riêng hiện có',
+    'profile-key-client': 'Khóa trong cấu hình máy khách hiện tại',
+    'profile-save': 'Lưu hồ sơ',
+    'profile-delete': 'Xóa hồ sơ đã lưu',
+    'profile-provider-mode': 'Máy khách này hỗ trợ nhà cung cấp riêng cho hồ sơ.',
+    'profile-single-active':
+      'Áp dụng hồ sơ sẽ đổi kết nối đang dùng của máy khách. Các hồ sơ đã lưu khác vẫn được giữ.',
+    'profile-delete-help':
+      'Xóa hồ sơ “{{name}}”? Trước tiên hãy gỡ cấu hình đã áp dụng vào máy khách.',
+    'profile-saved': 'Đã lưu hồ sơ. Xem trước rồi áp dụng cài đặt máy khách.',
+    'profile-deleted': 'Đã xóa hồ sơ đã lưu.',
+    'profile-required-default': 'Chọn mô hình mặc định từ danh sách của máy khách này.',
+    'config-conflict':
+      'Cài đặt đã thay đổi hoặc không thuộc Manager. Làm mới rồi xem lại bản xem trước.',
+    'config-invalid':
+      'Định dạng cấu hình hoặc kho lưu trữ không được hỗ trợ. Giữ nguyên tệp và kiểm tra định dạng.',
+    'config-read-failed': 'Không thể đọc cài đặt máy khách. Kiểm tra quyền tệp rồi thử lại.',
+    'config-key-missing': 'Đặt khóa API proxy Manager trước khi đồng bộ.',
+    'config-backup-failed':
+      'Không thể xác minh hoặc tạo bản sao lưu riêng cần thiết. Kiểm tra bản sao lưu và quyền.',
+    'config-unavailable': 'Dịch vụ cấu hình chưa sẵn sàng hoặc đang tắt. Thử lại khi sẵn sàng.',
+    'config-home-missing': 'Đặt DSH_HOME cho backend để xác định đúng hồ sơ DSH.',
+    'config-write-failed':
+      'Chưa xác nhận được việc ghi. Kiểm tra tệp máy khách và bản sao lưu trước khi xem trước lại.',
+    'dsh-store-key': 'Lưu khóa Manager riêng vào DSH',
+    'dsh-store-key-help':
+      'Yêu cầu kho thông tin xác thực DSH v1 gốc được khai báo trong hồ sơ này. Từ chối kho tùy chỉnh. Khóa chỉ ở phía máy chủ.',
+    'dsh-credential-retained':
+      'Giữ lại thông tin xác thực vì hồ sơ khác có thể còn dùng hoặc chưa xác nhận được quyền sở hữu.',
+    'dsh-credential-remove':
+      'Xóa thông tin xác thực riêng không bị thay đổi sau khi kiểm tra các hồ sơ khác.',
+    'dsh-default-restore': 'Khôi phục mô hình mặc định trước đó',
+    'client-description':
+      'Xem trước rồi cấu hình nhà cung cấp cho {{name}}. Chưa xác minh sử dụng thực tế trong ứng dụng khách.',
+    'version-unknown': 'Đã tìm thấy chương trình; chưa biết phiên bản',
+    'client-read-failed': 'Không đọc được cài đặt. Kiểm tra cấu hình rồi thử lại.',
+    'discover-models': 'Bật khám phá mô hình',
+    'openclaw-version': 'Định dạng cấu hình OpenClaw',
+    'choose-version': 'Chọn v1 hoặc v2',
+    'version-help':
+      'Chọn định dạng được phiên bản OpenClaw đã cài hỗ trợ. Không đoán phiên bản chưa biết.',
+    activate: 'Đặt nhà cung cấp này làm mặc định',
+    'default-model': 'Mô hình mặc định',
+    'default-help': 'Mô hình mặc định phải thuộc danh sách đã chọn.',
+    'backend-key':
+      'Backend được chọn cung cấp khóa Manager. Không hiển thị thông tin xác thực khác.',
+    'saved-client': 'Đã lưu cấu hình. Mở lại {{name}} và xác minh một yêu cầu.',
+    'invalid-client': 'Kiểm tra URL, ID, mô hình mặc định và định dạng bắt buộc.',
+    'merge-models': 'Đặt chế độ mô hình toàn cục thành merge',
+    'merge-models-change': 'Bản xem trước này đổi chế độ mô hình toàn cục thành merge.',
+    'dsh-description':
+      'Kết nối hồ sơ DSH hiện có với Manager. Lưu cấu hình không xác minh yêu cầu thực tế.',
+    profile: 'Hồ sơ',
+    protocol: 'Giao thức',
+    'credential-reference': 'Biến môi trường chứa thông tin xác thực',
+    'credential-reference-help': 'Nhập tên biến DSH hiện có. Giá trị bí mật vẫn do DSH lưu giữ.',
+    'model-ids': 'ID mô hình, ngăn cách bằng dấu phẩy hoặc xuống dòng',
+    'profile-found': 'Đã tìm thấy hồ sơ',
+    'profile-missing': 'Không tìm thấy hồ sơ',
+    'read-failed': 'Không đọc được hồ sơ. Kiểm tra DSH_HOME rồi thử lại.',
+    'preview-save': 'Xem trước cấu hình',
+    'preview-remove': 'Xem trước việc gỡ',
+    'review-save': 'Kiểm tra thay đổi',
+    'review-remove': 'Kiểm tra gỡ nhà cung cấp được quản lý',
+    'review-help':
+      'Chỉ nhà cung cấp được quản lý thay đổi. Tệp đã đổi sau khi xem trước sẽ bị từ chối.',
+    confirm: 'Áp dụng thay đổi đã kiểm tra',
+    cancel: 'Hủy',
+    'no-change': 'Không cần thay đổi.',
+    saved: 'Đã lưu cấu hình. Xác minh bằng yêu cầu mới trong DSH.',
+    failed: 'Chưa xác nhận được kết quả. Làm mới trạng thái và xem trước trước khi thử lại.',
+    invalid: 'Kiểm tra hồ sơ, URL, tên biến và ID mô hình.',
+    'receipt-failed':
+      'Cấu hình đã đổi nhưng chưa lưu được bản ghi quyền sở hữu. Kiểm tra hồ sơ trước khi thay đổi tiếp.',
   },
   cloud: {
+    'recommendation-target': 'Ứng dụng nhận đề xuất',
+    'use-recommended-account': 'Dùng tài khoản được đề xuất',
+    'no-target-recommendation': 'Không có tài khoản phù hợp cho ứng dụng này',
+    'recommendation-target-classic': 'Classic',
+    'project-id': {
+      title: 'ID dự án',
+      empty: 'Chưa đặt',
+      help: 'Nếu Google trả về ID, ID đó sẽ thay thế giá trị đã lưu. Sau khi xóa, cổng có thể tìm lại ID khi cần.',
+      clear: 'Xóa',
+      fetch: 'Lấy từ Google',
+      save: 'Lưu',
+      loading: 'Đang tải ID dự án…',
+      'load-failed': 'Không thể tải ID dự án.',
+      retry: 'Thử lại',
+      updating: 'Đang cập nhật ID dự án…',
+      updated: 'Đã cập nhật ID dự án.',
+      conflict: 'Tài khoản hoặc ID dự án đã thay đổi. Giá trị hiện tại đã được tải lại.',
+      'fetch-failed': 'Không thể lấy ID dự án từ Google.',
+      'update-failed': 'Không thể cập nhật ID dự án.',
+    },
+    'pool-summary': {
+      title: 'Hạn mức nhóm tài khoản',
+      'enabled-normal': 'Đã bật và bình thường',
+      'all-normal': 'Tất cả bình thường, kể cả đã tắt',
+      disabled: 'Đã tắt thủ công',
+      exceptions: 'Lỗi xác minh / OAuth / truy cập',
+      'unknown-health': 'Chưa xác nhận tình trạng',
+      'current-clients': 'Đang dùng trong ứng dụng khách',
+      'rate-limited': 'Đang giới hạn tốc độ',
+      scope: 'Phạm vi thống kê',
+      'filtered-scope': 'Tài khoản theo bộ lọc gói hiện tại ({{visible}} trên {{total}}).',
+      denominator: '{{known}} đã biết / {{total}} tài khoản',
+      'model-family': 'Nhóm mô hình',
+      'five-hour': '5 giờ',
+      weekly: 'Hàng tuần',
+      effective: 'Mức thấp nhất có hiệu lực',
+      weighted: 'Trọng số theo gói',
+      unknown: 'Chưa biết',
+      empty:
+        'Không có tài khoản bình thường trong phạm vi này. Đổi phạm vi hoặc kiểm tra trạng thái.',
+      'no-families': 'Chưa có hạn mức mô hình hiển thị được biết trong phạm vi này.',
+      ready: 'Hạn mức sẵn sàng',
+      exhausted: 'Đã hết',
+      cooling: 'Chờ / giới hạn tốc độ',
+      stale: 'Cần làm mới',
+      'weighted-note':
+        'Chỉ tính tỷ lệ còn lại. Ultra ×2, Pro ×1,5, Free ×1. Gói chưa biết bị loại khỏi trọng số; mỗi biến thể chỉ tính một lần cho mỗi tài khoản.',
+      'status-note':
+        'Hạn mức trong ảnh chụp không xác nhận khả năng gọi qua gateway. Thiếu dữ liệu là chưa biết, không phải không hỗ trợ. Danh tính ứng dụng khách tách biệt với điều kiện proxy.',
+      'weighted-denominator': '{{known}} tài khoản có trọng số; loại {{unknown}} do chưa biết gói',
+      zero: 'Không có hạn mức đã biết',
+      'unknown-value': '—',
+      snapshot: 'Trạng thái ảnh chụp',
+      'enabled-normal-count': 'Đã bật và bình thường',
+      'account-details': 'Chi tiết trạng thái tài khoản',
+      'missing-reset': 'Chưa biết thời điểm đặt lại',
+    },
     'total-accounts': 'Tổng số tài khoản',
     title: 'Tài khoản',
     description: 'Quản lý các tài khoản Google Gemini của bạn.',
@@ -954,7 +1318,7 @@ const vi = {
         'Không tìm thấy mức sử dụng hằng tuần trong thông tin nhận được.',
     },
     authDialog: {
-      'manual-sign-in': 'Nhập mã thủ công',
+      'manual-sign-in': 'Dán mã hoặc địa chỉ gọi lại',
       'waiting-for-browser':
         'Hoàn tất đăng nhập trong trình duyệt. Cửa sổ này sẽ tự động cập nhật.',
       title: 'Thêm tài khoản Google',
@@ -963,9 +1327,10 @@ const vi = {
       oauthClient: 'Cách đăng nhập',
       oauthClientPlaceholder: 'Chọn cách đăng nhập',
       openLogin: 'Mở trang đăng nhập',
-      authCode: 'Mã ủy quyền',
-      placeholder: 'Dán mã bắt đầu bằng 4/...',
-      instruction: 'Nếu đăng nhập không tự hoàn tất, hãy dán mã từ trình duyệt vào đây.',
+      authCode: 'Mã hoặc địa chỉ gọi lại',
+      placeholder: 'Dán mã hoặc toàn bộ địa chỉ gọi lại từ trình duyệt',
+      instruction:
+        'Bắt đầu đăng nhập ở trên, rồi dán mã hoặc địa chỉ gọi lại của lần đó. Địa chỉ phải chứa state của lần đăng nhập hiện tại.',
       verify: 'Xác thực và thêm',
     },
     card: {
@@ -1023,6 +1388,26 @@ const vi = {
       detailedQuota: 'Quota chi tiết',
       quotaGroupUnknown: 'Nhóm quota',
       quotaStatus: 'Hạn ngạch còn lại',
+      cycleUsage: 'Mức dùng cục bộ trong chu kỳ hiện tại',
+      cycleUsageLoading: 'Đang tải mức dùng đã lưu…',
+      cycleUsageQueryFailed: 'Truy vấn mức dùng cho {{group}} thất bại',
+      cycleUsageTokens: 'Đã biết: {{count}} token',
+      'cycle-usage-cached-tokens': 'Bộ nhớ đệm: {{count}} token',
+      'cycle-usage-cached-incomplete': 'Thiếu mức dùng bộ nhớ đệm cho {{count}} yêu cầu',
+      cycleUsageLocal: 'lượt thử cục bộ đã lưu',
+      cycleUsageRequests: '{{count}} yêu cầu có dữ liệu đầy đủ',
+      cycleUsageIncomplete:
+        '{{missing}} yêu cầu thiếu mức dùng của lượt thử · {{ambiguous}} yêu cầu không rõ nguồn',
+      'cycle-usage-scope':
+        'Theo thời điểm bắt đầu lượt thử · chỉ bản ghi cục bộ · không phải tổng thanh toán',
+      'cycle-usage-verified-google-account':
+        'Tài khoản Google đã xác minh · gồm bản ghi liên kết từ các lần thêm trước',
+      'cycle-usage-current-account-only':
+        'Chỉ lần thêm và thông tin xác thực hiện tại · chưa liên kết các lần thêm trước',
+      'cycle-usage-known-subtotal':
+        'Chỉ cộng mức dùng thực tế đã biết của các lượt thử; yêu cầu chưa đầy đủ vẫn có thể đóng góp token.',
+      'cycle-usage-legacy-ambiguity':
+        'Yêu cầu cũ không xác định được tài khoản có thể chỉ được đếm là yêu cầu chưa rõ theo thời điểm bắt đầu; mức dùng của chúng bị loại trừ.',
       gemini3Ready: 'Sẵn sàng cho Gemini 3',
       groupGoogleGemini: 'Google Gemini',
       groupAnthropicClaude: 'Anthropic Claude',
@@ -1035,6 +1420,9 @@ const vi = {
       'proxy-replace-placeholder': 'Nhập địa chỉ proxy mới',
       'proxy-remove': 'Xóa proxy',
       'proxy-save-failed': 'Không thể lưu proxy',
+      'proxy-routing-save-failed': 'Không thể lưu cài đặt định tuyến proxy',
+      'proxy-priority': 'Độ ưu tiên proxy (1–100)',
+      'proxy-enabled': 'Cho phép tài khoản xử lý yêu cầu proxy',
       noProxy: 'Không dùng proxy',
       aiCredits: 'AI Credits',
       aiCreditsValue: '{{amount}} credits',
@@ -1074,7 +1462,6 @@ const vi = {
       deleteVersionSuccess: 'Đã xóa bản lịch sử',
       openFolderSuccess: 'Đã mở thư mục lưu hồ sơ',
       baseline: 'Thông tin thiết bị ban đầu',
-
       description: 'Lưu thông tin thiết bị cho tài khoản này để sử dụng khi chuyển tài khoản.',
       'load-failed': 'Không thể đọc thông tin thiết bị',
       'retry-description': 'Vui lòng thử lại. Thông tin thiết bị đã lưu chưa bị thay đổi.',
@@ -1127,15 +1514,14 @@ const vi = {
           'login-failed': 'Không thể thêm tài khoản. Hãy thử lại.',
           'proxy-configuration-invalid':
             'Lưu địa chỉ proxy hợp lệ hoặc tắt proxy trong Cài đặt, sau đó thử đăng nhập lại.',
+          'invalid-manual-input':
+            'Mã hoặc địa chỉ gọi lại không hợp lệ hoặc thuộc lần đăng nhập khác. Hãy sao chép lại từ lần đăng nhập hiện tại và thử lại.',
         },
       },
       quotaRefreshed: 'Đã làm mới quota',
       refreshFailed: 'Không thể làm mới quota',
       pollFailed: 'Không thể polling quota của tất cả tài khoản',
-      switched: {
-        title: 'Đã chuyển tài khoản!',
-        description: 'Đang khởi động lại Antigravity...',
-      },
+      switched: { title: 'Đã chuyển tài khoản!', description: 'Đang khởi động lại Antigravity...' },
       switchFailed: 'Không thể chuyển tài khoản',
       switchFailureCodes: {
         'account-not-found': 'Tài khoản này không còn tồn tại.',
@@ -1197,6 +1583,8 @@ const vi = {
       quotaFlash: 'Quota Flash',
     },
     exportImport: {
+      'transfer-menu': 'Nhập / Xuất',
+      'import-from-file': 'Nhập từ tệp',
       'file-errors': {
         'file-too-large': 'Tệp đã chọn quá lớn. Hãy chọn bản sao lưu tài khoản nhỏ hơn.',
         'invalid-export': 'Không nhận dạng được bản sao lưu tài khoản này. Hãy chọn tệp hợp lệ.',
@@ -1236,6 +1624,7 @@ const vi = {
         'antigravity-keyring': 'Thông tin đăng nhập do hệ thống lưu',
         'antigravity-classic-db': 'Tài khoản đã lưu trong Antigravity',
         'antigravity-ide-db': 'Tài khoản đã lưu trong Antigravity IDE',
+        'antigravity-agy-file': 'Phiên đăng nhập đã lưu của Antigravity CLI',
       },
       validationErrors: {
         'credential-unavailable':
@@ -1266,12 +1655,9 @@ const vi = {
         'session-consumed':
           'Kết quả quét này đã được sử dụng. Hãy quét lại để nhập thêm tài khoản.',
       },
-
       title: 'Nhập tài khoản từ máy này',
-
       trigger: 'Nhập tài khoản từ máy này',
     },
-
     feedback: {
       'loading-title': 'Đang đọc tài khoản',
       'loading-description': 'Thông tin tài khoản sẽ xuất hiện ở đây khi sẵn sàng.',
@@ -1456,6 +1842,17 @@ const vi = {
       start: 'Bắt đầu dịch vụ',
       stop: 'Dừng dịch vụ',
       start_failed: 'Không thể khởi động dịch vụ',
+      'status-unavailable': 'Không thể đọc trạng thái dịch vụ',
+      'persistence-diagnostic': 'Mã chẩn đoán: {{diagnosticId}}',
+      'retry-save-failed': 'Không thể lưu lựa chọn khởi động. Hãy thử lưu lại.',
+      'stop-failed': 'Không thể dừng proxy.',
+      'operation-failed':
+        'Chưa xác nhận được kết quả thao tác. Kiểm tra trạng thái proxy rồi thử lại.',
+      'persistence-failed-started':
+        'Proxy đã chạy nhưng chưa lưu được cài đặt lần khởi động tiếp theo.',
+      'persistence-failed-stopped':
+        'Proxy đã dừng nhưng chưa lưu được cài đặt lần khởi động tiếp theo.',
+      'retry-save': 'Thử lưu lại',
       port_in_use_title: 'Cổng đã được sử dụng',
       port_in_use_description:
         'Cổng {{port}} đang được một tiến trình khác sử dụng. Hãy đóng tiến trình đó, hoặc đổi cổng lắng nghe API proxy trong Cài đặt rồi thử lại.',
@@ -1480,9 +1877,51 @@ const vi = {
       'global-system-prompt-character-count': '{{count}} ký tự',
       'global-system-prompt-long-warning':
         'Hướng dẫn dài hơn 2.000 ký tự sẽ để lại ít chỗ hơn cho lịch sử hội thoại. Hãy cân nhắc rút gọn.',
+      compaction: {
+        'trusted-sources': 'Phạm vi khóa được tin cậy',
+        'trust-desc':
+          'Chọn khóa API proxy hiện tại cho phối hợp Cowork. Mọi ứng dụng dùng chung khóa này đều được bao gồm. Dùng khóa riêng nếu cần loại các ứng dụng khác khỏi phạm vi. Chỉ dấu vân tay của khóa được lưu. Phạm vi chỉ có hiệu lực khi khóa này vẫn là khóa proxy hiện tại.',
+        'trust-current-key': 'Tin cậy khóa proxy hiện tại',
+        'key-required': 'Đặt khóa API proxy ở trên trước khi chọn phạm vi tin cậy.',
+        'no-trusted-sources': 'Chưa chọn phạm vi tin cậy. Phối hợp Cowork chưa hoạt động.',
+        'revoke-key': 'Thu hồi tin cậy',
+        'revoke-key-label': 'Thu hồi tin cậy cho dấu vân tay {{digest}}',
+        'trust-limit': 'Đã lưu 32 phạm vi. Thu hồi một phạm vi trước khi thêm.',
+        saving: 'Đang lưu cài đặt Cowork…',
+        'save-failed': 'Không thể lưu cài đặt Cowork. Hãy thử lại thao tác.',
+        retry: 'Thử lại',
+        title: 'Nén ngữ cảnh Cowork',
+        description:
+          'Phối hợp tóm tắt và thay thế lịch sử với ứng dụng Cowork; phiên thông thường không bị cắt tự động.',
+        auto: 'Bật phối hợp nén tự động',
+        'auto-desc':
+          'Chỉ các yêu cầu Cowork được nhận diện và vượt ngưỡng mới nhận phản hồi điều khiển cục bộ.',
+        manual: 'Bật phối hợp /compact thủ công',
+        'manual-desc':
+          'Cho phép lệnh Cowork /compact rõ ràng bắt đầu luồng do ứng dụng điều khiển.',
+        threshold: 'Ngưỡng tự động (token đầu vào ước tính)',
+        'threshold-desc':
+          'Mặc định 200.000; ngưỡng hiệu dụng cũng tính chi phí cố định của hệ thống và công cụ.',
+      },
       local_access: 'Truy cập trong mạng nội bộ:',
       select_ip: 'Chọn IP',
       no_token_warning: 'API key chưa được đặt. Bất kỳ ai trong mạng đều có thể truy cập!',
+      lan_access: 'Cho phép truy cập mạng nội bộ',
+      lan_access_desc: 'Mở proxy trên mạng nội bộ. Cần có API key.',
+      ip_access_title: 'Quy tắc truy cập IP',
+      ip_access_desc:
+        'Giới hạn yêu cầu mô hình, WebSocket và quản trị công khai theo địa chỉ máy khách.',
+      ip_filter_mode: 'Chế độ lọc IP',
+      ip_filter_off: 'Tắt',
+      ip_filter_allowlist: 'Chỉ danh sách cho phép',
+      ip_filter_blocklist: 'Danh sách chặn',
+      ip_filter_both: 'Danh sách cho phép và chặn',
+      ip_allowlist: 'IP hoặc CIDR được phép',
+      ip_blocklist: 'IP hoặc CIDR bị chặn',
+      trusted_proxy_cidrs: 'CIDR proxy tin cậy',
+      allowlist_precedence: 'Ưu tiên danh sách cho phép',
+      allowlist_precedence_desc:
+        'Địa chỉ trong danh sách cho phép có thể vượt qua mục bị chặn tương ứng.',
       show_key: 'Hiện',
       hide_key: 'Ẩn',
       cloud_code_meta: 'Tương thích Cloud Code',
@@ -1490,8 +1929,35 @@ const vi = {
         'Thêm thông tin phản hồi cần thiết cho các công cụ Cloud Code cũ. Chỉ bật khi công cụ cần, vì công cụ khác có thể không chấp nhận thông tin này.',
     },
     mapping: {
+      'alias-rules': 'Bí danh mô hình',
+      'alias-rules-description':
+        'Chọn đích cho từng tên được yêu cầu. Bí danh ẩn vẫn nhận yêu cầu. Đích tự động chỉ dùng mô hình đủ điều kiện trong các tài khoản.',
+      'no-rules': 'Chưa có bí danh tùy chỉnh. Hãy thêm quy tắc.',
+      'requested-model': 'Tên mô hình được yêu cầu',
+      'target-model': 'Mô hình đích',
+      'routing-strategy': 'Chiến lược định tuyến',
+      'fixed-target': 'Mô hình cố định',
+      'auto-flash': 'Flash khả dụng, suy nghĩ thấp',
+      'auto-flash-description':
+        'Dùng mô hình Flash đủ điều kiện với mức suy nghĩ thấp. Trả lỗi không khả dụng nếu không có mô hình phù hợp.',
+      'auto-opus': 'Opus mới nhất khả dụng',
+      'auto-opus-description': 'Ưu tiên Opus 5.5, rồi 4.6. Luôn giữ trong dòng Opus.',
+      'auto-opus-compat': 'Ưu tiên Opus 4.7',
+      'auto-opus-compat-description': 'Chọn mô hình đủ điều kiện theo thứ tự Opus 4.7, 4.6, 5.5.',
+      'route-enabled': 'Nhận yêu cầu',
+      published: 'Hiện trong danh sách mô hình',
+      'remove-rule': 'Xóa quy tắc {{index}}',
+      'pattern-hidden': 'Mẫu ký tự đại diện và tên chiến lược không xuất hiện trong danh sách.',
+      'add-rule': 'Thêm bí danh',
+      'save-rules': 'Lưu bí danh',
+      'saving-rules': 'Đang lưu…',
+      'discard-rules': 'Hủy thay đổi',
+      'invalid-rules': 'Nhập tên yêu cầu duy nhất và mô hình đích cho mỗi quy tắc.',
+      'save-failed': 'Không thể lưu. Nội dung chỉnh sửa được giữ lại; hãy thử lưu lần nữa.',
+      'rules-saved': 'Đã lưu bí danh.',
       title: 'Ánh xạ mô hình',
-      description: 'Chọn mô hình Gemini xử lý yêu cầu cho từng mô hình Claude.',
+      description:
+        'Ánh xạ tên mô hình được yêu cầu đến mô hình cố định hoặc mô hình khả dụng trong các tài khoản.',
       maps_to: 'Ánh xạ tới',
       restore: 'Khôi phục mặc định',
       'only-raw-quota-models': 'Chỉ liệt kê mô hình tìm thấy trong tài khoản',
@@ -1555,17 +2021,16 @@ const vi = {
       'success-title': 'Đã cập nhật cấu hình OpenCode',
       'error-title': 'Cập nhật OpenCode thất bại',
       'unknown-error': 'Lỗi cấu hình OpenCode không xác định',
-
       'choose-model-hint': 'Chọn ít nhất một mô hình để tiếp tục.',
       'config-retry-description': 'Vui lòng thử lại. Cấu hình đã lưu chưa bị thay đổi.',
     },
-    examples: {
-      title: 'Ví dụ sử dụng',
-      description: 'Ví dụ lệnh để gọi local API proxy.',
-    },
+    examples: { title: 'Ví dụ sử dụng', description: 'Ví dụ lệnh để gọi local API proxy.' },
     persistence: {
       title: 'Request history and reasoning',
       description: 'Inspect bounded local records without slowing model traffic.',
+      'successful-probes': 'Capture successful probes',
+      'successful-probes-description':
+        'Save successful health checks and model-directory polling. Failures and other business requests are still recorded when request history is enabled.',
       'audit-title': 'Lịch sử yêu cầu',
       'audit-description':
         'Lưu yêu cầu, phản hồi và các lần gửi tới dịch vụ mô hình trên máy tính này, đồng thời ẩn thông tin nhạy cảm.',
@@ -1574,9 +2039,32 @@ const vi = {
       dropped:
         'Không thể lưu {{count}} bản ghi ({{reason}}). Các yêu cầu mô hình vẫn tiếp tục bình thường.',
       'disk-gib': 'Disk limit (GiB)',
-      'body-hours': 'Thời gian giữ nội dung đầy đủ (giờ)',
-      'summary-days': 'Summary retention (days)',
+      'capacity-window':
+        'Giữ toàn bộ yêu cầu trong giới hạn dung lượng và số lượng. Xóa các yêu cầu đã hoàn tất cũ nhất trước; yêu cầu đang chạy được bảo vệ.',
       'max-rows': 'Maximum rows',
+      'queue-records': 'Pending command limit (32–4,096)',
+      'queue-mib': 'Pending command bytes (16–64 MiB)',
+      'version-unavailable': 'Refresh or upgrade the owner before editing audit settings.',
+      'save-saving': 'Saving and applying settings…',
+      'save-applied': 'Settings saved and applied.',
+      maintenance: 'History maintenance: {{state}}',
+      'maintenance-running': 'running',
+      'maintenance-scheduled': 'scheduled',
+      'maintenance-idle': 'idle',
+      'maintenance-stopped': 'stopped',
+      'maintenance-unknown': 'unavailable',
+      'reload-failed': 'Settings could not be refreshed. Refresh this page before retrying.',
+      'save-partial-failure':
+        'Đã lưu cài đặt nhưng một số thay đổi chưa được áp dụng cho dịch vụ đang chạy.',
+      'save-restart-required':
+        'Saved, but runtime application is incomplete. Check service status.',
+      'save-conflict': 'Settings changed elsewhere. Review refreshed settings before retrying.',
+      'save-failed': 'Save completion unconfirmed. Refresh and review before retrying.',
+      'invalid-number': 'Enter a finite number of at least {{min}}.',
+      'budget-current':
+        'Configured: {{disk}} MiB / {{rows}} requests. Queue: {{commands}} commands / {{queue}} MiB.',
+      'pressure-note':
+        'Reclamation is gradual and active captures/readers can delay it. The latest drop does not guarantee current write status.',
       'no-audit': 'No traffic records yet.',
       'audit-metadata': 'Chi tiết yêu cầu và các lần gọi dịch vụ mô hình',
       'audit-body-missing': 'Nội dung đầy đủ của yêu cầu hoặc phản hồi không còn được lưu.',
@@ -1595,7 +2083,40 @@ const vi = {
       'thought-title': 'Reasoning history',
       'thought-description': 'Save reasoning so later turns can continue the conversation.',
       sessions: '{{count}} sessions',
-      'hard-limit': 'Mỗi cuộc hội thoại lưu tối đa 200 lượt và 64 MiB nội dung.',
+      'hard-limit':
+        'Memory cache: {{turns}} turns / {{memory}} MiB per session. Durable history has its own {{disk}} MiB disk budget and retention.',
+      'thought-cache-turns': 'Cached turns per session (10–10,000)',
+      'thought-cache-mib': 'Session cache limit (1–64 MiB)',
+      'thought-disk-mib': 'Reasoning disk budget (128–16,384 MiB)',
+      'thought-stats-unavailable': 'Reasoning statistics are unavailable.',
+      'thought-count-unknown': 'Saved record count unavailable',
+      'thought-records': '{{count}} saved records',
+      'thought-memory': 'Memory: {{records}} records / {{bytes}}',
+      'thought-tool-links': 'Recoverable tool links: {{records}}',
+      'thought-recovery-partial':
+        'Thought records were processed, but some recovery-history cleanup is unconfirmed. Refresh and check before another operation.',
+      'no-thought-records': 'No saved reasoning records in this page.',
+      'thought-record-pages': 'Reasoning history pages',
+      'history-page-complete': 'Page {{page}} · end of this history window',
+      'history-page-more': 'Page {{page}} · more records available',
+      'record-unavailable': 'This record is no longer available. Refresh the session.',
+      'thought-delete-receipt': 'Deleted {{sessions}} sessions and {{records}} records.',
+      'thought-delete-scope':
+        'Delete all retained reasoning records in session {{session}}? Other sessions are unaffected.',
+      'thought-mutation-uncertain':
+        'The operation could not be confirmed. History was refreshed; check it before trying again.',
+      'cancel-action': 'Cancel',
+      'thought-failures':
+        'Failures: {{reads}} reads / {{admission}} cold admissions / {{writes}} writes',
+      'thought-write-failure':
+        'Last persistence failure: {{reason}}. Current memory does not guarantee recovery after restart.',
+      'thought-session-capacity': 'No durable session slot available',
+      'thought-maintenance-active-sessions': 'Maintenance deferred to protect active requests.',
+      'thought-maintenance-checkpoint-busy': 'Maintenance paused for a pinned SQLite reader.',
+      'thought-maintenance-no-progress':
+        'Disk reclamation made no progress; further pressure deletion paused.',
+      'thought-maintenance-oversized-record':
+        'An old record exceeds the bounded cleanup budget; manual diagnosis is required.',
       'retention-days': 'Retention (days)',
       'max-sessions': 'Maximum sessions',
       oversized: 'Nội dung vượt quá 64 MiB nên không được lưu đầy đủ.',
@@ -1604,12 +2125,30 @@ const vi = {
       'copy-signature': 'Copy signature',
       'no-thought': 'No reasoning history yet.',
       'clear-thought': 'Clear reasoning history',
+      'clear-failed': 'Không thể xóa lịch sử suy luận.',
+      'delete-failed': 'Không thể xóa phiên này.',
+      'load-failed': 'Không thể tải các phiên suy luận.',
       'repair-thought': 'Sửa chữa lịch sử suy luận',
       'confirm-clear': 'Xác nhận xóa',
       'confirm-repair': 'Xác nhận sửa chữa',
     },
   },
   traffic: {
+    'export-har': 'Xuất HAR',
+    'har-exporting': 'Đang xuất HAR…',
+    'har-export-saved': 'Đã lưu tệp HAR.',
+    'har-export-failed':
+      'Không thể xác nhận quá trình xuất đã hoàn tất. Kiểm tra tệp, làm mới yêu cầu rồi thử lại.',
+    'har-export-wait': 'Chờ yêu cầu hoàn tất trước khi xuất.',
+    'attempt-timing': {
+      'upload-finished': 'Tải lên hoàn tất',
+      'response-headers': 'Tiêu đề phản hồi',
+      'first-byte': 'Byte phản hồi đầu tiên',
+      'first-output': 'Nội dung hợp lệ đầu tiên',
+      'previous-attempts': 'Tổng các lần thử trước',
+      description:
+        'Các giai đoạn được đo từ đầu lần thử này. Tín hiệu duy trì kết nối không được tính là nội dung hợp lệ. Các lần thử trước chỉ cộng thời lượng đã ghi.',
+    },
     'recovered-badge': 'Đã khôi phục ({{count}} lần thử)',
     'recovered-hint': 'Đã khôi phục sau {{count}} lần thử',
     'fallback-diagnostics': 'Chẩn đoán dự phòng',
@@ -1617,6 +2156,68 @@ const vi = {
     'fallback-attempt-recovered': 'Đã khôi phục ở lần thử {{index}} {{operation}}{{status}}',
     'reset-dropped': 'Đặt lại',
     'reset-dropped-failed': 'Không thể đặt lại bộ đếm. Vui lòng thử lại.',
+    'archive-storage-note':
+      'Backups are kept separately and are not automatically removed by the audit capacity window.',
+    'capture-interrupted-description':
+      'The previous application process stopped before capture finished. The model result is unknown; the recorded end time is when capture was reconciled.',
+    'live-storage': 'Live audit: {{size}}',
+    'archive-storage': 'Backups: {{size}} ({{count}} files)',
+    'archive-storage-unknown': 'Backup size unknown',
+    'storage-unavailable': 'Could not measure audit storage.',
+    'storage-loading': 'Measuring audit storage…',
+    'save-full': 'Export saved content',
+    'copy-loaded': 'Copy visible view',
+    capture: {
+      refresh: 'Refresh capture',
+      missing: 'No saved body',
+      'missing-description':
+        'No capture metadata is available for this selection. The reason is unknown.',
+      writing: 'Capture in progress',
+      'writing-description':
+        'Saved content may still change. Export is available after capture finishes.',
+      complete: 'Capture complete',
+      empty: 'Empty body captured',
+      summary: 'Binary summary saved',
+      'summary-description':
+        'Only a summary was captured; the original binary content is not stored.',
+      partial: 'Partially saved',
+      'not-saved': 'Body not saved',
+      expired: 'Previously expired body',
+      oversized: 'The capture exceeded its size limit. Only the saved portion is available.',
+      'incomplete-description':
+        'The capture is incomplete. Missing content cannot be reconstructed from this record.',
+      sizes: 'Saved {{stored}} · Observed {{logical}}',
+      'hash-full': 'Hash covers the captured safe representation.',
+      'hash-prefix': 'Hash covers only the saved prefix.',
+      'hash-unavailable': 'No verification hash is available.',
+      loaded: 'Loaded content: {{size}}',
+      'read-failed': 'Could not load saved content. Any loaded pages are kept; try again.',
+      retry: 'Retry loading',
+      loading: 'Loading saved content…',
+      cancel: 'Pause loading',
+      paused: 'Loading paused.',
+      resume: 'Resume loading',
+      'copy-failed': 'Could not copy the visible content. Try again.',
+      'save-failed': 'Could not export the saved content. Try again.',
+      copied: 'Visible content copied',
+      saved: 'Saved content exported',
+      reasons: {
+        'disk-budget': 'The audit disk budget was reached.',
+        'disk-unknown': 'Available audit storage could not be measured.',
+        'checkpoint-busy': 'A SQLite reader prevented disk reclamation.',
+        'reclaim-failed': 'Audit storage could not be reclaimed.',
+        'read-only': 'Audit storage is read-only.',
+        'disk-full': 'The storage volume is full.',
+        'capture-disabled': 'Capture was disabled before this body finished.',
+        'worker-restart': 'Capture was interrupted by an audit worker restart.',
+        retention: 'An earlier age-retention policy removed this content. It cannot be restored.',
+        'disk-pressure': 'An earlier disk-pressure policy removed this content.',
+        'write-failure': 'Some body chunks could not be queued or saved.',
+        'transfer-incomplete': 'The body transfer did not finish.',
+        'serialization-failure': 'The body could not be serialized for capture.',
+        unknown: 'Capture stopped without a recognized reason.',
+      },
+    },
     'detail-load-failed': 'Không tải được yêu cầu này. Vui lòng thử lại.',
     'detail-not-found': 'Bản ghi này không còn khả dụng. Có thể đã bị xóa.',
     fields: {
@@ -1634,6 +2235,7 @@ const vi = {
       query: 'Tùy chọn yêu cầu bổ sung',
     },
     outcomes: {
+      capture_interrupted: 'Capture interrupted',
       in_progress: 'Đang xử lý',
       completed: 'Đã hoàn tất',
       client_cancelled: 'Đã hủy',
@@ -1665,7 +2267,6 @@ const vi = {
     'parse-error': 'Không thể đọc nội dung tại vị trí {{offset}}.',
     'thought-oversized':
       'Nội dung suy luận vượt quá 64 MiB nên không được lưu đầy đủ. Mã tham chiếu: {{hash}}',
-
     'loading-description': 'Bản ghi yêu cầu sẽ xuất hiện ở đây khi sẵn sàng.',
     'empty-description':
       'Các yêu cầu gửi qua proxy xuất hiện ở đây. Bạn cũng có thể điều chỉnh bộ lọc.',
@@ -1674,6 +2275,52 @@ const vi = {
     'load-failed': 'Không thể đọc bản ghi yêu cầu',
     'load-failed-description': 'Vui lòng thử lại. Điều này không có nghĩa là bản ghi đã bị xóa.',
     'refresh-failed': 'Không thể làm mới bản ghi. Dữ liệu đã tải trước đó vẫn được hiển thị.',
+    searching: 'Đang tìm kiếm…',
+    jumping: 'Đang mở vị trí khớp…',
+    'search-failed': 'Không thể tìm kiếm nội dung này. Hãy thử lại.',
+    clearing: 'Đang xóa…',
+    'clear-failed':
+      'Chưa xác nhận hoàn tất việc xóa. Hãy làm mới trước khi thử lại; quá trình ghi đang chạy có thể đã dừng.',
+    'resize-column': 'Điều chỉnh chiều rộng cột {{column}}',
+    'reset-columns': 'Đặt lại chiều rộng cột',
+    'columns-unsaved': 'Đã đổi chiều rộng cột trong chế độ xem này nhưng không thể lưu.',
+    'clear-scope':
+      'Xóa mọi bản ghi {{category}}, kể cả ngoài bộ lọc hiện tại? Kho suy nghĩ và tệp chẩn đoán không bị ảnh hưởng.',
+    'clear-complete': 'Đã xóa {{count}} bản ghi trong {{category}}.',
+    'exact-session': 'ID phiên đã lưu chính xác',
+    'apply-session': 'Áp dụng phiên',
+    'reset-session': 'Đặt lại phiên',
+    'recorded-usage': 'Recorded response usage',
+    'usage-source-unretained':
+      'Provider provenance is not retained for these counters. Local estimates are not mixed into this display.',
+    'cache-rate': 'Cached input / total input',
+    'cache-rate-missing': 'Unknown — input or cache count missing',
+    'cache-rate-zero-input': 'Not applicable — zero input',
+    'cache-rate-inconsistent': 'Inconsistent recorded counts',
+    'local-estimate': 'Local estimate',
+    'estimate-not-retained': 'Not retained in this audit record',
+    'measured-stages': 'Recorded gateway timing stages',
+    'stage-overlap-note':
+      'Stages can overlap; do not add them. Missing stages and legacy zeros remain unknown.',
+    'stage-clean': 'Request preparation',
+    'stage-normalization': 'Normalization',
+    'stage-thinking': 'Thought restoration',
+    'stage-ttft': 'Latest upstream attempt to first byte',
+    'wrap-lines': 'Wrap lines',
+    'view-mode-unsaved': 'Display mode changed, but could not be saved.',
+    'match-position': 'Match {{current}} of {{count}}',
+    'previous-match': 'Previous match',
+    'next-match': 'Next match',
+    'cancel-search': 'Cancel search',
+    'export-session': 'Export saved session',
+    'session-exporting': 'Exporting session…',
+    'session-export-scope':
+      'All saved model requests, attempts and bodies. Up to 2,000 settled requests and 100 MiB; partial captures stay partial.',
+    'session-export-needs-scope':
+      'Select a scoped saved-session key. Older records can be exported per body.',
+    'session-export-saved': 'Saved session export.',
+    'session-export-failed':
+      'Export completion could not be confirmed. Check the destination file. Wait for requests to settle, refresh and retry; active, changed, missing or oversized data is refused.',
   },
   'client-tools': {
     title: 'Công cụ Client & Thử nghiệm Hàm',

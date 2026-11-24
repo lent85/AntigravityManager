@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  convertOpenAIPartsToAnthropicContent,
-  convertOpenAIToClaude,
-} from '@/modules/proxy-gateway/server/modules/openai/chat/openai-claude-conversion';
-import type { OpenAIContentPart } from '@/modules/proxy-gateway/server/common/interfaces/request-interfaces';
+  convertOpenAIGenerationContent,
+  toOpenAIGenerationInput,
+} from '@/server/gateway/modules/openai/chat/openai-claude-conversion';
+import type { OpenAIContentPart } from '@/server/gateway/common/interfaces/request-interfaces';
+
+const pendingToolCall = (id: string) => ({
+  role: 'assistant',
+  content: '',
+  tool_calls: [
+    { id, type: 'function' as const, function: { name: 'read_media', arguments: '{}' } },
+  ],
+});
 
 describe('OpenAI image URL conversion', () => {
   const imageUrls: ReadonlyArray<NonNullable<OpenAIContentPart['image_url']>> = [
@@ -17,7 +25,7 @@ describe('OpenAI image URL conversion', () => {
   it.each(imageUrls)(
     'converts supported image URL form %# into an Anthropic image block',
     (imageUrl) => {
-      const content = convertOpenAIPartsToAnthropicContent([
+      const content = convertOpenAIGenerationContent([
         {
           type: 'image_url',
           image_url: imageUrl,
@@ -41,9 +49,10 @@ describe('OpenAI image URL conversion', () => {
   );
 
   it('keeps tool-result text and image media in one ordered result payload', () => {
-    const request = convertOpenAIToClaude({
+    const request = toOpenAIGenerationInput({
       model: 'gemini-3-flash',
       messages: [
+        pendingToolCall('call_image'),
         {
           role: 'tool',
           tool_call_id: 'call_image',
@@ -55,7 +64,7 @@ describe('OpenAI image URL conversion', () => {
       ],
     });
 
-    expect(request.messages).toEqual([
+    expect(request.messages.slice(1)).toEqual([
       {
         role: 'user',
         content: [
@@ -82,7 +91,7 @@ describe('OpenAI image URL conversion', () => {
 
   it('maps audio_url data and remote URLs while keeping the tool fallback', () => {
     expect(
-      convertOpenAIPartsToAnthropicContent([
+      convertOpenAIGenerationContent([
         {
           type: 'audio_url',
           audio_url: { url: 'data:audio/wav;name=sample;base64,AQ==' },
@@ -107,9 +116,10 @@ describe('OpenAI image URL conversion', () => {
       },
     ]);
 
-    const request = convertOpenAIToClaude({
+    const request = toOpenAIGenerationInput({
       model: 'gemini-3-flash',
       messages: [
+        pendingToolCall('call_audio'),
         {
           role: 'tool',
           tool_call_id: 'call_audio',
@@ -117,7 +127,7 @@ describe('OpenAI image URL conversion', () => {
         },
       ],
     });
-    expect(request.messages[0]?.content).toEqual([
+    expect(request.messages[1]?.content).toEqual([
       {
         type: 'tool_result',
         tool_use_id: 'call_audio',
@@ -128,9 +138,10 @@ describe('OpenAI image URL conversion', () => {
   });
 
   it('keeps the tool-result fallback for a remote image link', () => {
-    const request = convertOpenAIToClaude({
+    const request = toOpenAIGenerationInput({
       model: 'gemini-3-flash',
       messages: [
+        pendingToolCall('call_image'),
         {
           role: 'tool',
           tool_call_id: 'call_image',
@@ -144,7 +155,7 @@ describe('OpenAI image URL conversion', () => {
       ],
     });
 
-    expect(request.messages[0]?.content).toEqual([
+    expect(request.messages[1]?.content).toEqual([
       {
         type: 'tool_result',
         tool_use_id: 'call_image',

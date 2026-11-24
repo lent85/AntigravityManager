@@ -2,13 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { bootstrapDesktopOwner } from '@/modules/app-shell/services/desktop-owner-bootstrap';
 import { createDesktopRpcAdmission } from '@/ipc/admission';
 import { ServiceNotRunningError } from '@/core/management/client';
-import { CoreHandshakeSchema, type CoreHandshake } from '@/core/management/handshake';
+import { CORE_OWNER_COMPATIBILITY, CoreHandshakeSchema, type CoreHandshake } from '@/core/management/handshake';
 import type { ProfileOwner } from '@/core/ownership/profile-lease';
 import type { LaunchedCore } from '@/cli/service-launcher';
 
 const handshake: CoreHandshake = {
   version: 1,
-  compatibility: 4,
+  compatibility: CORE_OWNER_COMPATIBILITY,
   kind: 'core',
   pid: 123,
   epoch: '11111111-1111-4111-8111-111111111111',
@@ -145,6 +145,8 @@ describe('desktop owner bootstrap', () => {
     expect(CoreHandshakeSchema.safeParse({ ...handshake, compatibility: 1 }).success).toBe(false);
     expect(CoreHandshakeSchema.safeParse({ ...handshake, compatibility: 2 }).success).toBe(false);
     expect(CoreHandshakeSchema.safeParse({ ...handshake, compatibility: 3 }).success).toBe(false);
+    expect(CoreHandshakeSchema.safeParse({ ...handshake, compatibility: 4 }).success).toBe(false);
+    expect(CoreHandshakeSchema.safeParse({ ...handshake, compatibility: 5 }).success).toBe(false);
     expect(CoreHandshakeSchema.safeParse({ ...handshake, kind: 'desktop' }).success).toBe(false);
     expect(CoreHandshakeSchema.safeParse({ ...handshake, secret: 'unexpected' }).success).toBe(
       false,

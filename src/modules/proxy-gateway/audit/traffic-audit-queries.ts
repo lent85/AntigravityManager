@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { and, count, desc, eq, gte, isNull, like, lt, lte, or, sql, type SQL } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import { omit } from 'lodash-es';
 
 import {
   auditAdminEvents,
@@ -9,6 +10,8 @@ import {
   upstreamAttempts,
 } from './traffic-audit.schema';
 import type { TrafficAuditWorkerCommand } from './traffic-audit.worker-protocol';
+import { auditCaptureOutcome } from './traffic-audit-recovery';
+import { decodeUpstreamAttemptTiming } from './upstream-attempt-timing';
 
 type TrafficAuditDatabase = BetterSQLite3Database<typeof trafficAuditSchema>;
 
@@ -41,6 +44,8 @@ interface PayloadChunkRow {
 }
 
 interface SystemListRow {
+  outcome: string;
+  completedAt: number | null;
   [key: string]: unknown;
   hasImageOutput: number | null;
   hasTextOutput: number | null;
@@ -71,6 +76,9 @@ export class TrafficAuditQueries {
     }
     if (payload.protocol) {
       conditions.push(eq(requestLogs.protocol, payload.protocol));
+    }
+    if (payload.sessionId) {
+      conditions.push(eq(requestLogs.sessionId, payload.sessionId));
     }
     if (payload.accountId) {
       conditions.push(eq(requestLogs.attributedAccountId, payload.accountId));
@@ -176,7 +184,13 @@ export class TrafficAuditQueries {
       .limit(payload.limit)
       .offset(payload.offset)
       .all();
-    return { items, total: total ?? 0 };
+    return {
+      items: items.map((item) => ({
+        ...item,
+        outcome: auditCaptureOutcome(item.outcome, item.completedAt),
+      })),
+      total: total ?? 0,
+    };
   }
 
   private listSystem(
@@ -184,6 +198,10 @@ export class TrafficAuditQueries {
   ) {
     const clauses = ["traffic_class='system'"];
     const bindings: Record<string, number | string> = {};
+    if (payload.sessionId) {
+      clauses.push('session_id=@sessionId');
+      bindings.sessionId = payload.sessionId;
+    }
     if (payload.from !== undefined) {
       clauses.push('timestamp>=@from');
       bindings.from = payload.from;
@@ -221,6 +239,9 @@ export class TrafficAuditQueries {
         'OR session_id LIKE @search OR username LIKE @search OR CAST(status AS TEXT) LIKE @search)'
       : '';
     const adminClauses: string[] = [];
+    if (payload.sessionId) {
+      adminClauses.push('1=0');
+    }
     if (payload.from !== undefined) {
       adminClauses.push('timestamp>=@from');
     }
@@ -270,6 +291,7 @@ export class TrafficAuditQueries {
       .map((row) => ({
         ...row,
         attemptCount: typeof row.attemptCount === 'number' ? row.attemptCount : 1,
+        outcome: auditCaptureOutcome(row.outcome, row.completedAt),
         hasImageOutput: row.hasImageOutput === null ? null : Boolean(row.hasImageOutput),
         hasTextOutput: row.hasTextOutput === null ? null : Boolean(row.hasTextOutput),
       }));
@@ -322,7 +344,16 @@ export class TrafficAuditQueries {
       .prepare<[string, string], BodyDescriptorRow>(BODY_REFS_SQL)
       .all(id, id)
       .map(normalizeBodyDescriptor);
-    return { attempts, bodies, recordKind: 'request' as const, request };
+    return {
+      attempts: attempts.map((attempt) => ({
+        ...omit(attempt, 'accountSubjectHash', 'accountGrantHash', 'timingJson'),
+        timing: decodeUpstreamAttemptTiming(attempt.timingJson),
+        outcome: auditCaptureOutcome(attempt.outcome, attempt.completedAt),
+      })),
+      bodies,
+      recordKind: 'request' as const,
+      request: { ...request, outcome: auditCaptureOutcome(request.outcome, request.completedAt) },
+    };
   }
 
   private descriptorForPayload(id: string) {

@@ -2,6 +2,25 @@
 
 This reference owns audit/Thought retention, content capabilities, coding-tool files and local media access. The [global security reference](../../security.md) owns trust and validation rules.
 
+## Query credential metadata
+
+Gemini query-key admission uses the existing proxy credential identity. Normalization happens at
+the HTTP ingress before gzip admission and audit session resolution; downstream owners do not
+reparse the URL independently. The route scope and precedence are defined in the
+[compatibility reference](compatibility.md#gemini-query-credentials).
+
+Audit URL/query metadata, historical metadata read projections, cURL/HAR export and diagnostic
+text redact query credentials, including percent-encoded parameter names. The URL/query boundary
+treats `key` as a credential without changing ordinary business payload fields with that name.
+Copying cURL with current-key inclusion remains an explicit choice; it cannot restore a captured
+historical URL key. Raw OAuth callback input also remains credential-bearing data and does not
+enter public errors or diagnostic payloads.
+
+These changes do not rewrite historical audit rows, archive files, clipboard history or existing
+backups. Previously captured originals can still contain sensitive values on disk and remain
+subject to the profile's existing access and retention policy. No database migration or durable
+format change is introduced.
+
 ## OpenCode account configuration
 
 OpenCode refresh grants remain inside the selected owner and its existing external plugin account file; this integration does not introduce a Manager-side token-refresh mechanism. Normal responses contain strict status, intentional current configuration location metadata or a bounded redacted preview. Backup contents, backup/temporary locations, OAuth grants and dedicated keys do not cross control transport. OpenCode renderer routes bypass audit middleware. Configuration, local-account and OpenCode public errors preserve only validated closed categories and fixed messages; their IPC error logs omit raw input, values, causes and stacks. External plugin formats, account selection, backup recovery and native dedicated-key storage remain unchanged.
@@ -9,6 +28,44 @@ OpenCode refresh grants remain inside the selected owner and its existing extern
 ## Audit file export
 
 Audit file export keeps body contents and destination paths outside renderer responses. Only the trusted desktop chooser supplies a bounded absolute destination; private input is independently bounded to 3,000 encoded bytes. The selected owner enforces the existing 100 MiB body ceiling while streaming, uses a new sibling temporary file with restrictive POSIX permissions and preserves the prior destination on failure before replacement. Parent-directory synchronization errors after replacement indicate uncertain durability rather than rollback. Export failures expose fixed text without filesystem/provider diagnostics. The desktop retains its creating adapter throughout selection and does not use embedded persistence on remote failure.
+
+## Responses history ownership
+
+Responses continuation, read and delete require the creating caller's existing proxy
+credential identity. The store retains a versioned one-way digest, never the raw
+credential. Equivalent Bearer/API-key headers agree; credential rotation changes the
+identity. No encryption is added: conversation history remains plaintext under the
+profile's OS permissions. Open mode remains unauthenticated and does not establish
+distinct human identities; header-free callers share its anonymous scope.
+
+Admission precedes history materialization and retention renewal. Unknown, foreign,
+expired and missing HTTP cursors use the existing not-found envelope; WebSocket
+durable-history admission uses the same ownership check. Parent and child ownership
+must agree. Cancelled, failed and incomplete responses cannot publish completed
+history. WebSocket and HTTP completions share the history writer and its caller
+ownership checks. Explicit `store:false` prevents durable publication while retaining
+the active WebSocket connection's transcript. A new connection may restore an owned
+saved cursor without supplying its model again. Its later appends retain the recovered
+transcript and effective model. Foreign and expired cursors are rejected before dispatch.
+
+The active store reuses `openai-responses-sessions.json`, with the generic version-1 durable
+envelope and the Responses-owned `sha256-v1:` caller codec. The strict current decoder rejects
+records without the required owner and initial identity; the first store access atomically
+replaces those unsupported entries. Other historical filenames are not searched, imported or
+used as fallback. Unknown provenance is not guessed from an ID prefix.
+
+The current format requires strict version-1 initial identity metadata (client/content origin
+and a fixed-size task digest), plus a valid routing root for client-origin records. Earlier
+cursors are unavailable even when caller ownership is valid, because their initial task
+provenance was not retained. The human explicitly accepts restarting those conversations or
+replaying history already held by the client. Initial task identity is captured before media
+bounding and restored only after caller admission; it is not an authorization credential.
+Existing capacity, expiry and atomic fail-open behavior continue for the active store. The
+application does not create a migration backup; a downgrade that needs replaced history
+requires a copy made before the cutover.
+
+See the [upgrade guide](../../upgrade-guides/next/responses-history-ownership.md) for
+credential changes, plaintext backups, write failure and downgrade limitations.
 
 ## Proxy traffic and thought persistence
 
@@ -25,8 +82,9 @@ UUID, expiry and sequential byte cursors. Each content owner permits four snapsh
 of retained body buffers. Each chunk is at most 64 KiB before base64 encoding; normal control
 limits remain unchanged. Completion, explicit close, expiry and owner drain release retention.
 Disconnect cleanup is best-effort and diagnosed without values; expiry bounds orphan retention.
-Thought detail intentionally returns plaintext thought, visible text and nullable signature to
-the requesting renderer. Their combined body has a 256 MiB operational transfer ceiling while
+Thought detail intentionally returns plaintext thought, visible text, nullable reasoning signature
+and per-part signature metadata to the requesting renderer. All four use the bounded content
+transfer, with metadata JSON occupying its own measured segment. Their combined body has a 256 MiB operational transfer ceiling while
 thought text retains its 64 MiB limit. cURL capabilities and commands stay in Electron main;
 only copied status reaches React. The 8 MiB replay-body limit remains separate from the 64 MiB
 quoted-command ceiling. Current gateway key inclusion remains opt-in; upstream credentials
@@ -66,7 +124,9 @@ its worker command back to the existing weighted queue. Statistics, list/detail 
 new audit writes can run before maintenance completes. A yielded command keeps its original
 ID, promise and queue-capacity reservation; only a final result or error settles it. Startup
 and configuration maintenance passes run serially. Configuration reports completion only
-after its own pass finishes, including physical disk reclamation.
+after its own pass finishes, including available physical disk reclamation. A busy WAL checkpoint
+stops further disk eviction and records the remaining pressure for a later pass. Unreclaimed free
+pages request a bounded background continuation instead of discarding additional bodies.
 
 Passes capture row-ID high-water marks and creation-time cutoffs, so concurrent arrivals do
 not extend the pass or become eviction candidates after a clear reuses SQLite row IDs.
@@ -80,6 +140,13 @@ guarantee. Concurrent writes can leave the measured size above budget until a la
 Shutdown retains the existing admission closure, drain deadline and observable termination
 failure semantics. Partial evictions survive a failure or forced termination; they are not
 rolled back or reported as completed maintenance.
+
+The dedicated `thinking-store.db` uses schema 2. Earlier Thought Store tables are reset
+inside one SQLite transaction on open, with no import, backup or format fallback.
+Failure rolls back the reset and closes the opening connection. Replacement refuses
+unowned database objects and unknown future schema versions. It does not unlink database
+or WAL/SHM files and does not touch adjacent account, audit or Responses stores.
+See [required actions and downgrade limits](../../upgrade-guides/next/replace-thought-store-history.md).
 
 Before an audit payload reaches SQLite, authorization and cookie headers, credential-bearing query
 parameters, and recursively matched JSON credential keys are replaced with `[REDACTED]`. Media
@@ -110,9 +177,17 @@ before accumulating a complete body for clipboard copy.
 Both databases reject unknown future schema versions. Corruption does not trigger automatic
 replacement. An authenticated explicit repair first closes the worker, then preserves the main
 database and WAL/SHM sidecars under a timestamped `.corrupt-*` name before creating a fresh file.
-For this unshipped audit feature, an older audit schema is archived with its WAL/SHM sidecars and
-replaced by an empty schema v4 database. No old audit rows are migrated; the independent Thought
-Store database is untouched.
+Audit schemas 4, 5 and 6 receive an additive schema-7 migration after a verified
+pre-migration SQLite snapshot. Existing requests, attempts and bodies are retained;
+historical attempt timing is unknown. Older prototype layouts retain their separate
+archive-and-rebuild policy. The independent Thought Store is untouched. See the
+[upgrade and recovery guide](../../upgrade-guides/next/physical-attempt-usage.md).
+
+HAR uses saved sanitized capture and the selected audit file owner. It never applies
+the cURL current-credential opt-in. Private user-authored content can remain in
+sanitized bodies. Review exports before sharing. Unknown origin, method and timing,
+partial content and reconstructed SSE are explicitly identified in the
+[export reference](traffic-diagnostics.md#har-export).
 
 ## Coding tool configuration files
 
@@ -126,6 +201,15 @@ project only model/address fields and a hidden credential marker. The user confi
 restore in the UI or supplies CLI `--yes`. See
 [agent-tools reference](agent-tools.md) for the difference between removal
 and restoration.
+
+Independent connection profiles snapshot existing keys into separate OS-keyring accounts.
+Their version-1 metadata catalog contains no raw key. Private field originals, first native
+backups and interrupted-write ownership are AES-256-GCM encrypted using an independent
+OS-keyring encryption key. The selected backend owns this catalog and its keyring entries.
+The renderer receives only profile metadata and credential availability. Losing the encryption
+key makes the ownership catalog unreadable. Operations fail without a plaintext fallback or
+an automatic empty replacement. Preserve the catalog and the original user's keyring together.
+These profile records do not change existing client snapshot or recovery-file formats.
 
 ## Local video paths
 

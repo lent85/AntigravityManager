@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { TrafficMonitorPage } from '@/modules/proxy-gateway/traffic-monitor/TrafficMonitorPage';
+import { TrafficActivityHeatmap } from '@/modules/proxy-gateway/traffic-monitor/components/TrafficActivityHeatmap';
 
 const mocks = vi.hoisted(() => ({
   read: vi.fn(),
@@ -17,17 +18,25 @@ const mocks = vi.hoisted(() => ({
     },
   ],
 }));
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    i18n: { language: 'en-US' },
+    t: (key: string, options?: { formatted?: string }) =>
+      options?.formatted === undefined ? key : `${key} ${options.formatted}`,
+  }),
+}));
 vi.mock('@/ipc/manager', () => ({
   ipc: {
     client: {
       gateway: {
         auditList: mocks.read,
-        auditStats: async () => ({ rows: 1, databaseBytes: 1000, droppedCount: 0 }),
-        auditFilterOptions: async () => ({
-          accountIds: ['private-account-id'],
-          modelFamilies: [],
+        auditStats: async () => ({
+          rows: 1,
+          databaseBytes: 1000,
+          archives: { status: 'complete' as const, bytes: 0, files: 0 },
+          droppedCount: 0,
         }),
+        auditFilterOptions: async () => ({ accountIds: ['private-account-id'], modelFamilies: [] }),
       },
     },
   },
@@ -65,6 +74,31 @@ function mount(initialAccountId?: string) {
   );
   return client;
 }
+
+it('renders all thirty activity days and exposes the selected count to the date slider', () => {
+  const days = Array.from({ length: 30 }, (_, index) => ({
+    date: `2026-04-${String(index + 1).padStart(2, '0')}`,
+    requests: index === 0 ? 3 : 0,
+  }));
+  render(createElement(TrafficActivityHeatmap, { days }));
+
+  expect(screen.getAllByRole('listitem')).toHaveLength(30);
+  const slider = screen.getByRole('slider', { name: 'traffic.trends.activity-inspect' });
+  expect(slider.getAttribute('aria-valuetext')).toBe(
+    'Apr 30, 2026 · traffic.trends.activity-empty',
+  );
+  fireEvent.change(slider, { target: { value: '0' } });
+  const selected = screen.getByRole('button', {
+    name: 'Apr 1, 2026 · traffic.trends.activity-count 3',
+  });
+  expect(selected.getAttribute('aria-pressed')).toBe('true');
+  expect(slider.getAttribute('aria-valuetext')).toBe(selected.getAttribute('aria-label'));
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Apr 30, 2026 · traffic.trends.activity-empty' }),
+  );
+  expect(selected.getAttribute('aria-pressed')).toBe('false');
+});
+
 it('distinguishes a failed initial read from an empty list and offers a working retry', async () => {
   mocks.read
     .mockRejectedValueOnce(new Error('Synthetic read failure'))

@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Observable } from 'rxjs';
 
-import { GeminiController } from '@/modules/proxy-gateway/server/modules/gemini/gemini.controller';
-import { proxyModelAvailabilityStore } from '@/modules/proxy-gateway/server/shared/services/model-availability.service';
-import { UpstreamRequestError } from '@/modules/proxy-gateway/server/common/exceptions/upstream-request.exception';
+import { GeminiController } from '@/server/gateway/modules/gemini/gemini.controller';
+import { proxyModelAvailabilityStore } from '@/server/gateway/shared/services/model-availability.service';
+import { UpstreamRequestError } from '@/server/gateway/common/exceptions/upstream-request.exception';
+import { resolveGeminiSessionScope } from '@/server/gateway/common/signature-session-scope';
 import {
   collect,
   createAccount,
@@ -26,7 +27,7 @@ import {
  */
 
 vi.mock(
-  '@/modules/proxy-gateway/server/common/utils/request-user-agent',
+  '@/server/gateway/common/utils/request-user-agent',
   async (importOriginal) => ({
     ...(await importOriginal<Record<string, unknown>>()),
     resolveRequestUserAgent: async () => 'antigravity-parity-harness/0.0.0',
@@ -38,6 +39,140 @@ function geminiRequest(text: string) {
 }
 
 describe('real request path, Gemini surface', () => {
+  it.each(['generateContent', 'streamGenerateContent'] as const)(
+    'rejects a known foreign signature family before selecting an account on %s',
+    async (action) => {
+      const source = Buffer.from([0x08, 0x04, 0x12, ...Array<number>(80).fill(0x7f)]).toString(
+        'base64',
+      );
+      const upstream = createUpstream({ generate: geminiTextResponse('unreachable') });
+      const lease = createLease([createAccount('acc-1')]);
+      const controller = new GeminiController(createGateway(upstream, lease).geminiService);
+      const reply = createReply();
+
+      await controller.modelAction(
+        `gemini-3-flash:${action}`,
+        {
+          contents: [
+            {
+              role: 'model',
+              parts: [
+                {
+                  functionCall: { id: 'call-1', name: 'read', args: {} },
+                  thoughtSignature: source,
+                },
+              ],
+            },
+          ],
+        },
+        reply as never,
+      );
+
+      expect(reply.statusCode).toBe(400);
+      expect(reply.body).toEqual({
+        error: {
+          code: 400,
+          message:
+            'Thought signature format at contents[0].parts[0] is incompatible with target model family gemini.',
+          status: 'INVALID_ARGUMENT',
+        },
+      });
+      expect(lease.getNextToken).not.toHaveBeenCalled();
+      expect(upstream.calls).toEqual([]);
+    },
+  );
+
+  it.each([
+    { action: 'generateContent', part: 'thinking' },
+    { action: 'streamGenerateContent', part: 'thinking' },
+    { action: 'generateContent', part: 'functionCall' },
+    { action: 'streamGenerateContent', part: 'functionCall' },
+    { action: 'generateContent', part: 'functionResponse' },
+    { action: 'streamGenerateContent', part: 'functionResponse' },
+  ] as const)(
+    'rejects conflicting $part signature aliases before account selection on $action',
+    async ({ action, part }) => {
+      const upstream = createUpstream({ generate: geminiTextResponse('unreachable') });
+      const lease = createLease([]);
+      const controller = new GeminiController(createGateway(upstream, lease).geminiService);
+      const reply = createReply();
+      const request = {
+        contents: [
+          {
+            role: part === 'functionResponse' ? 'user' : 'model',
+            parts: [
+              {
+                ...(part === 'thinking' ? { text: 'reasoning', thought: true } : {}),
+                ...(part === 'functionCall'
+                  ? { functionCall: { id: 'call-1', name: 'read', args: {} } }
+                  : {}),
+                ...(part === 'functionResponse'
+                  ? { functionResponse: { id: 'call-1', name: 'read', response: { result: 'ok' } } }
+                  : {}),
+                thoughtSignature: 'synthetic-private-signature-A',
+                thought_signature: 'synthetic-private-signature-B',
+              },
+            ],
+          },
+        ],
+      };
+      const before = structuredClone(request);
+
+      await controller.modelAction(`gemini-3-flash:${action}`, request, reply as never);
+
+      expect(reply.status).toHaveBeenCalledWith(400);
+      expect(reply.body).toEqual({
+        error: {
+          code: 400,
+          message:
+            'Conflicting thoughtSignature and thought_signature at contents[0].parts[0]. Supply one signature value or equivalent aliases.',
+          status: 'INVALID_ARGUMENT',
+        },
+      });
+      expect(lease.getNextToken).not.toHaveBeenCalled();
+      expect(upstream.calls).toEqual([]);
+      expect(request).toEqual(before);
+    },
+  );
+
+  it.each([
+    { model: 'gemini-3-flash', stream: false },
+    { model: 'gemini-3-flash', stream: true },
+    { model: 'gemini-3.1-flash-image', stream: false },
+    { model: 'gemini-3.1-flash-image', stream: true },
+  ])('passes scoped account affinity for $model stream=$stream', async ({ model, stream }) => {
+    const upstream = createUpstream({
+      generate: geminiTextResponse('ok'),
+      streamFrames: [geminiStreamFrame(geminiTextResponse('ok'))],
+    });
+    const lease = createLease([createAccount('acc-1')]);
+    const service = createGateway(upstream, lease).geminiService;
+    const body = geminiRequest('synthetic task');
+    const context = {
+      headers: { authorization: 'Bearer synthetic-tenant', 'x-session-id': 'session-a' },
+      url: '/v1beta/models/x?session_id=ignored',
+    };
+    if (stream) {
+      await collect(
+        await service.handleGeminiStreamGenerateContent(model, body, undefined, context),
+      );
+    } else {
+      await service.handleGeminiGenerateContent(
+        model,
+        body,
+        'generate-content',
+        undefined,
+        'gemini',
+        context,
+      );
+    }
+    expect(lease.getNextToken.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        sessionKey: resolveGeminiSessionScope(body, context.headers, context.url).affinityKey,
+      }),
+    );
+    expect(lease.commitSession).toHaveBeenCalledOnce();
+  });
   it('builds a true image-generation wire envelope when requested by the OpenAI fallback', async () => {
     const upstream = createUpstream({ generate: geminiTextResponse('ok') });
     const service = createGateway(upstream, createLease([createAccount('acc-1')])).geminiService;
@@ -134,7 +269,7 @@ describe('real request path, Gemini surface', () => {
       expect(upstream.calls).toHaveLength(1);
       expect(upstream.calls[0]?.body.model).toBe('gemini-3.7-flash-high');
       expect(upstream.calls[0]?.body.request.generationConfig).toEqual({
-        maxOutputTokens: 65536,
+        maxOutputTokens: 11024,
         thinkingConfig: {
           includeThoughts: true,
           thinkingBudget: 10000,
@@ -159,7 +294,7 @@ describe('real request path, Gemini surface', () => {
 
     expect(upstream.calls[0]?.body.model).toBe('gemini-3.7-flash-high');
     expect(upstream.calls[0]?.body.request.generationConfig).toEqual({
-      maxOutputTokens: 65536,
+      maxOutputTokens: 11024,
       thinkingConfig: {
         includeThoughts: true,
         thinkingBudget: 10000,
@@ -171,7 +306,7 @@ describe('real request path, Gemini surface', () => {
     const upstream = createUpstream({ generate: geminiTextResponse('ok') });
     const service = createGateway(upstream, createLease([createAccount('acc-1')])).geminiService;
 
-    await service.handleGeminiGenerateContent('gemini-pro-agent', {
+    await service.handleGeminiGenerateContent('gemini-3-flash-agent', {
       ...geminiRequest('hello'),
       generationConfig: {
         temperature: 0.2,
@@ -183,15 +318,77 @@ describe('real request path, Gemini surface', () => {
       },
     });
 
-    expect(upstream.calls[0]?.body.model).toBe('gemini-pro-agent');
+    expect(upstream.calls[0]?.body.model).toBe('gemini-3-flash-agent');
     expect(upstream.calls[0]?.body.request.generationConfig).toEqual({
       temperature: 0.2,
-      maxOutputTokens: 42_769,
+      maxOutputTokens: 11_024,
       thinkingConfig: {
         includeThoughts: true,
-        thinkingBudget: 10_001,
+        thinkingBudget: 10_000,
       },
     });
+  });
+
+  it('passes a Gemini bare-model thinking level into selection and physical resolution', async () => {
+    const upstream = createUpstream({ generate: geminiTextResponse('ok') });
+    const lease = createLease([createAccount('acc-1')]);
+    const service = createGateway(upstream, lease).geminiService;
+
+    await service.handleGeminiGenerateContent('gemini-3.8-flash', {
+      ...geminiRequest('Use medium effort.'),
+      generationConfig: {
+        thinkingConfig: {
+          includeThoughts: true,
+          thinkingLevel: 'medium',
+        },
+      },
+    });
+
+    expect(lease.getNextToken).toHaveBeenCalledWith(
+      expect.objectContaining({
+        effort: 'medium',
+        model: 'gemini-3.8-flash',
+      }),
+    );
+    expect(lease.resolveDynamicModelForAccount).toHaveBeenCalledWith(
+      'acc-1',
+      'gemini-3.8-flash',
+      'medium',
+      false,
+    );
+  });
+
+  it('rejects an unknown Gemini thinking level before account selection', async () => {
+    const upstream = createUpstream({ generate: geminiTextResponse('unreachable') });
+    const lease = createLease([createAccount('acc-1')]);
+    const controller = new GeminiController(createGateway(upstream, lease).geminiService);
+    const reply = createReply();
+
+    await controller.modelAction(
+      'gemini-3.8-flash:generateContent',
+      {
+        ...geminiRequest('Reject this effort.'),
+        generationConfig: {
+          thinkingConfig: {
+            includeThoughts: true,
+            thinkingLevel: 'not-a-tier',
+          },
+        },
+      },
+      reply as never,
+    );
+
+    expect(reply.statusCode).toBe(400);
+    expect(reply.body).toEqual({
+      error: {
+        code: 400,
+        message: expect.stringContaining('Unsupported model effort "not-a-tier"'),
+        status: 'INVALID_ARGUMENT',
+      },
+    });
+    expect(lease.getNextToken).not.toHaveBeenCalled();
+    expect(lease.resolveDynamicModelForAccount).not.toHaveBeenCalled();
+    expect(upstream.calls).toEqual([]);
   });
 
   it('rebinds native variant parameters when the account selects a physical sibling', async () => {
@@ -204,7 +401,7 @@ describe('real request path, Gemini surface', () => {
 
     expect(upstream.calls[0]?.body.model).toBe('gemini-3.7-flash-medium');
     expect(upstream.calls[0]?.body.request.generationConfig).toEqual({
-      maxOutputTokens: 65536,
+      maxOutputTokens: 5024,
       thinkingConfig: {
         includeThoughts: true,
         thinkingBudget: 4000,
@@ -268,20 +465,29 @@ describe('real request path, Gemini surface', () => {
         );
       }
       expect(upstream.calls).toHaveLength(1);
-      expect(upstream.calls[0].body.request.contents).toEqual([
+      const forwardedContents = upstream.calls[0].body.request.contents;
+      const callId = forwardedContents[0]?.parts[0]?.functionCall?.id;
+      expect(callId).toMatch(/^call_[a-f0-9]{32}$/);
+      expect(forwardedContents).toEqual([
         {
           role: 'model',
           parts: [
             {
-              functionCall: { name: 'lookup', args: { key: 'fixture' } },
-              thoughtSignature: 'skip_thought_signature_validator',
-              thought_signature: 'skip_thought_signature_validator',
+              functionCall: { id: callId, name: 'lookup', args: { key: 'fixture' } },
             },
           ],
         },
         {
           role: 'user',
-          parts: [{ functionResponse: { name: 'lookup', response: { result: 'ok' } } }],
+          parts: [
+            {
+              functionResponse: {
+                id: callId,
+                name: 'lookup',
+                response: { result: 'ok' },
+              },
+            },
+          ],
         },
       ]);
       expect(request.contents[0].parts[0]).toEqual({
@@ -370,16 +576,17 @@ describe('real request path, Gemini surface', () => {
       ...geminiRequest('hello'),
       tools: [],
       toolConfig: { extension: { value: 1 }, includeServerSideToolInvocations: false },
-      tool_config: { function_calling_config: { mode: 'ANY', allowed_function_names: ['read'] } },
+      tool_config: { function_calling_config: { mode: 'NONE' } },
     };
     await controller.modelAction('gemini-3-flash:generateContent', request, createReply() as never);
+    expect(upstream.calls).toHaveLength(1);
     expect(upstream.calls[0]?.body.request.tools).toEqual([]);
     expect(upstream.calls[0]?.body.request.toolConfig).toEqual({
       extension: { value: 1 },
       includeServerSideToolInvocations: true,
     });
     expect(upstream.calls[0]?.body.request.tool_config).toEqual({
-      function_calling_config: { mode: 'ANY', allowed_function_names: ['read'] },
+      function_calling_config: { mode: 'NONE' },
       include_server_side_tool_invocations: true,
     });
     expect(request.toolConfig.includeServerSideToolInvocations).toBe(false);

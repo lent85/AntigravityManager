@@ -1,10 +1,12 @@
 import { lazy, Suspense, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import * as ContextMenu from '@radix-ui/react-context-menu';
-import { AlertTriangle, Clipboard, Clock3, Server } from 'lucide-react';
+import { Clipboard, Server } from 'lucide-react';
 
-import { Badge } from '@/components/ui/badge';
+import { OutcomeBadge } from './AuditOutcomeBadge';
+import { AuditUsageSummary } from './AuditUsageSummary';
+import { AuditHarExportAction } from './AuditHarExportAction';
+import { AttemptPane } from './TrafficAttemptPane';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -72,7 +74,14 @@ function TrafficDetailDialogContent({
       (body) => body.ownerKind === 'parent' && body.direction === 'response',
     );
   const effectiveBodyId =
-    selectedBodyId ?? preferredBody?.id ?? requestDetail?.bodies[0]?.id ?? null;
+    selectedBodyId ??
+    (selectedAttemptId
+      ? (requestDetail?.bodies.find(
+          (body) => body.ownerId === selectedAttemptId && body.direction === 'response',
+        )?.id ??
+        requestDetail?.bodies.find((body) => body.ownerId === selectedAttemptId)?.id ??
+        null)
+      : (preferredBody?.id ?? requestDetail?.bodies[0]?.id ?? null));
   const selectedBody: TrafficAuditBodyDescriptor | null =
     requestDetail?.bodies.find((body) => body.id === effectiveBodyId) ?? null;
 
@@ -121,6 +130,12 @@ function TrafficDetailDialogContent({
               </Tooltip>
             </TooltipProvider>
           )}
+          {requestDetail && requestDetail.request.trafficClass !== 'ipc' && (
+            <AuditHarExportAction
+              requestId={requestDetail.request.id}
+              disabled={requestDetail.request.outcome === 'in_progress'}
+            />
+          )}
         </DialogHeader>
 
         {detail.isLoading && (
@@ -165,6 +180,14 @@ function TrafficDetailDialogContent({
         )}
         {requestDetail && (
           <>
+            {requestDetail.request.outcome === 'capture_interrupted' && (
+              <p
+                role="status"
+                className="text-muted-foreground shrink-0 border-b px-5 py-2 text-xs"
+              >
+                {t('traffic.capture-interrupted-description')}
+              </p>
+            )}
             <dl className="bg-muted/20 grid shrink-0 grid-cols-2 gap-3 border-b px-5 py-3 text-sm sm:grid-cols-4">
               {[
                 [t('traffic.status'), requestDetail.request.status ?? '—'],
@@ -192,15 +215,11 @@ function TrafficDetailDialogContent({
                 selectedAttemptId={effectiveAttemptId}
                 onSelect={(attemptId) => {
                   setSelectedAttemptId(attemptId);
-                  const preferred = requestDetail.bodies.find(
-                    (body) => body.ownerId === attemptId && body.direction === 'response',
-                  );
-                  if (preferred) {
-                    setSelectedBodyId(preferred.id);
-                  }
+                  setSelectedBodyId(null);
                 }}
               />
               <PayloadPane
+                attempts={requestDetail.attempts}
                 bodies={requestDetail.bodies}
                 selectedBody={selectedBody}
                 onSelect={setSelectedBodyId}
@@ -228,12 +247,16 @@ function TrafficDetailDialogContent({
                   parentId={requestDetail.request.id}
                   onCopyCurl={onCopyCurl}
                   selectedAttemptId={effectiveAttemptId}
-                  onSelect={setSelectedAttemptId}
+                  onSelect={(attemptId) => {
+                    setSelectedAttemptId(attemptId);
+                    setSelectedBodyId(null);
+                  }}
                   borderless
                 />
               </TabsContent>
               <TabsContent value="payloads" className="min-h-0 flex-1 overflow-hidden">
                 <PayloadPane
+                  attempts={requestDetail.attempts}
                   bodies={requestDetail.bodies}
                   selectedBody={selectedBody}
                   onSelect={setSelectedBodyId}
@@ -301,6 +324,7 @@ function MetadataPane({
             : []),
         ]}
       />
+      <AuditUsageSummary request={request} />
       <details className="mt-4 rounded-md border p-3 text-xs">
         <summary className="focus-visible:ring-ring cursor-default rounded-sm font-medium focus-visible:ring-2 focus-visible:outline-none">
           {t('traffic.advanced-diagnostics')}
@@ -337,94 +361,13 @@ function MetadataPane({
   );
 }
 
-function AttemptPane({
-  attempts,
-  parentId,
-  onCopyCurl,
-  selectedAttemptId,
-  onSelect,
-  borderless = false,
-}: {
-  attempts: RequestDetail['attempts'];
-  parentId: string;
-  onCopyCurl: (id: string, attemptId?: string) => void;
-  selectedAttemptId: string | null;
-  onSelect: (id: string) => void;
-  borderless?: boolean;
-}) {
-  const { t } = useTranslation();
-  return (
-    <section className={`min-h-0 overflow-auto p-4 ${borderless ? '' : 'border-r'}`}>
-      <h3 className="mb-3 text-sm font-semibold">{t('traffic.upstream-attempts')}</h3>
-      <div className="space-y-2">
-        {attempts.length === 0 && (
-          <p className="text-muted-foreground rounded-md border border-dashed p-4 text-sm">
-            {t('traffic.no-attempts')}
-          </p>
-        )}
-        {attempts.map((attempt) => (
-          <ContextMenu.Root key={attempt.id}>
-            <ContextMenu.Trigger asChild>
-              <button
-                type="button"
-                aria-pressed={selectedAttemptId === attempt.id}
-                className={`focus-visible:ring-ring w-full cursor-default rounded-lg border p-3 text-left transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none motion-reduce:transition-none ${selectedAttemptId === attempt.id ? 'border-foreground/40 bg-accent' : 'hover:bg-muted/50'}`}
-                onClick={() => onSelect(attempt.id)}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium">
-                    {t('traffic.attempt', { index: attempt.attemptIndex })}
-                    {attempt.operation && (
-                      <span className="text-muted-foreground ml-1.5 text-xs font-normal">
-                        ({attempt.operation})
-                      </span>
-                    )}
-                  </span>
-                  <OutcomeBadge outcome={attempt.outcome} />
-                </div>
-                <div className="text-muted-foreground mt-2 truncate text-xs">
-                  {attempt.endpoint}
-                </div>
-                {attempt.accountId && (
-                  <div className="mt-1 truncate font-mono text-[11px] select-text">
-                    {attempt.accountId}
-                  </div>
-                )}
-                <div className="text-muted-foreground mt-2 flex gap-3 text-[11px]">
-                  <span>{attempt.status ?? '—'}</span>
-                  <span>
-                    {attempt.durationMs === null
-                      ? t('traffic.running')
-                      : `${attempt.durationMs} ms`}
-                  </span>
-                </div>
-                {attempt.error && (
-                  <div className="text-destructive mt-2 line-clamp-2 text-xs">{attempt.error}</div>
-                )}
-              </button>
-            </ContextMenu.Trigger>
-            <ContextMenu.Portal>
-              <ContextMenu.Content className="bg-popover text-popover-foreground z-50 min-w-48 rounded-md border p-1 shadow-md">
-                <ContextMenu.Item
-                  className="hover:bg-accent focus:bg-accent cursor-default rounded px-2 py-1.5 text-xs outline-none"
-                  onSelect={() => onCopyCurl(parentId, attempt.id)}
-                >
-                  {t('traffic.copy-upstream-curl')}
-                </ContextMenu.Item>
-              </ContextMenu.Content>
-            </ContextMenu.Portal>
-          </ContextMenu.Root>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function PayloadPane({
+  attempts,
   bodies,
   selectedBody,
   onSelect,
 }: {
+  attempts: RequestDetail['attempts'];
   bodies: TrafficAuditBodyDescriptor[];
   selectedBody: TrafficAuditBodyDescriptor | null;
   onSelect: (id: string) => void;
@@ -441,7 +384,12 @@ function PayloadPane({
             className={`focus-visible:ring-ring cursor-default rounded-md border px-2.5 py-1.5 text-xs focus-visible:ring-2 focus-visible:outline-none ${selectedBody?.id === body.id ? 'border-foreground/40 bg-accent text-accent-foreground' : 'hover:bg-muted'}`}
             onClick={() => onSelect(body.id)}
           >
-            {body.ownerKind === 'parent' ? t('traffic.client') : t('traffic.upstream')}{' '}
+            {body.ownerKind === 'parent'
+              ? t('traffic.client')
+              : t('traffic.attempt', {
+                  index:
+                    attempts.find((attempt) => attempt.id === body.ownerId)?.attemptIndex ?? '—',
+                })}{' '}
             {t(`traffic.${body.direction}`)}
           </button>
         ))}
@@ -456,24 +404,6 @@ function PayloadPane({
         </Suspense>
       </div>
     </section>
-  );
-}
-
-function OutcomeBadge({ outcome }: { outcome: string }) {
-  const { t } = useTranslation();
-  const variant =
-    outcome === 'completed' ? 'default' : outcome === 'in_progress' ? 'secondary' : 'destructive';
-  return (
-    <Badge
-      variant={variant}
-      className={`gap-1 text-[10px] font-medium ${outcome === 'completed' ? 'border-success-border bg-success-soft text-success hover:bg-success-soft' : ''}`}
-    >
-      {outcome === 'in_progress' ? <Clock3 className="h-3 w-3" /> : null}
-      {outcome.includes('error') || outcome === 'partial' ? (
-        <AlertTriangle className="h-3 w-3" />
-      ) : null}
-      {t(`traffic.outcomes.${outcome}`, { defaultValue: outcome })}
-    </Badge>
   );
 }
 

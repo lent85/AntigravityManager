@@ -1,12 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { MISSING_COMMAND_FALLBACK } from '@/modules/proxy-gateway/antigravity/CommandToolAdapter';
-import { OpenAIService as ProxyService } from '../../modules/proxy-gateway/server/modules/openai/openai.service';
+import { decodeAntigravityGenerationResult } from '@/modules/proxy-gateway/antigravity/AntigravityResponseDecoder';
+import { generateGeminiWithAggregationFallback } from '@/server/gateway/common/aggregate-gemini-fallback';
+import type { GeminiResponse } from '@/server/gateway/common/interfaces/request-interfaces';
+import { convertOpenAIGenerationTools } from '@/server/gateway/modules/openai/chat/openai-claude-conversion';
+import { toOpenAIChatResponse } from '@/server/gateway/modules/openai/chat/openai-chat-response';
 
 describe('OpenAI tool mapper compatibility', () => {
   it('maps a Responses apply_patch custom tool to the upstream freeform input schema', () => {
-    const service = Object.create(ProxyService.prototype) as ProxyService;
-    const result = Reflect.get(service, 'convertOpenAIToolsToAnthropicTools').call(service, [
+    const result = convertOpenAIGenerationTools([
       {
         type: 'custom',
         name: 'apply_patch',
@@ -23,8 +25,7 @@ describe('OpenAI tool mapper compatibility', () => {
           properties: {
             input: {
               type: 'string',
-              description:
-                'The exact freeform V4A patch text to pass to Codex apply_patch. It must start with *** Begin Patch and end with *** End Patch. Do not wrap it in a shell command or command array.',
+              description: 'Pass the exact freeform text in this field.',
             },
           },
           required: ['input'],
@@ -33,34 +34,57 @@ describe('OpenAI tool mapper compatibility', () => {
     ]);
   });
 
-  it('treats safety prompt feedback as a usable upstream response', () => {
-    const service = Object.create(ProxyService.prototype) as ProxyService;
-    const hasUsableResponse = Reflect.get(service, 'hasUsableGeminiCandidate').call(service, {
+  it('returns safety prompt feedback without starting an aggregation fallback', async () => {
+    const response: GeminiResponse = {
       candidates: [],
       promptFeedback: {
         blockReason: 'SAFETY',
       },
-    });
-
-    expect(hasUsableResponse).toBe(true);
+    };
+    const start = vi.fn();
+    const collect = vi.fn();
+    const onFallback = vi.fn();
+    await expect(
+      generateGeminiWithAggregationFallback({
+        request: {
+          model: 'gemini-3-flash',
+          request: { contents: [] },
+          requestId: 'controlled-safety-response',
+          userAgent: 'controlled-mapper-test/0.0.0',
+        },
+        generate: async () => response,
+        start,
+        collect,
+        onFallback,
+      }),
+    ).resolves.toEqual(response);
+    expect(start).not.toHaveBeenCalled();
+    expect(collect).not.toHaveBeenCalled();
+    expect(onFallback).not.toHaveBeenCalled();
   });
 
-  it('normalizes an incomplete PowerShell tool call in a non-stream Chat Completions response', () => {
-    const service = Object.create(ProxyService.prototype) as ProxyService;
-    const result = Reflect.get(service, 'convertClaudeToOpenAIResponse').call(
-      service,
-      {
-        content: [
+  it('preserves incomplete PowerShell arguments without inserting an executable command', () => {
+    const result = toOpenAIChatResponse(
+      decodeAntigravityGenerationResult({
+        candidates: [
           {
-            id: 'call_powershell',
-            input: { description: 'sensitive tool detail' },
-            name: 'PowerShell',
-            type: 'tool_use',
+            content: {
+              role: 'model',
+              parts: [
+                {
+                  functionCall: {
+                    id: 'call_powershell',
+                    name: 'PowerShell',
+                    args: { description: 'sensitive tool detail' },
+                  },
+                },
+              ],
+            },
+            finishReason: 'STOP',
           },
         ],
-        stop_reason: 'tool_use',
-        usage: { input_tokens: 1, output_tokens: 1 },
-      },
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+      }),
       'gpt-5-codex',
     );
 
@@ -68,7 +92,6 @@ describe('OpenAI tool mapper compatibility', () => {
     const toolCall = result.choices[0].message.tool_calls?.[0];
     expect(toolCall?.function?.name).toBe('PowerShell');
     expect(JSON.parse(toolCall?.function?.arguments ?? '{}')).toEqual({
-      command: MISSING_COMMAND_FALLBACK,
       description: 'sensitive tool detail',
     });
   });

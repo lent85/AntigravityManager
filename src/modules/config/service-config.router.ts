@@ -2,6 +2,9 @@ import { os, ORPCError } from '@orpc/server';
 import { z } from 'zod';
 import {
   ServiceConfigSnapshotSchema,
+  AuditConfigConflictError,
+  InvalidGatewayThinkingBudgetError,
+  readServiceConfigErrorCode,
   ServiceConfigUpdateSchema,
   ServiceSecretNameSchema,
   ServiceSecretWriteSchema,
@@ -28,9 +31,24 @@ async function safe<T>(work: () => Promise<T>): Promise<T> {
   try {
     return await work();
   } catch (error) {
+    if (
+      error instanceof AuditConfigConflictError ||
+      readServiceConfigErrorCode(error) === 'conflict'
+    ) {
+      throw new ORPCError('CONFLICT', {
+        message: 'Audit settings changed. Refresh before retrying.',
+        data: { configCode: 'conflict' },
+      });
+    }
     if (error instanceof UpstreamProxyConfigurationError) {
       throw new ORPCError('BAD_REQUEST', {
         message: 'Upstream proxy configuration is invalid.',
+        data: { configCode: 'invalid-input' },
+      });
+    }
+    if (error instanceof InvalidGatewayThinkingBudgetError) {
+      throw new ORPCError('BAD_REQUEST', {
+        message: error.message,
         data: { configCode: 'invalid-input' },
       });
     }

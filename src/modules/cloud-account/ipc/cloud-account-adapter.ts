@@ -21,6 +21,7 @@ import {
   type CloudAccountView,
 } from '@/modules/cloud-account/services/cloud-account-view';
 import { CloudAccountRepo } from '@/modules/cloud-account/persistence/cloudHandler';
+import { deleteCloudAccount } from '../services/cloud-account-deletion.service';
 import {
   getActiveOAuthClient,
   listOAuthClients,
@@ -42,7 +43,11 @@ import {
   restoreCloudIdentityProfileRevision,
 } from '@/modules/cloud-account/services/cloud-account-identity-profile.service';
 
-export interface CloudAccountAdapter {
+import type { CloudAccountProjectIdOperations } from '../services/cloud-account-project-id.schema';
+import { cloudAccountProjectId } from '../services/cloud-account-project-id.service';
+import { logger } from '@/shared/logging/logger';
+
+export interface CloudAccountAdapter extends CloudAccountProjectIdOperations {
   getSwitchStatus(): Promise<CloudAccountSwitchStatus>;
   localImport: LocalAccountImportOwner;
   getAutoSwitchEnabled(): Promise<boolean>;
@@ -65,6 +70,7 @@ export interface CloudAccountAdapter {
   getSecurityStatus(): Promise<CloudAccountSecurityStatus>;
   openValidationLink(accountId: string): Promise<void>;
   setProxy(accountId: string, proxyUrl: string | null): Promise<void>;
+  setRouting?(accountId: string, proxyPriority: number, proxyEnabled: boolean): Promise<void>;
   delete(accountId: string): Promise<void>;
   listOAuthClients(): Promise<OAuthClientDescriptor[]>;
   getActiveOAuthClient(): Promise<string>;
@@ -103,6 +109,9 @@ type StandaloneCoreCloudAccountClient = Pick<
   | 'accountSecurityStatus'
   | 'resolveAccountValidationUrl'
   | 'setAccountProxy'
+  | 'getAccountProjectId'
+  | 'setAccountProjectId'
+  | 'fetchAccountProjectId'
   | 'deleteCloudAccount'
   | 'listOAuthClients'
   | 'getActiveOAuthClient'
@@ -114,7 +123,9 @@ type StandaloneCoreCloudAccountClient = Pick<
   | 'restoreIdentityProfileRevision'
   | 'restoreBaselineProfile'
   | 'deleteIdentityProfileRevision'
->;
+> & {
+  setAccountRouting?: CoreRpcClient['setAccountRouting'];
+};
 
 export type CloudAccountAdapterSelection =
   | { mode: 'desktop-embedded' }
@@ -179,7 +190,10 @@ function createDesktopEmbeddedAdapter(): CloudAccountAdapter {
       await openTrustedAccountValidationUrl(url);
     },
     setProxy: async (accountId, proxyUrl) => CloudAccountRepo.setAccountProxy(accountId, proxyUrl),
-    delete: (accountId) => CloudAccountRepo.removeAccount(accountId),
+    ...cloudAccountProjectId,
+    setRouting: async (accountId, proxyPriority, proxyEnabled) =>
+      CloudAccountRepo.setAccountRouting(accountId, proxyPriority, proxyEnabled),
+    delete: deleteCloudAccount,
     listOAuthClients: async () => listOAuthClients(),
     getActiveOAuthClient: async () => getActiveOAuthClient(),
     setActiveOAuthClient: async (clientKey) => setActiveOAuthClient(clientKey),
@@ -233,7 +247,13 @@ function createStandaloneCoreAdapter(
     },
     switchAccount: (accountId, appTarget) => client.switchCloudAccount(accountId, appTarget),
     listViews: () => client.accountViews(),
-    refreshQuota: (accountId) => client.refreshAccountQuota(accountId),
+    refreshQuota: async (accountId) => {
+      const account = await client.refreshAccountQuota(accountId);
+      void import('@/modules/app-shell/ipc/tray/handler')
+        .then(({ refreshTrayAccount }) => refreshTrayAccount())
+        .catch(() => logger.warn('Failed to load tray presentation after quota refresh'));
+      return account;
+    },
     clearServiceDisabled: (accountId) => client.clearServiceDisabled(accountId),
     syncFromIde: (appTarget) => client.syncFromIde(appTarget),
     getSecurityStatus: () => client.accountSecurityStatus(),
@@ -243,6 +263,15 @@ function createStandaloneCoreAdapter(
       await openTrustedAccountValidationUrl(url);
     },
     setProxy: (accountId, proxyUrl) => client.setAccountProxy(accountId, proxyUrl),
+    getAccountProjectId: (input) => client.getAccountProjectId(input),
+    setAccountProjectId: (input) => client.setAccountProjectId(input),
+    fetchAccountProjectId: (input) => client.fetchAccountProjectId(input),
+    setRouting: async (accountId, proxyPriority, proxyEnabled) => {
+      if (!client.setAccountRouting) {
+        throw new Error('Standalone core does not support account routing settings');
+      }
+      await client.setAccountRouting({ accountId, proxyPriority, proxyEnabled });
+    },
     delete: (accountId) => client.deleteCloudAccount(accountId),
     listOAuthClients: () => client.listOAuthClients(),
     getActiveOAuthClient: () => client.getActiveOAuthClient(),

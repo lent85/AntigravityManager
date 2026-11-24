@@ -13,7 +13,12 @@ import {
 import { AuditFileExportInputSchema } from '@/modules/proxy-gateway/audit/audit-file-owner.schema';
 import { MAX_AUDIT_BODY_BYTES } from '@/modules/proxy-gateway/audit/audit-sanitizer';
 import { selectAuditFileAdapter } from '@/modules/proxy-gateway/ipc/audit-file-adapter';
-import { exportSelectedAuditBody } from '@/modules/proxy-gateway/ipc/audit-file-desktop';
+import {
+  exportSelectedAuditBody,
+  exportSelectedAuditSession,
+  exportSelectedAuditHar,
+} from '@/modules/proxy-gateway/ipc/audit-file-desktop';
+import { mockCoreGatewayLifecycle } from '../support/core-gateway-lifecycle';
 
 let directory: string;
 let server: ManagementServer | undefined;
@@ -29,7 +34,11 @@ beforeEach(async () => {
     yield 'first\n';
     yield 'second\n';
   });
-  owner = createAuditFileOwner({ bodyContent: content });
+  owner = createAuditFileOwner({
+    bodyContent: content,
+    sessionContent: content,
+    harContent: content,
+  });
   selectAuditFileAdapter({ mode: 'desktop-embedded' });
 });
 afterEach(async () => {
@@ -57,7 +66,7 @@ async function remote() {
     shutdown: async () => {},
     onShutdownError: vi.fn(),
     rpc: {
-      ...createCoreRpcOperations({ startGateway: vi.fn(), stopGateway: vi.fn() }),
+      ...createCoreRpcOperations(mockCoreGatewayLifecycle()),
       auditFile: owner,
     },
   });
@@ -68,6 +77,81 @@ async function remote() {
 }
 
 describe('selected audit file owner', () => {
+  it('streams HAR through the owner captured before the chooser yields, returning status only', async () => {
+    await remote();
+    const embedded = vi.spyOn(auditFileOwner, 'exportHar');
+    const chunk = '正文🙂'.repeat(50000);
+    content.mockImplementation(async function* () {
+      yield chunk;
+      yield chunk;
+      yield chunk;
+    });
+    const filePath = join(directory, 'request.har');
+    expect(
+      await exportSelectedAuditHar(bodyId, '../unsafe request.har', async (safeName) => {
+        expect(safeName).not.toMatch(/[\\/]/u);
+        selectAuditFileAdapter({ mode: 'desktop-embedded' });
+        return filePath;
+      }),
+    ).toEqual({ status: 'saved' });
+    expect(Buffer.byteLength(chunk.repeat(3))).toBeGreaterThan(1024 * 1024);
+    expect(await readFile(filePath, 'utf8')).toBe(chunk.repeat(3));
+    expect(content).toHaveBeenCalledExactlyOnceWith(bodyId);
+    expect(embedded).not.toHaveBeenCalled();
+  });
+
+  it('preserves the existing HAR and cleans temporary output after a content failure', async () => {
+    await remote();
+    const filePath = join(directory, 'request.har');
+    await writeFile(filePath, 'keep destination');
+    content.mockImplementation(async function* () {
+      yield '{"partial":';
+      throw new Error('capture changed');
+    });
+    await expect(
+      exportSelectedAuditHar(bodyId, 'request.har', async () => filePath),
+    ).rejects.toThrow('Audit export is unavailable.');
+    expect(await readFile(filePath, 'utf8')).toBe('keep destination');
+    expect((await readdir(directory)).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+  });
+
+  it('does not read HAR content after chooser cancellation or an invalid request ID', async () => {
+    const chooser = vi.fn(async () => null);
+    expect(await exportSelectedAuditHar(bodyId, 'request.har', chooser)).toEqual({
+      status: 'cancelled',
+    });
+    await expect(exportSelectedAuditHar('invalid', 'request.har', chooser)).rejects.toThrow(
+      'Audit export is unavailable.',
+    );
+    expect(chooser).toHaveBeenCalledTimes(1);
+    expect(content).not.toHaveBeenCalled();
+  });
+
+  it('exports a scoped session through the owner selected before the native chooser yields', async () => {
+    await remote();
+    const sessionId = `session:affinity:v1:${'a'.repeat(64)}`;
+    const filePath = join(directory, 'session.ndjson');
+    expect(
+      await exportSelectedAuditSession(sessionId, 'session.ndjson', async () => {
+        selectAuditFileAdapter({ mode: 'desktop-embedded' });
+        return filePath;
+      }),
+    ).toEqual({ status: 'saved' });
+    expect(content).toHaveBeenCalledExactlyOnceWith(sessionId);
+    expect(await readFile(filePath, 'utf8')).toBe('first\nsecond\n');
+  });
+  it('does not export a session after chooser cancellation or with an unscoped legacy key', async () => {
+    const chooser = vi.fn(async () => null);
+    const sessionId = `session:affinity:v1:${'a'.repeat(64)}`;
+    expect(await exportSelectedAuditSession(sessionId, 'session.ndjson', chooser)).toEqual({
+      status: 'cancelled',
+    });
+    await expect(
+      exportSelectedAuditSession('legacy-session', 'session.ndjson', chooser),
+    ).rejects.toThrow('Audit export is unavailable.');
+    expect(chooser).toHaveBeenCalledOnce();
+    expect(content).not.toHaveBeenCalled();
+  });
   it('writes an export above the RPC response cap in the remote owner and returns status only', async () => {
     await remote();
     const embedded = vi.spyOn(auditFileOwner, 'exportBody');

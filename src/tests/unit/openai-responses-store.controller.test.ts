@@ -5,10 +5,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_APP_CONFIG } from '@/modules/config/types';
 import { getServerConfig, setServerConfig } from '@/server/server-config';
-import { ProxyGuard } from '@/modules/proxy-gateway/server/guards/proxy.guard';
-import { OpenAIOperations } from '@/modules/proxy-gateway/server/modules/openai/openai-operations.service';
-import { OpenAIResponsesSessionService } from '@/modules/proxy-gateway/server/modules/openai/responses/openai-responses-session.service';
-import { OpenAIResponsesStoreController } from '@/modules/proxy-gateway/server/modules/openai/responses/openai-responses-store.controller';
+import { ProxyGuard } from '@/server/gateway/guards/proxy.guard';
+import { OpenAIOperations } from '@/server/gateway/modules/openai/openai-operations.service';
+import { OpenAIResponsesSessionService } from '@/server/gateway/modules/openai/responses/openai-responses-session.service';
+import { OpenAIResponsesStoreController } from '@/server/gateway/modules/openai/responses/openai-responses-store.controller';
 
 vi.mock('@/modules/proxy-gateway/opencode-sync/opencode-credentials', () => ({
   openCodeCredentialService: { matches: () => false },
@@ -75,13 +75,17 @@ async function createSurface(...answers: unknown[]) {
   );
   apps.push(store);
   await store.init();
+  const operations = new OpenAIOperations(
+    { handleChatCompletions } as never,
+    undefined,
+    undefined,
+    responsesSessions,
+  );
   return {
-    chat: new OpenAIOperations(
-      { handleChatCompletions } as never,
-      undefined,
-      undefined,
-      responsesSessions,
-    ),
+    chat: {
+      responses: (...[body, reply]: Parameters<OpenAIOperations['responses']>) =>
+        operations.responses(body, reply, { headers, url: '/v1/responses' } as never),
+    },
     store,
     responsesSessions,
   };
@@ -238,7 +242,7 @@ describe('OpenAIResponsesStoreController', () => {
 
   it('retains framework handling for unexpected store failures', async () => {
     const { store, responsesSessions } = await createSurface();
-    vi.spyOn(responsesSessions, 'get').mockImplementationOnce(() => {
+    vi.spyOn(responsesSessions, 'getHistoryOwner').mockImplementationOnce(() => {
       throw new Error('Store failed');
     });
     const reply = await store.inject({ url: '/v1/responses/resp_kept', headers });

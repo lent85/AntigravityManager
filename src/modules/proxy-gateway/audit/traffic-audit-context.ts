@@ -6,29 +6,50 @@ import {
 } from '@nestjs/common';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { createHash } from 'node:crypto';
+import type { PromptTransformationState } from '../../../server/gateway/common/prompt-transformation-diagnostics';
+import type { ThoughtRestoreDiagnostics } from '../thought-store/thought-restore-diagnostics';
+import type { SignatureSessionScope } from '../../../server/gateway/common/signature-session-scope';
+import {
+  thoughtCaptureLeases,
+  type ThoughtCaptureLease,
+} from '../thought-store/thought-capture-leases';
 import { Transform, type Readable } from 'node:stream';
 import { Observable } from 'rxjs';
+import { evaluateClientAddress } from '@/shared/network/client-address';
+import { getServerConfig } from '@/server/server-config';
 
 import {
   trafficAuditService,
   type AuditSseBodyWriter,
   type AuditHandle,
-  type UpstreamAttemptHandle,
 } from './traffic-audit.service';
 import type {
   CompleteUpstreamAttemptInput,
   StartUpstreamAttemptInput,
 } from './traffic-audit.types';
 import { classifyHttpTraffic } from './traffic-classifier';
+import { isSuccessfulProbeCandidate } from './audit-probe-policy';
 import { IncrementalSseRedactor } from './incremental-sse-redactor';
 import { auditJsonObject, parseAuditJsonBody } from './audit-json-object';
 import { isFailedAuditAttempt } from './audit-attempt-outcome';
+import { captureGatewayErrorDiagnostic } from './gateway-error-diagnostic';
 import {
-  firstHeader,
+  createCurrentUpstreamAttempt,
+  completeUpstreamAttemptDiagnostic,
+  captureUpstreamAttemptUsage,
+  currentUpstreamAttemptUsage,
+  isUpstreamAttemptUsagePartial,
+  type CurrentUpstreamAttemptHandle,
+} from './upstream-attempt-diagnostics';
+export type { CurrentUpstreamAttemptHandle } from './upstream-attempt-diagnostics';
+export { captureUpstreamAttemptUsage } from './upstream-attempt-diagnostics';
+
+import { resolveAuditSessionId } from './audit-session-identity';
+import {
   inferProtocol,
   isAuditManagementRoute,
   resolveHttpOutcome,
-  resolveStableSessionId,
   resolveThoughtSession,
 } from './traffic-audit-http-metadata';
 import { extractAuditUsage, mergeAuditUsage, type AuditUsage } from './audit-usage';
@@ -42,15 +63,23 @@ export { normalizeSseForAudit } from './normalize-sse-for-audit';
 export { createThoughtSessionKey } from './traffic-audit-http-metadata';
 
 export interface TrafficAuditRequestContext {
+  thoughtCaptureLease?: ThoughtCaptureLease;
+  auditSessionId?: string;
+  promptTransformations?: PromptTransformationState;
+  thoughtRestore?: ThoughtRestoreDiagnostics;
   attemptSequence: number;
   failedAttemptCount?: number;
   currentAccountId?: string | null;
+  currentAccountGenerationHash?: string;
+  currentAccountSubjectHash?: string;
+  currentAccountGrantHash?: string;
   currentAccountEmail?: string | null;
   parent: AuditHandle | null;
   responseUsage?: AuditUsage;
   upstreamUsage?: AuditUsage;
   thoughtSessionKey: string;
   thoughtSessionStable: boolean;
+  thoughtSessionResolved?: boolean;
   proxyTiming?: ProxyResponseTimingState;
   clientSessionId?: string;
 }
@@ -60,12 +89,15 @@ export interface ProxyResponseTimingState {
   cleanMs: number | null;
   normalizationStartedAt: number | null;
   normMs: number | null;
-  thinkingMs: number;
+  thinkingMs: number | null;
   upstreamStartedAt: number | null;
   ttftMs: number | null;
 }
 
 interface HttpAuditState extends TrafficAuditRequestContext {
+  auditGeneration: number;
+  auditStartedAt: number;
+  deferProbe: boolean;
   clientSessionId: string;
   proxyTiming: ProxyResponseTimingState;
   captureClosing?: boolean;
@@ -112,7 +144,7 @@ export function captureHijackedHttpResponseChunk(
 export function completeHijackedHttpResponse(
   request: FastifyRequest | null | undefined,
   reply: FastifyReply,
-  options: { error?: unknown; partial?: boolean } = {},
+  options: { error?: unknown; partial?: boolean; body?: unknown } = {},
 ): void {
   const state = ensureHttpState(request);
   if (!state || state.completed) {
@@ -129,6 +161,9 @@ export function completeHijackedHttpResponse(
   state.responsePartial = state.responsePartial || transportPartial;
   if (options.error) {
     state.error = options.error;
+  }
+  if (options.body !== undefined) {
+    state.responseBody = options.body;
   }
   state.responseCapture = state.sseWriter?.finish({
     errorSummary: final?.result.errorSummary,
@@ -171,30 +206,56 @@ export function runWithTrafficAuditRequestContext<TResult>(
   context: TrafficAuditRequestContext,
   callback: () => TResult,
 ): TResult {
+  context.thoughtCaptureLease ??= thoughtCaptureLeases.acquire(context.thoughtSessionKey);
   return requestContextStorage.run(context, callback);
 }
 
 export function startCurrentUpstreamAttempt(
   input: StartUpstreamAttemptInput,
-): UpstreamAttemptHandle | null {
+): CurrentUpstreamAttemptHandle {
   const context = getTrafficAuditRequestContext();
+  const snapshot = {
+    ...input,
+    accountId: input.accountId ?? context?.currentAccountId ?? undefined,
+    accountGenerationHash:
+      input.accountGenerationHash ??
+      (input.accountId === undefined || input.accountId === context?.currentAccountId
+        ? context?.currentAccountGenerationHash
+        : undefined),
+    accountSubjectHash:
+      input.accountSubjectHash ??
+      (input.accountId === undefined || input.accountId === context?.currentAccountId
+        ? context?.currentAccountSubjectHash
+        : undefined),
+    accountGrantHash:
+      input.accountGrantHash ??
+      (input.accountId === undefined || input.accountId === context?.currentAccountId
+        ? context?.currentAccountGrantHash
+        : undefined),
+  };
   if (!context) {
-    return null;
+    return createCurrentUpstreamAttempt(null, input.operation, undefined, snapshot);
   }
   context.attemptSequence += 1;
-  return trafficAuditService.startAttempt(context.parent, context.attemptSequence, {
-    ...input,
-    accountId: input.accountId ?? context.currentAccountId ?? undefined,
-  });
+  const audit = trafficAuditService.startAttempt(context.parent, context.attemptSequence, snapshot);
+  return createCurrentUpstreamAttempt(audit, input.operation, context.parent?.id, snapshot);
 }
 
 export function setCurrentAuditAccountId(
   accountId: string | null,
   accountEmail?: string | null,
+  lifecycleGeneration?: string,
+  subjectHash?: string,
+  grantHash?: string,
 ): void {
   const context = getTrafficAuditRequestContext();
   if (context) {
     context.currentAccountId = accountId;
+    context.currentAccountGenerationHash = lifecycleGeneration
+      ? createHash('sha256').update(lifecycleGeneration).digest('hex')
+      : undefined;
+    context.currentAccountSubjectHash = subjectHash;
+    context.currentAccountGrantHash = grantHash;
     if (accountEmail !== undefined) {
       context.currentAccountEmail = accountEmail;
     }
@@ -211,15 +272,52 @@ export function captureCurrentAuditUsage(value: unknown): void {
   }
 }
 
+/** Only protocol-owned D03 resolution may supply a restored/generated logical identity. */
+export function captureCurrentAuditSession(scope: SignatureSessionScope): void {
+  const context = getTrafficAuditRequestContext();
+  if (context) {
+    context.auditSessionId = scope.auditKey;
+    bindCurrentThoughtRecoveryScope(scope.storeKey);
+  }
+}
+
+/** Call only after the protocol has proved ownership of the restored history. */
+export function bindCurrentThoughtRecoveryScope(sessionKey: string): void {
+  const context = getTrafficAuditRequestContext();
+  if (
+    !context ||
+    context.thoughtSessionStable ||
+    context.thoughtSessionResolved ||
+    context.thoughtCaptureLease?.valid === false
+  ) {
+    return;
+  }
+  if (context.thoughtSessionKey !== sessionKey) {
+    context.thoughtCaptureLease?.release();
+    context.thoughtSessionKey = sessionKey;
+    context.thoughtCaptureLease = thoughtCaptureLeases.acquire(sessionKey);
+  }
+  context.thoughtSessionResolved = true;
+}
+
 export function completeCurrentUpstreamAttempt(
-  handle: UpstreamAttemptHandle | null,
+  handle: CurrentUpstreamAttemptHandle | null,
   input: CompleteUpstreamAttemptInput,
 ): void {
+  captureUpstreamAttemptUsage(handle, input.responseBody);
+  const usage = mergeAuditUsage(currentUpstreamAttemptUsage(handle), input.usage);
+  if (handle && !completeUpstreamAttemptDiagnostic(handle, input)) {
+    return;
+  }
   const context = getTrafficAuditRequestContext();
   if (context && isFailedAuditAttempt(input)) {
     context.failedAttemptCount = (context.failedAttemptCount ?? 0) + 1;
   }
-  trafficAuditService.completeAttempt(handle, input);
+  trafficAuditService.completeAttempt(handle?.audit ?? null, {
+    ...input,
+    usage,
+    partial: input.partial || isUpstreamAttemptUsagePartial(handle),
+  });
 }
 
 /** Runs Nest handlers inside the request context created by the Fastify lifecycle hooks. */
@@ -244,6 +342,11 @@ export function registerTrafficAuditHttpHooks(instance: FastifyInstance): void {
     }
     const session = resolveThoughtSession(request);
     const state: HttpAuditState = {
+      auditGeneration: trafficAuditService.captureGeneration(
+        classifyHttpTraffic(request.method, request.url),
+      ),
+      auditStartedAt: Date.now(),
+      deferProbe: deferProbeCapture(request),
       attemptSequence: 0,
       clientSessionId: session.clientId,
       completed: false,
@@ -253,13 +356,15 @@ export function registerTrafficAuditHttpHooks(instance: FastifyInstance): void {
       responsePartial: false,
       thoughtSessionKey: session.key,
       thoughtSessionStable: session.stable,
+      thoughtCaptureLease: thoughtCaptureLeases.acquire(session.key),
     };
     const stateKey = requestStateKey(request);
     completedRequestKeys.delete(stateKey);
     requestStates.set(stateKey, state);
+    reply.raw.once('close', () => state.thoughtCaptureLease?.release());
     request.raw.once('aborted', () => {
       if (!state.parent) {
-        state.parent = startHttpParent(request);
+        state.parent = startHttpParent(request, state.auditStartedAt, state.auditGeneration);
       }
       state.responsePartial = true;
       completeHttpAuditState(state, reply, 'client_cancelled', 499);
@@ -268,17 +373,24 @@ export function registerTrafficAuditHttpHooks(instance: FastifyInstance): void {
 
   instance.addHook('preHandler', async (request) => {
     const state = requestStates.get(requestStateKey(request));
-    if (!state || state.parent) {
+    if (!state || state.parent || state.deferProbe) {
       return;
     }
     refreshThoughtSession(state);
-    state.parent = startHttpParent(request);
+    state.parent = startHttpParent(request, state.auditStartedAt, state.auditGeneration);
   });
 
   instance.addHook('onSend', async (request, reply, payload) => {
     const state = requestStates.get(requestStateKey(request));
     if (!state) {
       return payload;
+    }
+    if (state.deferProbe && reply.statusCode >= 200 && reply.statusCode < 300 && !state.error) {
+      return payload;
+    }
+    if (state.deferProbe) {
+      state.deferProbe = false;
+      state.parent = startHttpParent(request, state.auditStartedAt, state.auditGeneration);
     }
     if (isReadable(payload)) {
       const capturingStream = createCapturingTransform(payload, state);
@@ -302,7 +414,7 @@ export function registerTrafficAuditHttpHooks(instance: FastifyInstance): void {
   });
 
   instance.addHook('onResponse', async (request, reply) => {
-    const state = ensureHttpState(request);
+    const state = ensureHttpState(request, false);
     if (state) {
       await completeHttpAuditStateAfterCapture(state, reply);
     }
@@ -336,31 +448,54 @@ function completeHttpAuditState(
     return;
   }
   state.completed = true;
+  state.thoughtCaptureLease?.release();
   const status = statusOverride ?? reply.statusCode;
+  captureGatewayErrorDiagnostic({
+    error: state.error,
+    status,
+    protocol: inferProtocol(state.request.url),
+    requestId: state.parent?.id,
+  });
+  const suppress =
+    state.deferProbe &&
+    status >= 200 &&
+    status < 300 &&
+    !state.error &&
+    !state.responsePartial &&
+    !outcome;
+  if (!suppress && !state.parent) {
+    state.parent = startHttpParent(state.request, state.auditStartedAt, state.auditGeneration);
+  }
   const usage = mergeAuditUsage(
     mergeAuditUsage(state.responseUsage, extractAuditUsage(state.responseBody)),
     state.upstreamUsage,
   );
-  trafficAuditService.completeParent(state.parent, {
-    error: state.error,
-    outcome: outcome ?? resolveHttpOutcome(status, state.error ?? state.responseBody),
-    partial: state.responsePartial,
-    responseBody: state.responseBody,
-    responseHeaders: reply.getHeaders(),
-    responsePayloadHandled: Boolean(state.sseWriter),
-    status,
-    usage,
-    outputModalities: mergeAuditOutputModalities(
-      state.outputModalities ?? null,
-      detectAuditOutputModalities(state.responseBody),
-    ),
-  });
+  if (!suppress) {
+    trafficAuditService.completeParent(state.parent, {
+      sessionId: state.auditSessionId,
+      error: state.error,
+      outcome: outcome ?? resolveHttpOutcome(status, state.error ?? state.responseBody),
+      partial: state.responsePartial,
+      responseBody: state.responseBody,
+      responseHeaders: reply.getHeaders(),
+      responsePayloadHandled: Boolean(state.sseWriter),
+      status,
+      usage,
+      outputModalities: mergeAuditOutputModalities(
+        state.outputModalities ?? null,
+        detectAuditOutputModalities(state.responseBody),
+      ),
+    });
+  }
   const stateKey = requestStateKey(state.request);
   completedRequestKeys.add(stateKey);
   requestStates.delete(stateKey);
 }
 
-function ensureHttpState(request: FastifyRequest | null | undefined): HttpAuditState | undefined {
+function ensureHttpState(
+  request: FastifyRequest | null | undefined,
+  admit = true,
+): HttpAuditState | undefined {
   if (!request || typeof request !== 'object') {
     return undefined;
   }
@@ -372,6 +507,11 @@ function ensureHttpState(request: FastifyRequest | null | undefined): HttpAuditS
   if (!state && !isAuditManagementRoute(request.url)) {
     const session = resolveThoughtSession(request);
     state = {
+      auditGeneration: trafficAuditService.captureGeneration(
+        classifyHttpTraffic(request.method, request.url),
+      ),
+      auditStartedAt: Date.now(),
+      deferProbe: deferProbeCapture(request),
       attemptSequence: 0,
       clientSessionId: session.clientId,
       completed: false,
@@ -384,9 +524,10 @@ function ensureHttpState(request: FastifyRequest | null | undefined): HttpAuditS
     };
     requestStates.set(stateKey, state);
   }
-  if (state && !state.parent) {
+  if (state && !state.parent && admit) {
+    state.deferProbe = false;
     refreshThoughtSession(state);
-    state.parent = startHttpParent(request);
+    state.parent = startHttpParent(request, state.auditStartedAt, state.auditGeneration);
   }
   return state;
 }
@@ -397,33 +538,57 @@ function createProxyResponseTimingState(): ProxyResponseTimingState {
     normMs: null,
     normalizationStartedAt: null,
     startedAt: performance.now(),
-    thinkingMs: 0,
+    thinkingMs: null,
     ttftMs: null,
     upstreamStartedAt: null,
   };
 }
 
-function startHttpParent(request: FastifyRequest): AuditHandle | null {
+function deferProbeCapture(request: FastifyRequest): boolean {
+  return (
+    !getServerConfig()?.traffic_audit.capture_successful_probes &&
+    isSuccessfulProbeCandidate(request.method, request.url)
+  );
+}
+
+function startHttpParent(
+  request: FastifyRequest,
+  startedAt: number,
+  captureGeneration: number,
+): AuditHandle | null {
   const headers = request.headers;
-  const forwarded = firstHeader(headers['x-forwarded-for'])?.split(',')[0]?.trim();
-  const clientIp = forwarded || firstHeader(headers['x-real-ip']) || request.ip;
+  const config = getServerConfig();
+  const decision = config
+    ? evaluateClientAddress(request.socket.remoteAddress ?? request.ip, headers, config.network)
+    : null;
+  const clientIp = decision?.clientAddress ?? request.ip;
   const protocol = inferProtocol(request.url);
   const url = request.url;
   return trafficAuditService.startParent({
+    startedAt,
+    captureGeneration,
     clientIp,
     headers,
     method: request.method,
     protocol,
     query: auditJsonObject(request.query) ?? undefined,
     requestBody: request.body,
-    sessionId: resolveStableSessionId(request) ?? undefined,
+    sessionId: resolveAuditSessionId(request),
     trafficClass: classifyHttpTraffic(request.method, url),
     url,
   });
 }
 
 function refreshThoughtSession(state: HttpAuditState): void {
+  // A protocol-resolved hint-free scope supersedes the temporary HTTP entry key.
+  if (state.thoughtSessionResolved) {
+    return;
+  }
   const session = resolveThoughtSession(state.request, state.clientSessionId);
+  if (state.thoughtSessionKey !== session.key && state.thoughtCaptureLease?.valid !== false) {
+    state.thoughtCaptureLease?.release();
+    state.thoughtCaptureLease = thoughtCaptureLeases.acquire(session.key);
+  }
   state.clientSessionId = session.clientId;
   state.thoughtSessionKey = session.key;
   state.thoughtSessionStable = session.stable;

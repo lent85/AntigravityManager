@@ -17,6 +17,8 @@ const suites = {
     'squirrel-upgrade': './installers/installed-squirrel-upgrade.mjs',
     'squirrel-updater': './installers/packaged-squirrel-updater-native.mjs',
     'nsis-updater': './installers/packaged-nsis-updater-native.mjs',
+    'nsis-feedback': './installers/nsis-feedback-native.mjs',
+    'nsis-inventory': './installers/nsis-inventory.mjs',
     feed: './installers/prepare-windows-update-feed.test.mjs',
   },
   accounts: {
@@ -47,16 +49,22 @@ const suites = {
   release: {
     notes: '../release/github-release-notes.test.mjs',
     artifacts: '../release/validate-release-artifacts.mjs',
+    delivery: '../release/release-delivery.test.mjs',
   },
 };
 
 const unitFiles = [
+  '../build/download-standalone-runtime.test.mjs',
   '../build/forge-package-bin-scan.test.mjs',
   '../build/publish-standalone-runtime.test.mjs',
   '../build/trace-standalone-runtime.test.mjs',
+  '../release/build-source-manifest.test.mjs',
   '../release/github-release-notes.test.mjs',
   '../release/validate-release-artifacts.test.mjs',
+  '../release/release-delivery.test.mjs',
   './installers/prepare-windows-update-feed.test.mjs',
+  './installers/nsis-inventory.test.mjs',
+  './installers/nsis-attempt-log.test.mjs',
   './accounts/official-auth-state.test.mjs',
   './accounts/snapshot-isolation.test.mjs',
   './accounts/classic-terms-state.test.mjs',

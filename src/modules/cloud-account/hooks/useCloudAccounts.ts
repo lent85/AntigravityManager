@@ -8,6 +8,7 @@ import {
   batchSetCloudAccountsPaused,
   refreshAccountQuota,
   setAccountProxy,
+  setAccountRouting,
   listOAuthClients,
   setActiveOAuthClient,
 } from '@/modules/cloud-account/actions/cloud';
@@ -317,6 +318,16 @@ export function useSetAccountProxy() {
     },
     onError: (error) => {
       console.error('[Mutation] setAccountProxy failed:', error);
+    },
+  });
+}
+
+export function useSetAccountRouting() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: setAccountRouting,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cloudAccounts });
     },
   });
 }

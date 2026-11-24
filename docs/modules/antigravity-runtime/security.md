@@ -2,6 +2,34 @@
 
 This reference owns official-client credential destinations, local snapshots and recovery. Use [account switching acceptance](account-switch-acceptance.md) for live evidence and [global security rules](../../security.md) for shared requirements.
 
+## Read-only Cowork runtime inspection
+
+Cowork discovery and inspection remain separate from the Agy binary patcher. Discovery
+admits regular Claude files under explicit roots/custom bundle layouts and records their
+bounded size and SHA-256 fingerprint. A custom bundle whose canonical executable escapes
+its bundle is refused. Direct symbolic runtime files are refused.
+
+Inspection requires a fingerprint from admitted discovery, reopens the selected canonical
+file, bounds descriptor reads to the admitted size plus one growth probe, and compares
+the complete SHA-256. Oversized, changed or unavailable candidates return an unreadable
+state with a rediscovery instruction. A source classification or write-free plan does
+not authorize mutation, establish a valid executable signature, prove the exact running
+installation, or verify client launch. Transactional backup/write/recovery, platform
+process ownership and signing remain unimplemented for Cowork.
+
+Source inspection requires valid UTF-8 and parses at most 1 MiB of complete JavaScript
+with Acorn. Only unique top-level function declarations matching the frozen reverse
+accumulation algorithm are eligible. Parameter/local bindings, loop conditions and
+returns must agree; text in strings/comments and unrelated filters are not evidence.
+Shadowed `Math` bindings are refused. Native/bundled payload extraction and nested
+function scopes remain unsupported pending a verified format contract.
+
+A pure original-to-8k preview preserves the exact UTF-8 byte count and all bytes outside
+the selected function, then parses and checks the result again. It returns original and
+preview hashes and the byte range; it performs no filesystem write. Recognized return-zero
+and 35k legacy forms require version-matched original recovery material and cannot
+produce a ready upgrade plan. See the [preflight decision](../../../.agents/notes/implemented/security/2026-11-05-cowork-structural-preflight.md).
+
 ## Local-account transport
 
 Legacy local-account transport contains bounded account/identity metadata and closed error categories, without backup paths, raw database rows or credential-bearing backup objects. Snapshot restore accepts an account ID and reads its existing backup only inside the selected owner. The unused raw backup/restore renderer contracts are removed; internal durable backup codecs and native injection policy remain unchanged. Admission/drain covers both reads and serialized writes, and existing database primitives close their per-operation handles in `finally` blocks.
@@ -39,7 +67,7 @@ of the Manager's success notification. See the
 
 Classic credential-store switches update the host system credential and, on Linux, the required Classic cache. Ordinary Windows and Linux IDE switches on version 2.6 or newer synchronize the captured profile's SQLite UnifiedStateSync desktop identity, the operating system's `gemini` / `antigravity` credentials and `~/.gemini/jetski-standalone-oauth-token`. The desktop and embedded Agent have separate authentication readers; profile SQLite alone does not establish Agent identity. Unknown IDE versions, older IDEs and macOS retain their existing destination.
 
-The runtime closes the captured IDE tree before required writes, verifies each destination and restarts the same installation/profile. It then checks the official Agent's `GetAuthStatus` and `GetUserStatus` through a loopback hub belonging to the newly launched main process. Every observed hub must report valid authentication and the selected email. Observation has one 30-second deadline; missing hubs, changed process identities, unsupported responses, and mismatches cannot finalize the Manager account. No generation request is made during this check. Responses and CSRF values remain inside the runtime.
+The runtime closes the captured IDE tree before required writes, verifies each destination and restarts the same installation/profile. It then checks the official Agent's `GetAuthStatus` and `GetUserStatus` through a loopback hub belonging to the newly launched main process. Every observed hub must report valid authentication and the selected email. Observation has a single deadline of 120 seconds on Windows and 30 seconds on Linux and macOS. Windows IDE can finish desktop sign-in before the Agent hub starts. Missing hubs, changed process identities, unsupported responses, and mismatches cannot finalize the Manager account. No generation request is made during this check. Responses and CSRF values remain inside the runtime.
 
 Workspace provisioning explicitly selects the existing workspace writer behavior: this ordinary-switch change does not add SQLite/cache synchronization or identity confirmation to workspace launch. Windows IDE 2.6 workspace credentials still use the shared Windows item. Separate profiles and HOME directories do not isolate it; concurrent account isolation remains unresolved. The standalone fallback added here belongs to the current ordinary-switch OS environment, not to managed workspace homes. No accepted-terms records are manufactured.
 
@@ -82,6 +110,11 @@ native credentials are lost. Windows/Linux native recovery APIs do not apply to 
 Windows Classic credential storage uses the official target `gemini:antigravity` through the existing Koffi dependency and Win32 `CredReadW`/`CredWriteW`. DLLs are loaded from the absolute Windows system directory. Reads do not create or mutate an entry; missing entries are distinguished from native failures. Returned metadata and payload size are validated before decoding, native read allocations are freed, and temporary write buffers are cleared. The payload remains raw UTF-8 JSON. The native integration fixture uses an isolated target, checks it through independent credential enumeration, and deletes only that synthetic target.
 
 Windows IDE 2.6 ordinary switches reuse that native target. Recovery snapshots preserve exact payload bytes and writable metadata; entries with native attributes are rejected before mutation because their recovery is unsupported. The plaintext JSON sibling `state.vscdb.account-switch.credentials.backup` holds the pre-write native item and standalone file, including absence. It requires no Manager key. Capture occurs after shutdown, once per prepared operation, and backup write/readback must succeed before client state changes. It is replaced on the next switch; retain it with its corresponding SQLite `.account-switch.backup` for manual recovery. Historical encrypted records remain readable with their original key.
+
+Windows IDE 2.6 and later ordinary switches write one Agent credential envelope to the native
+item and the standalone fallback file. The account email and optional ID token are top-level
+fields. The nested token carries its absolute expiry, `expires_in: 3599` and any enterprise project.
+Each destination requires exact readback before the runtime starts the IDE and confirms its Agent.
 
 `restoreWindowsIdeCredentials` is a trusted runtime recovery API, not renderer IPC. It holds the runtime's switch guard, refuses running official IDE/App clients, reads and validates the selected profile's backup, rejects redirected standalone paths, restores native credentials with full readback, and restores or removes the standalone file with byte readback. It does not restore SQLite or start the client. A separate maintenance process must first stop the Manager/Core owner as well; the switch guard is process-local. Keep clients stopped while separately restoring the matching SQLite backup, without mixing in a later WAL. Restoration across these stores is not atomic; a failed restore remains an error and preserves the recovery files. Moving a native recovery record to another HOME is rejected. Native recovery records restore the original environment; use account snapshots for account migration. Code rollback alone does not restore accounts.
 
@@ -173,6 +206,56 @@ uses a synchronized sibling temporary file and verifies readback. Links and over
 rejected. Unrelated settings are retained. History is saved before replacing a valid baseline;
 invalidation clears stale official fields before committing the new revision, so failed writes
 cannot silently import stale consent on retry. Prelaunch recovery restores only this invocation's
-consent fields and refuses to overwrite later acceptance. These are local filesystem checks,
+consent fields and refuses to overwrite later acceptance. It reads the official file back before
+confirming those restored fields. A missing file or changed consent fields fails recovery; unrelated
+settings are not used to infer consent recovery. Failed recovery preserves the original switch
+failure alongside the recovery failure, stops success publication and adds no automatic retry.
+This consent-only recovery does not restore credentials. These are local filesystem checks,
 not a lock enforced by the official client; independently started external writers can still race.
 No raw file contents, paths or identities enter the new diagnostic messages.
+
+## Cowork runtime IPC ownership
+
+The `coworkRuntime` feature router owns bounded discovery, selected-target inspection,
+source-only preview, transaction receipts and lifecycle admission. Selection and preview
+UUIDs reference main-process snapshots. IPC callers cannot supply patched source, a
+recovery destination, package eligibility or process callbacks. Reinspection compares
+the selected hash; changed installations require a new selection and preview.
+
+The production service has no verified Claude package adapter. All real discovered
+targets therefore remain unsupported for mutation and process control. Windows writes
+are denied, and `.app` targets require complete signing-resource recovery before any
+future adapter can admit them. An exact standalone JavaScript match remains an
+inspection-only preview and does not prove Claude product ownership.
+
+For a recognized thin arm64 Mach-O Bun standalone executable, inspection can display
+the payload envelope's file range. For the supported module table layout it also shows
+the module count, the virtual entry name and its content byte range. The probe reads
+only bounded format metadata from the selected file. Virtual entry names are displayed
+as text and never resolved as filesystem paths. Unrecognized module metadata leaves
+the envelope-only result available. Native targets remain ineligible for writes and
+process control. Package identity, source extraction and the pruning function require
+their own evidence.
+
+The transaction implementation accepts only a trusted main-process unsigned-source
+adapter that independently verifies package identity and exact-instance lifecycle.
+Its immutable original backup and versioned journal remain under the Manager profile,
+outside the installation. Restore checks package/version/instance, immutable backup
+identity and the complete original structural plan. Current contents must equal the
+recomputed patched bytes or the exact original. Preview and backup lookup are read-only.
+Prepared and interrupted journal phases block another apply or manual start until
+explicit recovery. Manual start rechecks ownership and selected bytes before dispatch.
+Confirmed restore of original bytes and permissions reconciles the journal without
+inspecting, stopping or starting the client. A mode-only restore uses the stopped-client
+transaction. Changed target bytes, ownership, journal identity or backup material refuse
+recovery instead of overwriting an external update.
+Rollback checks current bytes and stopped-instance evidence before replacing anything.
+Primary, rollback and restart failures remain distinct in typed receipts. Raw causes
+remain in main. A successful write does not establish restart or functional acceptance.
+
+General settings shows an explicit confirmation for each admitted action. Apply and
+restore require a ready one-use preview and known selected-instance process state.
+The result keeps file effect, recovery and restart separate. A lost reply requires
+inspection before retrying with a fresh preview.
+
+See the module's [remaining package and platform work](../../../src/modules/antigravity-runtime/cowork/TODO.md).

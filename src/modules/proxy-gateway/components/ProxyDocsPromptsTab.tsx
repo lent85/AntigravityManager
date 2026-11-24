@@ -14,7 +14,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import { OpenCodeSyncCard } from './OpenCodeSyncCard';
 import type { ProxyApiKey } from '@/modules/config/types';
 import type { ProxyExampleModel } from './proxy-example-models';
 import {
@@ -686,8 +685,6 @@ print(f"Total Input Tokens: {response.usage.input_tokens}")`;
 
         {/* Tab 1: Clients & IDEs */}
         <TabsContent value="ides" className="mt-0 space-y-3">
-          <OpenCodeSyncCard baseUrl={baseUrl} models={models} />
-
           {/* Cursor Configuration */}
           <div className="bg-card space-y-2 rounded-md border p-3">
             <div className="flex items-center justify-between gap-2">

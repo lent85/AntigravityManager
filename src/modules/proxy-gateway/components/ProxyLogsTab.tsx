@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ipc } from '@/ipc/manager';
@@ -23,7 +23,7 @@ import type {
   ProxyUsageRecord,
   ProxyUsageStatsResult,
   UsageTimeRange,
-} from '../server/shared/services/proxy-usage.types';
+} from '@/server/gateway/shared/services/proxy-usage.types';
 import {
   Activity,
   AlertCircle,
@@ -85,6 +85,7 @@ export function ProxyLogsTab({
   // Sync external client filter if provided
   useEffect(() => {
     if (selectedClientKeyId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setClientFilter(selectedClientKeyId);
       setPageIndex(0);
     }
@@ -92,6 +93,7 @@ export function ProxyLogsTab({
 
   // Reset page index on filter change
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPageIndex(0);
   }, [timeRange, statusFilter, clientFilter, accountFilter, modelFilter, protocolFilter]);
 

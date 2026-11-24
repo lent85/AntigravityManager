@@ -22,6 +22,7 @@ vi.mock('@/modules/cloud-account/persistence/cloudHandler');
 const RESET_TIME = '2026-09-01T00:00:00Z';
 const RESET_TIMESTAMP = Date.parse(RESET_TIME);
 const CONFIG: WeeklyWarmupConfig = { enabled: true, groups: ['claude', 'gemini'] };
+const storedAccounts = new Map<string, CloudAccount>();
 
 function makeAccount(
   id: string,
@@ -29,7 +30,7 @@ function makeAccount(
   bucketId: string,
   resetTime = RESET_TIME,
 ): CloudAccount {
-  return {
+  const value: CloudAccount = {
     id,
     provider: 'google',
     email: `${id}@example.com`,
@@ -42,7 +43,14 @@ function makeAccount(
       project_id: `project-${id}`,
     },
     quota: {
-      models: {},
+      models: {
+        [groupName.toLowerCase().includes('claude') || groupName.toLowerCase().includes('3p')
+          ? 'claude-sonnet-4-6-thinking'
+          : 'gemini-3-flash-agent']: {
+          percentage: 100,
+          resetTime,
+        },
+      },
       quota_groups: [
         {
           display_name: groupName,
@@ -61,10 +69,32 @@ function makeAccount(
     last_used: 1,
     status: 'active',
   };
+  storedAccounts.set(id, value);
+  return value;
 }
 
 describe('weekly warmup candidate selection', () => {
   const emptyHistory: WeeklyWarmupHistory = { version: 1, entries: {} };
+
+  it('skips unknown model catalogs and honors explicit quota-group membership', () => {
+    const unknown = makeAccount('unknown', 'Gemini Models', 'weekly');
+    unknown.quota!.models = {};
+    const excluded = makeAccount('excluded', 'Gemini Models', 'weekly');
+    excluded.quota!.quota_groups![0].model_ids = ['gemini-3.1-pro-high'];
+    expect(
+      selectWeeklyWarmupCandidates([unknown, excluded], CONFIG, emptyHistory, RESET_TIMESTAMP),
+    ).toEqual([]);
+    const supported = makeAccount('supported', 'Gemini Models', 'weekly');
+    supported.quota!.quota_groups![0].model_ids = ['gemini-3-flash-agent'];
+    supported.quota!.models = {
+      'models/GEMINI-3-FLASH-AGENT': { percentage: 100, resetTime: RESET_TIME },
+    };
+    expect(
+      selectWeeklyWarmupCandidates([supported], CONFIG, emptyHistory, RESET_TIMESTAMP).map(
+        (candidate) => candidate.availableModels,
+      ),
+    ).toEqual([['gemini-3-flash-agent']]);
+  });
 
   it('rejects forbidden accounts, invalid calendar dates and stale cycles', () => {
     const forbidden = makeAccount('forbidden', 'Claude', '3p-weekly');
@@ -147,6 +177,10 @@ describe('weekly warmup candidate selection', () => {
 
   it('warms a dedicated model-family group only when the representative model belongs to it', () => {
     const account = makeAccount('pro-account', 'Gemini Models', 'gemini-weekly');
+    account.quota!.models['claude-sonnet-4-6-thinking'] = {
+      percentage: 100,
+      resetTime: RESET_TIME,
+    };
     const dedicatedGroup = (displayName: string, bucketId: string) => ({
       display_name: displayName,
       buckets: [
@@ -209,6 +243,18 @@ describe('WeeklyWarmupService.run', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    storedAccounts.clear();
+    vi.mocked(CloudAccountRepo.getAccount).mockImplementation(async (id) => {
+      const value = storedAccounts.get(id);
+      return value ? structuredClone(value) : undefined;
+    });
+    vi.mocked(CloudAccountRepo.updateToken).mockImplementation(async (id, token, guard) => {
+      guard?.(storedAccounts.get(id));
+      const value = storedAccounts.get(id);
+      if (value) {
+        value.token = structuredClone(token);
+      }
+    });
     WeeklyWarmupService.resetStateForTesting();
     storedConfig = { ...CONFIG };
     storedHistory = { version: 1, entries: {} };
@@ -266,16 +312,19 @@ describe('WeeklyWarmupService.run', () => {
   });
 
   it('serializes overlapping runs and rechecks history before the queued run', async () => {
+    const entered = Promise.withResolvers<void>();
     let release: () => void = () => undefined;
     const warmup = vi.fn(
       () =>
         new Promise<void>((resolve) => {
           release = resolve;
+          entered.resolve();
         }),
     );
     const accounts = [makeAccount('a', 'Gemini', 'weekly')];
     const first = WeeklyWarmupService.run(accounts, { warmup }, { now: RESET_TIMESTAMP });
     const second = WeeklyWarmupService.run(accounts, { warmup }, { now: RESET_TIMESTAMP });
+    await entered.promise;
     expect(warmup).toHaveBeenCalledTimes(1);
     release();
     expect(await Promise.all([first, second])).toEqual([['a'], []]);
@@ -371,13 +420,18 @@ describe('WeeklyWarmupService.run', () => {
         expect(warmup).not.toHaveBeenCalled();
       } else {
         expect(warmed).toEqual([account.id]);
-        expect(CloudAccountRepo.updateToken).toHaveBeenCalledWith(account.id, {
-          ...account.token,
-          project_id: projectId,
-        });
+        expect(CloudAccountRepo.updateToken).toHaveBeenCalledWith(
+          account.id,
+          {
+            ...account.token,
+            project_id: projectId,
+          },
+          expect.any(Function),
+        );
         expect(warmup).toHaveBeenCalledExactlyOnceWith({
           accessToken: account.token.access_token,
           model: 'gemini-3-flash',
+          availableModels: ['gemini-3-flash-agent'],
           projectId,
           upstreamProxyUrl: undefined,
           signal: expect.any(AbortSignal),

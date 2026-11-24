@@ -4,7 +4,7 @@ import {
   RateLimitReason,
   RateLimitTrackerService,
   shouldGraceRetry,
-} from '../../modules/proxy-gateway/server/shared/services/rate-limit-tracker.service';
+} from '../../server/gateway/shared/services/rate-limit-tracker.service';
 
 describe('RateLimitTrackerService parity replay', () => {
   it('uses Retry-After header before body/default', () => {
@@ -48,7 +48,7 @@ describe('RateLimitTrackerService parity replay', () => {
 
     expect(info).toMatchObject({
       reason: RateLimitReason.RateLimitExceeded,
-      retryAfterSec: 30,
+      retryAfterSec: 5,
       model: 'gemini-3.1-pro-high',
     });
     expect(tracker.isRateLimited('acc-resource', 'gemini-3.1-pro-high')).toBe(true);

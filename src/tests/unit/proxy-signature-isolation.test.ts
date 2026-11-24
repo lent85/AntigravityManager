@@ -3,7 +3,7 @@ import { SignatureStore } from '@/modules/proxy-gateway/antigravity/SignatureSto
 import type {
   AnthropicChatRequest,
   OpenAIChatRequest,
-} from '@/modules/proxy-gateway/server/common/interfaces/request-interfaces';
+} from '@/server/gateway/common/interfaces/request-interfaces';
 import {
   collect,
   createAccount,
@@ -14,7 +14,7 @@ import {
 } from './proxy-real-path.harness';
 import { Observable } from 'rxjs';
 
-vi.mock('@/modules/proxy-gateway/server/common/utils/request-user-agent', async (original) => ({
+vi.mock('@/server/gateway/common/utils/request-user-agent', async (original) => ({
   ...(await original<object>()),
   resolveRequestUserAgent: async () => 'signature-test/1.0',
 }));
@@ -48,7 +48,7 @@ describe('real gateway signature isolation', () => {
     });
     const { openAIService } = createGateway(upstream, createLease([createAccount('acc-1')]));
     const a: OpenAIChatRequest = {
-      model: 'gemini-pro-agent',
+      model: 'gemini-3.1-pro-low',
       stream,
       messages: [{ role: 'user', content: 'Read task A' }],
       tools: [{ type: 'function', function: { name: 'read', parameters: { type: 'object' } } }],
@@ -102,7 +102,7 @@ describe('real gateway signature isolation', () => {
       });
       const { anthropicService } = createGateway(upstream, createLease([createAccount('acc-1')]));
       const a: AnthropicChatRequest = {
-        model: 'gemini-pro-agent',
+        model: 'gemini-3.1-pro-low',
         max_tokens: 128,
         stream,
         messages: [{ role: 'user', content: 'Read task A' }],

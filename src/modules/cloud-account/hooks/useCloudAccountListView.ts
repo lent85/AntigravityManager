@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { filter, flatMap, isEmpty, size, sumBy } from 'lodash-es';
 import type { CloudAccountView } from '@/modules/cloud-account/services/cloud-account-view';
 import type { AppConfig } from '@/modules/config/types';
+import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
 import {
   buildAccountTierOptions,
   filterAndSortCloudAccounts,
@@ -24,7 +25,6 @@ import {
   type ManualAccountRecommendation,
 } from '@/modules/cloud-account/utils/manual-account-recommendation';
 import { selectWeeklyQuotaItems } from '@/modules/cloud-account/utils/quota-groups';
-
 const EMPTY_ACCOUNTS: CloudAccountView[] = [];
 const EMPTY_SELECTED_TIER_KEYS: string[] = [];
 const EMPTY_MODEL_VISIBILITY: Record<string, boolean> = {};
@@ -98,6 +98,7 @@ export function useCloudAccountListView(
   accounts: CloudAccountView[] | undefined,
   config: Pick<AppConfig, 'account_tier_filter' | 'model_visibility'> | undefined,
   currentSort: AccountSortKey,
+  appTarget: AntigravityAppTarget,
 ): CloudAccountListView {
   const sourceAccounts = accounts ?? EMPTY_ACCOUNTS;
   const selectedTierKeys = config?.account_tier_filter ?? EMPTY_SELECTED_TIER_KEYS;
@@ -125,10 +126,11 @@ export function useCloudAccountListView(
   const manualRecommendation = useMemo(
     () =>
       getManualAccountRecommendation(baseSortedAccounts, {
+        appTarget,
         sortKey: currentSort,
         modelVisibility,
       }),
-    [baseSortedAccounts, currentSort, modelVisibility],
+    [appTarget, baseSortedAccounts, currentSort, modelVisibility],
   );
 
   const sortedAccounts = useMemo(
@@ -161,7 +163,6 @@ export function useCloudAccountListView(
 
   const overallWeeklyQuotaStatus =
     overallWeeklyQuotaPercentage === null ? null : getQuotaStatus(overallWeeklyQuotaPercentage);
-
   return {
     sortedAccounts,
     manualRecommendation,

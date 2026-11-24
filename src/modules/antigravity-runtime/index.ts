@@ -21,10 +21,12 @@ export {
 export type { ClientAccountStorage } from './credentials/clientAccountWrite';
 export type { ClientAccountCredentials } from './credentials/clientAccount';
 export {
+  readAgyAccountToken,
   readAntigravityCredentialStoreToken,
   readClientAccountToken,
   CredentialStoreReadError,
 } from './credentials/antigravityCredentialStore';
 export { buildAntigravityCredentialPayload } from './credentials/antigravityCredentialPayload';
+export { detectAgyCliExecutablePath } from './binary-patch/agyCliPathDetection';
 export { restoreWindowsIdeCredentials } from './credentials/windowsIdeRecovery';
 export { restoreLinuxIdeCredentials } from './credentials/linuxIdeRecovery';

@@ -6,6 +6,8 @@ that module; cross-cutting runtime and security contracts remain in the root-lev
 
 ## Current behavior
 
+- [Gateway settings and runtime state](settings-runtime.md): manual startup choice, field patches,
+  independent saves, runtime application and configuration recovery.
 - [Compatibility reference](compatibility.md): request, response, stream and client compatibility.
 - [Account leases and playground](account-leases.md): token and project persistence, targeted account leases and in-app model playground execution.
 - [Schema conversion](schema-conversion.md): schema selection, conversion limits and diagnostics.
@@ -28,3 +30,9 @@ that module; cross-cutting runtime and security contracts remain in the root-lev
 
 For change-to-evidence selection, use the central [testing strategy](../../testing.md). For client
 settings recovery and sensitive local files, use [security and data boundaries](../../security.md).
+
+## Streaming and diagnostics
+
+- [Stream and tool compatibility](stream-tool-compatibility.md)
+- [Inline media and thought history](inline-media-and-thought-history.md)
+- [Diagnostic retention and queue pressure](diagnostic-retention.md)

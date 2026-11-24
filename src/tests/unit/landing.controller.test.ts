@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_APP_CONFIG } from '@/modules/config/types';
-import { LandingController } from '@/modules/proxy-gateway/server/modules/landing/landing.controller';
+import { LandingController } from '@/server/gateway/modules/landing/landing.controller';
 import { getServerConfig, setServerConfig } from '@/server/server-config';
 
 function createReply() {

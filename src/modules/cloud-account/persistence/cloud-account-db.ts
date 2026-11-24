@@ -11,6 +11,8 @@ import {
   openDrizzleConnection,
 } from '@/shared/persistence/database/dbConnection';
 import * as drizzleSchema from '@/shared/persistence/database/schema';
+import { ensureCloudAccountLifecycleSchema } from './cloud-account-lifecycle-schema';
+import { ensureGoogleUsageIdentitySchema } from './google-usage-identity-schema';
 
 export const CLOUD_ACCOUNT_SQLITE_BUSY_TIMEOUT_MS = 3000;
 
@@ -59,7 +61,10 @@ function ensureDatabaseInitialized(dbPath: string): void {
         last_used INTEGER NOT NULL,
         status TEXT DEFAULT 'active',
         status_reason TEXT,
-        is_active INTEGER DEFAULT 0
+        is_active INTEGER DEFAULT 0,
+        proxy_url TEXT,
+        proxy_priority INTEGER NOT NULL DEFAULT 50,
+        proxy_enabled INTEGER NOT NULL DEFAULT 1
       );
     `);
 
@@ -71,6 +76,8 @@ function ensureDatabaseInitialized(dbPath: string): void {
     const hasProxyUrl = tableInfo.some((col) => col.name === 'proxy_url');
     const hasStatusReason = tableInfo.some((col) => col.name === 'status_reason');
     const hasHealthJson = tableInfo.some((col) => col.name === 'health_json');
+    const hasProxyPriority = tableInfo.some((col) => col.name === 'proxy_priority');
+    const hasProxyEnabled = tableInfo.some((col) => col.name === 'proxy_enabled');
     if (!hasIsActive) {
       db.exec('ALTER TABLE accounts ADD COLUMN is_active INTEGER DEFAULT 0');
     }
@@ -89,6 +96,14 @@ function ensureDatabaseInitialized(dbPath: string): void {
     if (!hasHealthJson) {
       db.exec('ALTER TABLE accounts ADD COLUMN health_json TEXT');
     }
+    if (!hasProxyPriority) {
+      db.exec('ALTER TABLE accounts ADD COLUMN proxy_priority INTEGER NOT NULL DEFAULT 50');
+    }
+    if (!hasProxyEnabled) {
+      db.exec('ALTER TABLE accounts ADD COLUMN proxy_enabled INTEGER NOT NULL DEFAULT 1');
+    }
+    ensureCloudAccountLifecycleSchema(db);
+    ensureGoogleUsageIdentitySchema(db, dbPath);
 
     db.exec(`CREATE INDEX IF NOT EXISTS idx_accounts_email ON accounts(email);`);
 

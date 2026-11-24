@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { traceRuntime } from './trace-standalone-runtime.mjs';
+import bundledDependencies from './standalone-bundled-dependencies.json' with { type: 'json' };
 
 test('runtime tracing excludes host assets while retaining all explicit native entries', async () => {
   await mkdir(path.resolve('dist/.runtime'), { recursive: true });
@@ -35,12 +36,15 @@ test('runtime tracing excludes host assets while retaining all explicit native e
       'cli/main.cjs',
       'core/traffic-audit.worker.js',
       'core/thought-store.worker.js',
+      'core/error-window.worker.js',
     ]) {
       await file(entry, 'module.exports = {};');
     }
     const keyring = `@napi-rs/keyring-${process.platform}-${process.arch}${process.platform === 'win32' ? '-msvc' : process.platform === 'linux' ? '-gnu' : ''}`;
     const koffi = `@koromix/koffi-${process.platform}-${process.arch}`;
     const sysinfo = `@draculabo/sysinfo-process-enhanced-${process.platform}-${process.arch}${process.platform === 'win32' ? '-msvc' : process.platform === 'linux' ? '-gnu' : ''}`;
+    const sqliteDirectory = 'node_modules/better-sqlite3/prebuilds';
+    const otherSqliteBinary = `${sqliteDirectory}/other-target.node`;
     for (const name of [
       'better-sqlite3',
       'keytar',
@@ -53,8 +57,17 @@ test('runtime tracing excludes host assets while retaining all explicit native e
     }
     await file(`node_modules/${keyring}/package.json`, '{"main":"keyring.node"}');
     await file(`node_modules/${sysinfo}/package.json`, '{"main":"sysinfo.node"}');
+    await file(otherSqliteBinary, Buffer.alloc(0));
+    await file('node_modules/better-sqlite3/index.js', "require('./lib/binding');");
+    await file(
+      'node_modules/better-sqlite3/lib/binding.js',
+      `const path = require('node:path');
+       require('../prebuilds/other-target.node');
+       require(path.join(__dirname, '..', 'build', 'Debug', 'better_sqlite3.node'));
+       require(path.join(__dirname, '..', 'build', 'Release', 'better_sqlite3.node'));`,
+    );
     const binaries = [
-      'node_modules/better-sqlite3/build/Release/better_sqlite3.node',
+      `${sqliteDirectory}/${process.platform}-${process.arch}.node`,
       'node_modules/keytar/build/Release/keytar.node',
       `node_modules/${keyring}/keyring.node`,
       `node_modules/${sysinfo}/sysinfo.node`,
@@ -85,10 +98,15 @@ test('runtime tracing excludes host assets while retaining all explicit native e
     const core = await readFile(path.join(root, 'core/main.cjs'), 'utf8');
     await file('core/main.cjs', core + declarations.join(''));
     const trace = await traceRuntime(root);
-    assert.equal(trace.warnings.length, 1);
-    assert.match(trace.warnings[0], /Failed to resolve dependency "original-fs"/);
+    assert.equal(trace.warnings.length, 3);
+    assert(trace.warnings.some((warning) => warning.includes('dependency "original-fs"')));
+    assert.equal(
+      trace.warnings.filter((warning) => warning.includes('better_sqlite3.node')).length,
+      2,
+    );
     assert(trace.files.includes(path.normalize('node_modules/@electron/asar/lib/wrapped-fs.js')));
     assert(!trace.files.some((entry) => entry.includes('host-only-marker')));
+    assert(!trace.files.includes(path.normalize(otherSqliteBinary)));
     for (const binary of binaries) {
       assert(trace.files.includes(path.normalize(binary)), `Missing native entry: ${binary}`);
     }
@@ -96,6 +114,28 @@ test('runtime tracing excludes host assets while retaining all explicit native e
     await file('assets/fixture', 'Asset resource');
     await file('pnpm-lock.yaml', 'lockfileVersion: 9.0\n');
     await file('LICENSE', 'Runtime license');
+    for (const [name, importers] of Object.entries(bundledDependencies)) {
+      const directory = [
+        'node_modules',
+        ...importers.flatMap((entry) => [entry, 'node_modules']),
+        name,
+      ].join('/');
+      await file(
+        `${directory}/package.json`,
+        JSON.stringify({ name, version: '1.0.0', exports: './index.js' }),
+      );
+      await file(`${directory}/index.js`, 'module.exports = {};');
+      if (name !== 'drizzle-orm') {
+        const licenseName = ['jsonc-parser', 'uuid', 'radash'].includes(name)
+          ? 'LICENSE.md'
+          : 'LICENSE';
+        await file(`${directory}/${licenseName}`, `${name} fixture license`);
+      }
+      if (importers.length > 0) {
+        await file(`node_modules/${name}/package.json`, JSON.stringify({ name, version: '0.9.0' }));
+        await file(`node_modules/${name}/LICENSE`, 'Incorrect top-level license');
+      }
+    }
     const output = path.join(outside, 'materialized');
     const moduleUrl = pathToFileURL(
       path.resolve('scripts/build/trace-standalone-runtime.mjs'),
@@ -115,6 +155,24 @@ test('runtime tracing excludes host assets while retaining all explicit native e
     );
     assert.ifError(child.error);
     assert.equal(child.status, 0, child.stderr);
+    const expectedNotices = await Promise.all(
+      Object.keys(bundledDependencies).map(async (name) => {
+        const license =
+          name === 'drizzle-orm'
+            ? await readFile(new URL('./licenses/drizzle-orm.LICENSE', import.meta.url), 'utf8')
+            : `${name} fixture license`;
+        return `${name}@1.0.0\n\n${license.trimEnd()}`;
+      }),
+    );
+    assert.equal(
+      await readFile(path.join(output, 'THIRD-PARTY-NOTICES.txt'), 'utf8'),
+      `${expectedNotices.join('\n\n')}\n`,
+    );
+    for (const name of Object.keys(bundledDependencies)) {
+      await assert.rejects(readFile(path.join(output, 'node_modules', name, 'index.js')), {
+        code: 'ENOENT',
+      });
+    }
     for (let i = 0; i < 80; i++) {
       const name = 'linked-fixture-' + String(i).padStart(3, '0');
       assert.equal(

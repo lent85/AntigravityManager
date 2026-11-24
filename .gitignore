@@ -130,3 +130,4 @@ bun.lock
 
 /artifacts/
 .agents/teamwork/
+.tmp/

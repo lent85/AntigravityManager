@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_APP_CONFIG, type ProxyConfig } from '@/modules/config/types';
 import { setServerConfig } from '../../server/server-config';
-import { AccountLeaseService } from '../../modules/proxy-gateway/server/modules/account-lease/account-lease.service';
+import { AccountLeaseService } from '../../server/gateway/modules/account-lease/account-lease.service';
 import { CloudAccountRepo } from '@/modules/cloud-account/persistence/cloudHandler';
 import { GoogleAPIService } from '@/modules/cloud-account/services/GoogleAPIService';
 import { CloudAccountHealthService } from '@/modules/cloud-account/services/CloudAccountHealthService';
@@ -234,6 +234,13 @@ describe('AccountLeaseService parity scheduling replay', () => {
     setServerConfig(createProxyConfig({ parity_enabled: false, parity_kill_switch: false }));
     await seedAccounts([leaseAccount('acc-1')]);
     expect(await service.getNextToken({ excludeAccountIds: ['acc-1'] })).toBeNull();
+  });
+
+  it('moves to a second eligible account after the preferred stored account disappears', async () => {
+    setServerConfig(createProxyConfig({ preferred_account_id: 'acc-1' }));
+    fixture.accounts.delete('acc-1');
+    const lease = await service.getNextToken({ model: 'gemini-2.5-flash' });
+    expect(lease?.id).toBe('acc-2');
   });
 
   it('does not issue a cached lease after its persisted account is deleted', async () => {

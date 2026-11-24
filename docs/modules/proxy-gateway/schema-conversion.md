@@ -18,6 +18,29 @@ upstream compatibility transformations rather than a complete JSON Schema valida
 references, named anchors, dynamic references and nested resource scope changes are unsupported.
 The converter fetches no reference resources.
 
+For tool declarations, an explicit object or an untyped schema with `properties` can recover
+named parameters misplaced under `items`. Recovery requires a nonempty map of declarations
+that each have a type or a reference. Existing `properties` win on duplicate names, and
+recovered references resolve against the original document. The conversion removes the
+recovered `items` field from the outbound object and retains its `required` list.
+
+Array tool declarations keep their resolved `items` and discard misplaced `properties`.
+This follows the effective type after reference siblings and branch selection have been
+applied. Arrays without usable `items` receive the existing string-item fallback.
+
+Native Gemini generation prepares supplied function parameter schemas once before account
+selection, including the native `OBJECT` root spelling. It preserves omitted parameter
+schemas, built-in declarations and runtime function arguments. Enum normalization applies
+to declaration nodes, including when an argument object uses keys such as `enum` or `$ref`.
+
+Translated Anthropic requests use the explicit built-in tool type to skip search schemas.
+Ordinary functions named `web_search`, `google_search` or `builtin_web_search` receive the
+same declaration conversion and admission budgets as other functions.
+
+Explicit native Gemini `ANY` requires a declared function. Both tool-config aliases check
+every allowed function name against the request's declarations before account selection.
+Valid choices preserve provider extension fields and each alias's existing default policy.
+
 | Finding                                            | Result                                                             |
 | -------------------------------------------------- | ------------------------------------------------------------------ |
 | Unconvertible tool child node                      | Fixed string fallback; retain tool, siblings and parent `required` |
@@ -36,11 +59,26 @@ Fallback nodes contain exactly:
 }
 ```
 
-HTTP Schema input errors use status 400 and `invalid_request_error` in the caller's protocol.
+HTTP Schema input errors use status 400 with the caller's invalid-request shape. Native
+Gemini uses `INVALID_ARGUMENT`.
 Responses WebSocket uses an `error` event with `invalid_request_error` and `invalid_schema`.
 Schema rejection precedes account leasing, upstream execution and streaming publication. A
 rejected WebSocket Schema does not replace admitted socket configuration. History repair and
 quota/model policies retain their current owners and behavior.
+
+## Responses structured output
+
+For Responses requests with `text.format.type: json_schema`, the Gemini internal
+request sends `responseSchema` and omits optional tool declarations and tool
+configuration. Previous tool calls and results remain in the conversation.
+A required or named tool choice with JSON Schema fails before generation with
+`invalid_tool_choice`. JSON object mode does not use this tool restriction.
+
+After a successful non-streaming Responses answer in JSON Schema or JSON object
+mode, the gateway removes one outer Markdown fence if it encloses the entire
+answer and its payload parses as JSON. Ordinary text, invalid JSON and streaming
+deltas pass through this compatibility rule without modification. The check
+establishes valid JSON syntax. Schema validation remains separate.
 
 ## Bounds and cache
 
@@ -100,10 +138,12 @@ retains bare mode. Tool search is disabled so declarations appear in actual requ
 and the built-in MCP startup wait are execution-allowlisted. The sampler retains aggregate
 counts, operation budgets and converted-schema hashes, never raw schemas or client context.
 
-`pnpm run test:schema:sentry` runs the real Node SDK from the prepared standalone runtime against
-a local envelope receiver. It checks one isolated event and excludes inherited synthetic private
-context. It sends no remote Sentry event. Live tests must separately verify provider tool calls
-and actual remote Sentry receipt. These acceptance commands never alter client-global settings.
+`pnpm run test:schema:sentry` runs the bundled Node SDK with the prepared standalone runtime's Node
+executable and retained dependencies. Pass a standalone resource directory to check a specific
+artifact. The local receiver checks one isolated event and excludes inherited synthetic private
+context. The fixture also checks that default integrations are disabled and an active OpenTelemetry
+span survives an async boundary and supplies the trace ID to its child. Live tests separately
+verify provider tool calls and remote Sentry receipt.
 
 The [live gateway workflow](#live-schema-acceptance) uses the prepared core,
 existing account policies and read-only controlled tools. It records final tool-result matches,
@@ -128,10 +168,27 @@ A signature-only fragment after visible text remains in the scoped signature sto
 adding an empty final client message. This preserves Claude Code's final answer while retaining
 the existing tool/signature history policy.
 
-The Anthropic request boundary preserves `tool_choice`. Object and string auto/none choices map
-to Gemini AUTO/NONE; required/any choices use ANY. Named Anthropic tools and OpenAI function
-choices include allowedFunctionNames. Omitting a choice retains VALIDATED. This does not enforce
-the client option disable_parallel_tool_use.
+OpenAI and Anthropic adapters preserve an explicit `tool_choice`. Object and string auto/none
+choices map to Gemini AUTO/NONE; required/any choices use ANY. Named choices must reference a
+function declared on the same request and include `allowedFunctionNames`. Unsupported choices,
+unknown names, forced calls without functions, and an explicit mixture of Google Search with
+function declarations fail as invalid client requests before account selection. If the client
+omits `tool_choice`, the mapped request omits `functionCallingConfig` and retains the independent
+server-side invocation flag. Native Gemini requests keep their existing default behavior. This
+does not enforce the Anthropic option `disable_parallel_tool_use`.
+
+Ordinary function tools remain functions even when their name matches a search or custom-tool
+name. Google Search is mapped only from its recognized explicit built-in type. OpenAI declarations
+with `type: custom` use a single string `input` field at the upstream function boundary. Ordinary
+functions named `apply_patch` retain their declared Schema and runtime arguments. Tool parameters
+are not guessed, length-truncated or coerced to match a converted Schema. See
+[tool passthrough](stream-tool-compatibility.md#tool-passthrough) for the output contract.
+
+Within tool parameter Schemas, nonempty `enum` and converted `const` values serialize to strings,
+and their Schema node type becomes `string`. A literal empty-string member is removed; whitespace
+only strings are preserved. An enum with no remaining values is removed. The declaration change
+does not coerce runtime arguments, so a client tool that requires a number may reject a string
+returned in accordance with the provider's string enum.
 
 Unary Gemini responses containing only thought parts without a finish reason do not complete
 an answer. The shared generation path uses its existing single stream-aggregation fallback
@@ -161,7 +218,7 @@ remote Sentry receipt check or calibrate budgets from organic traffic. Run
 `node --test scripts/acceptance/schema/check-client-matrix.mjs` for its protocol, guard, continuation
 and audit evidence controls.
 
-After `pnpm run prepare:standalone`, use `pnpm run test:schema:live gemini-3.1-pro-high` to test
+After `pnpm run prepare:standalone`, use `pnpm run test:schema:live gemini-3.8-flash-high` to test
 ordinary and degraded tool parameters against the real gateway and Google upstream. The harness
 also exercises current native Gemini Flash/Pro routes and installed Claude Code's Read tool.
 Use `pnpm run test:schema:live gemini-3.7-flash-high` for ordinary/degraded Flash tool loops;
@@ -185,11 +242,11 @@ Append `client-mcp` to use default Claude Code declarations and the three inspec
 local MCP servers. This verifies actual declaration acceptance and a controlled Read cycle;
 it does not execute MCP business tools. Append `history` to acquire two real parallel calls and
 compare combined, adjacent and reversed-result histories without rewriting production history.
-Append `history extended` to compare identical resubmissions and bidirectional Pro/Flash
-continuation, choosing the source model in the first argument. Append `history recovery` to
-mutate only signatures in a controlled history and require final result matches plus actual
-upstream 400/200 attempts for one gateway request. A provider accepting the mutation does not
-prove recovery and keeps this check failing. Audit evidence retains anonymous scenario labels
+Append `history extended` to compare identical resubmissions and cross-version Flash
+continuation, choosing the source model in the first argument. Append `history rejection` to
+mutate only signatures in a controlled history and verify that the gateway returns HTTP 400
+after one upstream HTTP 400 attempt. The preceding controls require both tool results to reach
+the final answer. Audit evidence retains anonymous scenario labels
 and per-request attempt counts. `node scripts/acceptance/schema/check-history-evidence.mjs`
 checks missing-result sensitivity and private audit-context exclusion using isolated fixtures.
 `node scripts/acceptance/schema/run-core-startup.mjs 5` isolates the prepared core's readiness
@@ -205,7 +262,7 @@ full cycle record. Append `2.5.5` or `1.23.2` for an isolated User-Agent build e
 `production` for a transient backup-endpoint-only experiment. These modes identify themselves
 in the result and do not alter production routing, version selection or saved configuration.
 
-`node scripts/acceptance/schema/run-live-retry.mjs <network|rotation|incomplete|all> [gemini-3.7-flash-high|gemini-3.1-pro-high]`
+`node scripts/acceptance/schema/run-live-retry.mjs <network|rotation|incomplete|all> [gemini-3.7-flash-high|gemini-3.8-flash-high]`
 starts the prepared core with a temporary loopback relay. Network mode resets the first
 controlled continuation connection; rotation mode returns 503 for both addresses on the
 first account. Successful generations use the real provider. Incomplete mode injects a

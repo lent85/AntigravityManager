@@ -5,13 +5,13 @@ import { of } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_APP_CONFIG } from '@/modules/config/types';
 import { getServerConfig, setServerConfig } from '@/server/server-config';
-import { ProxyGuard } from '@/modules/proxy-gateway/server/guards/proxy.guard';
-import { AnthropicController } from '@/modules/proxy-gateway/server/modules/anthropic/anthropic.controller';
-import { AnthropicService } from '@/modules/proxy-gateway/server/modules/anthropic/anthropic.service';
-import { OpenAIChatController } from '@/modules/proxy-gateway/server/modules/openai/openai-chat.controller';
-import { OpenAIOperations } from '@/modules/proxy-gateway/server/modules/openai/openai-operations.service';
-import { OpenAIService } from '@/modules/proxy-gateway/server/modules/openai/openai.service';
-import { UpstreamRequestError } from '@/modules/proxy-gateway/server/common/exceptions/upstream-request.exception';
+import { ProxyGuard } from '@/server/gateway/guards/proxy.guard';
+import { AnthropicController } from '@/server/gateway/modules/anthropic/anthropic.controller';
+import { AnthropicService } from '@/server/gateway/modules/anthropic/anthropic.service';
+import { OpenAIChatController } from '@/server/gateway/modules/openai/openai-chat.controller';
+import { OpenAIOperations } from '@/server/gateway/modules/openai/openai-operations.service';
+import { OpenAIService } from '@/server/gateway/modules/openai/openai.service';
+import { UpstreamRequestError } from '@/server/gateway/common/exceptions/upstream-request.exception';
 import {
   registerTrafficAuditHttpHooks,
   TrafficAuditContextInterceptor,
@@ -23,6 +23,7 @@ const audit = vi.hoisted(() => ({ completeParent: vi.fn() }));
 vi.mock('@/modules/proxy-gateway/audit/traffic-audit.service', () => ({
   trafficAuditService: {
     startParent: () => ({ id: 'parent', startedAt: 1, trafficClass: 'model' }),
+    captureGeneration: () => 0,
     startAttempt: () => null,
     completeAttempt: vi.fn(),
     completeParent: audit.completeParent,
@@ -158,7 +159,7 @@ describe('fallback diagnostics through HTTP entry points', () => {
     });
     expect(reply.statusCode).toBe(403);
     expect(reply.json()).toEqual({
-      error: { message: 'Agent Platform API is disabled', type: 'server_error' },
+      error: { message: 'Agent Platform API is disabled', type: 'invalid_request_error' },
     });
     expect(audit.completeParent).toHaveBeenCalledWith(
       expect.anything(),
@@ -176,7 +177,7 @@ describe('fallback diagnostics through HTTP entry points', () => {
     });
     expect(reply.statusCode).toBe(403);
     expect(reply.json()).toEqual({
-      error: { message: 'Invalid credentials', type: 'server_error' },
+      error: { message: 'Invalid credentials', type: 'invalid_request_error' },
     });
     expect(audit.completeParent).toHaveBeenCalledWith(
       expect.anything(),

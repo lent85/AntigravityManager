@@ -9,8 +9,8 @@ describe('usesAuthoritativeThinkingBudget', () => {
   it('recognizes registered aliases, agent identities, future Gemini majors, and explicit tiers', () => {
     expect([
       usesAuthoritativeThinkingBudget('models/gemini-3.7-flash'),
-      usesAuthoritativeThinkingBudget('gemini-pro'),
-      usesAuthoritativeThinkingBudget('gemini-pro-agent'),
+      usesAuthoritativeThinkingBudget('gemini-3.1-pro-low'),
+      usesAuthoritativeThinkingBudget('gemini-3-flash-agent'),
       usesAuthoritativeThinkingBudget('gemini-10-flash'),
       usesAuthoritativeThinkingBudget('gemini-3.8-flash-high'),
     ]).toEqual([true, true, true, true, true]);
@@ -26,6 +26,20 @@ describe('usesAuthoritativeThinkingBudget', () => {
 });
 
 describe('resolveModelVariant', () => {
+  it.each([
+    ['LOW', 'low'],
+    ['extra_low', 'low'],
+    ['min', 'low'],
+    ['minimal', 'low'],
+    ['lite', 'low'],
+    [' X_HIGH ', 'high'],
+    ['xhigh', 'high'],
+    ['max', 'high'],
+    ['extreme', 'high'],
+  ] as const)('normalizes effort alias %s to %s', (effort, tier) => {
+    expect(resolveModelVariant({ model: 'gemini-3.7-flash', effort })?.tier).toBe(tier);
+  });
+
   it('defaults the canonical Gemini 3.7 Flash model to the registered high tier', () => {
     expect(resolveModelVariant({ model: 'gemini-3.7-flash' })).toEqual({
       canonicalModel: 'gemini-3.7-flash',
@@ -97,9 +111,9 @@ describe('resolveModelVariant', () => {
       },
       {
         canonicalModel: 'gemini-3.7-flash',
-        model: 'gemini-3.7-flash-medium',
-        tier: 'medium',
-        thinkingBudget: 4000,
+        model: 'gemini-3.6-flash-tiered',
+        tier: 'high',
+        thinkingBudget: -1,
         maxOutputTokens: 65536,
         includeThoughts: true,
         preserveClientBudget: false,
@@ -189,10 +203,11 @@ describe('resolveModelVariant', () => {
     });
   });
 
-  it('uses the exact registered Gemini 3.1 Pro limits for low and high', () => {
+  it('preserves the Gemini 3.1 Pro Low profile after retiring Pro High', () => {
     expect([
-      resolveModelVariant({ model: 'gemini-3.1-pro', effort: 'low' }),
-      resolveModelVariant({ model: 'gemini-3.1-pro', effort: 'high' }),
+      resolveModelVariant({ model: 'gemini-3.1-pro-low', effort: 'high' }),
+      resolveModelVariant({ model: 'gemini-3.1-pro-high' }),
+      resolveModelVariant({ model: 'gemini-pro-agent' }),
     ]).toEqual([
       {
         canonicalModel: 'gemini-3.1-pro',
@@ -204,16 +219,8 @@ describe('resolveModelVariant', () => {
         preserveClientBudget: false,
         supportsTools: true,
       },
-      {
-        canonicalModel: 'gemini-3.1-pro',
-        model: 'gemini-pro-agent',
-        tier: 'high',
-        thinkingBudget: 10001,
-        maxOutputTokens: 65535,
-        includeThoughts: true,
-        preserveClientBudget: false,
-        supportsTools: true,
-      },
+      null,
+      null,
     ]);
   });
 
@@ -229,7 +236,7 @@ describe('resolveModelVariant', () => {
           effort: 'medium',
         }),
         resolveModelVariant({
-          model: 'gemini-3.1-pro-high',
+          model: 'gemini-3.7-flash-high',
           effort: 'low',
         }),
       ].map((variant) => ({
@@ -252,10 +259,10 @@ describe('resolveModelVariant', () => {
         thinkingBudget: 4000,
       },
       {
-        canonicalModel: 'gemini-3.1-pro',
-        model: 'gemini-pro-agent',
+        canonicalModel: 'gemini-3.7-flash',
+        model: 'gemini-3.7-flash-high',
         tier: 'high',
-        thinkingBudget: 10001,
+        thinkingBudget: 10000,
       },
     ]);
   });
@@ -323,16 +330,16 @@ describe('resolveModelVariant', () => {
 
   it('rebinds all registered parameters when account availability forces a different tier', () => {
     const low = resolveModelVariant({
-      model: 'gemini-3.1-pro',
+      model: 'gemini-3.7-flash',
       effort: 'low',
     });
 
-    expect(rebindModelVariant(low, 'gemini-pro-agent')).toEqual({
-      canonicalModel: 'gemini-3.1-pro',
-      model: 'gemini-pro-agent',
+    expect(rebindModelVariant(low, 'gemini-3.7-flash-high')).toEqual({
+      canonicalModel: 'gemini-3.7-flash',
+      model: 'gemini-3.7-flash-high',
       tier: 'high',
-      thinkingBudget: 10001,
-      maxOutputTokens: 65535,
+      thinkingBudget: 10000,
+      maxOutputTokens: 65536,
       includeThoughts: true,
       preserveClientBudget: false,
       supportsTools: true,

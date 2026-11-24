@@ -70,6 +70,7 @@ import {
   useTogglePauseCloudAccount,
 } from '@/modules/cloud-account/hooks/useCloudAccounts';
 import { CloudAccountProxyDialog } from '@/modules/cloud-account/components/CloudAccountProxyDialog';
+import { CloudAccountProjectIdDialog } from '@/modules/cloud-account/components/CloudAccountProjectIdDialog';
 import { getCloudAccountBlockedStatusLabel } from '@/modules/cloud-account/utils/accountValidationStatus';
 import type { AntigravityAppTarget } from '@/shared/platform/antigravityAppTarget';
 import { AccountTierBadge } from '@/modules/cloud-account/components/AccountTierBadge';
@@ -82,6 +83,7 @@ import {
 import type { QuotaWindow } from '@/modules/cloud-account/utils/quota-groups';
 import { DetailedQuotaDisplay } from '@/modules/cloud-account/components/DetailedQuotaDisplay';
 import { AccountQuotaWindowSections } from '@/modules/cloud-account/components/AccountQuotaWindowSections';
+import { CurrentCycleUsage } from '@/modules/cloud-account/components/CurrentCycleUsage';
 import {
   CompactModelQuotaDisplay,
   type CompactModelQuotaItem,
@@ -433,6 +435,7 @@ export function CloudAccountCard({
     models: mergedModelQuotas,
     providerModels,
     groups: detailedGroups,
+    restrictionGroups,
     weeklyItems: weeklyQuotaItems,
     fiveHourHidden,
     weeklyHidden,
@@ -1070,6 +1073,9 @@ export function CloudAccountCard({
         ) : (
           <div className="space-y-2">
             <AccountQuotaWindowSections
+              restrictionGroups={
+                isMinimalMode ? restrictionGroups.filter(isGeminiQuotaGroup) : restrictionGroups
+              }
               quotaWindow={quotaWindow}
               weeklyItems={
                 isMinimalMode
@@ -1117,6 +1123,7 @@ export function CloudAccountCard({
                 )
               }
             />
+            <CurrentCycleUsage accountId={account.id} groups={account.quota?.quota_groups} />
           </div>
         )}
       </CardContent>
@@ -1415,7 +1422,15 @@ export function CloudAccountCard({
             </TooltipProvider>
           </div>
 
-          <CloudAccountProxyDialog accountId={account.id} configured={account.proxy_configured} />
+          {account.provider === 'google' && (
+            <CloudAccountProjectIdDialog accountId={account.id} email={account.email} />
+          )}
+          <CloudAccountProxyDialog
+            accountId={account.id}
+            configured={account.proxy_configured}
+            proxyPriority={account.proxy_priority ?? 50}
+            proxyEnabled={account.proxy_enabled !== false}
+          />
         </div>
       </CardFooter>
     </Card>
@@ -1528,6 +1543,7 @@ export function CompactCloudAccountCard({
     models: mergedModelQuotas,
     groups: detailedGroups,
     weeklyItems: weeklyQuotaItems,
+    restrictionGroups,
     fiveHourHidden,
     weeklyHidden,
   } = getVisibleAccountQuota(account.quota, config?.model_visibility ?? {}, quotaGroupVisibility);
@@ -1759,21 +1775,31 @@ export function CompactCloudAccountCard({
             {t('cloud.card.serviceBlockedNotice')}
           </div>
         ) : (
-          <AccountQuotaWindowSections
-            quotaWindow={quotaWindow}
-            weeklyItems={
-              isMinimalMode
-                ? weeklyQuotaItems.filter(
-                    (item) => isGeminiWeeklyQuotaItem(item) || isClaudeOrGptWeeklyQuotaItem(item),
-                  )
-                : weeklyQuotaItems
-            }
-            fiveHourHidden={isMinimalMode ? false : fiveHourHidden}
-            weeklyHidden={isMinimalMode ? false : weeklyHidden}
-            hasQuotaSummary={account.quota?.quota_groups !== undefined}
-            variant="compact"
-            fiveHourContent={<CompactModelQuotaDisplay items={compactQuotaItems} />}
-          />
+          <>
+            <AccountQuotaWindowSections
+              restrictionGroups={
+                isMinimalMode ? restrictionGroups.filter(isGeminiQuotaGroup) : restrictionGroups
+              }
+              quotaWindow={quotaWindow}
+              weeklyItems={
+                isMinimalMode
+                  ? weeklyQuotaItems.filter(
+                      (item) => isGeminiWeeklyQuotaItem(item) || isClaudeOrGptWeeklyQuotaItem(item),
+                    )
+                  : weeklyQuotaItems
+              }
+              fiveHourHidden={isMinimalMode ? false : fiveHourHidden}
+              weeklyHidden={isMinimalMode ? false : weeklyHidden}
+              hasQuotaSummary={account.quota?.quota_groups !== undefined}
+              variant="compact"
+              fiveHourContent={<CompactModelQuotaDisplay items={compactQuotaItems} />}
+            />
+            <CurrentCycleUsage
+              accountId={account.id}
+              groups={account.quota?.quota_groups}
+              compact
+            />
+          </>
         )}
       </div>
 
@@ -1918,6 +1944,9 @@ export function CompactCloudAccountCard({
           </DropdownMenu>
         </div>
 
+        {account.provider === 'google' && (
+          <CloudAccountProjectIdDialog accountId={account.id} email={account.email} />
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-7 w-7 cursor-pointer rounded-full">

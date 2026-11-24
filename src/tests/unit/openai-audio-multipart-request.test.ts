@@ -2,7 +2,7 @@ import fastifyMultipart from '@fastify/multipart';
 import Fastify from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { parseAudioMultipartRequest } from '@/modules/proxy-gateway/server/modules/openai/media/audio-multipart-request';
+import { parseAudioMultipartRequest } from '@/server/gateway/modules/openai/media/audio-multipart-request';
 
 const servers: Array<ReturnType<typeof Fastify>> = [];
 

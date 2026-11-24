@@ -1,4 +1,35 @@
+import { errorDiagnosticsEnglish } from '@/modules/error-diagnostics/localization';
+import { imageSendWindowEnglish } from '@/modules/proxy-gateway/settings/localization';
 const tr = {
+  'image-send-window': imageSendWindowEnglish,
+  'error-diagnostics': errorDiagnosticsEnglish,
+  'account-evidence': {
+    'subscription-unavailable': 'Abonelik yenilenemedi; önceden doğrulanmış bir düzey yok.',
+    'observed-at': 'Son gözlem: {{time}}',
+    'checked-at': 'Son kontrol: {{time}}',
+    'unknown-time': 'Kaydedilmedi',
+    'invalid-data': 'Kota verileri geçersiz; doğrulamak için yenileyin.',
+    'reset-unknown': 'Sıfırlama zamanı bilinmiyor.',
+    'exhausted-unknown-reset': 'Dönem kotası tükendi; sıfırlama zamanı bilinmiyor.',
+    'recheck-required': 'Kotası tükenen dönem sona erdi; düzelmeyi doğrulamak için yenileyin.',
+    'window-ended': 'Dönem sona erdi; bakiye henüz yeniden doğrulanmadı.',
+    'weekly-exhausted':
+      'Haftalık dönem kotası tükendi; başka bir dönemin bakiyesi bu kısıtlamayı kaldırmaz.',
+    'window-exhausted': 'Dönem kotası tükendi.',
+    'group-restrictions': 'Kota grubu kısıtlamaları',
+    'group-limited':
+      'Dönem kotası tükendi. Bilinen en geç sıfırlama: {{time}}; düzelmenin doğrulanması gerekiyor.',
+    'subscription-failed': 'Abonelik yenilemesi başarısız veya eksik; önceki kayıt gösteriliyor.',
+    'subscription-unrecognized': 'Abonelik düzeyi tanınmadı; Free temel düzeyi kullanılıyor.',
+    'subscription-missing': 'Abonelik bilgisi dönmedi; Free temel düzeyi kullanılıyor.',
+    'subscription-observed': 'Abonelik bilgisi gözlemlendi.',
+    'subscription-unknown': 'Abonelik kaynağı kaydedilmedi.',
+    'source-paid': 'Kaynak: ücretli abonelik',
+    'source-current': 'Kaynak: geçerli abonelik',
+    'source-free': 'Kaynak: açıkça belirtilen ücretsiz düzey',
+    'source-unknown': 'Kaynak: bilinmiyor',
+    'small-positive': 'Az miktarda pozitif bakiye var; bu dönem tükenmedi.',
+  },
   'agent-tools': {
     title: 'Kodlama araçlarınızı bağlayın',
     description: 'Modellerinizi Antigravity Manager üzerinden kullanmak için bir araç seçin.',
@@ -61,7 +92,6 @@ const tr = {
       'key-missing': 'Önce proxy sayfasında bağlantı anahtarı oluşturun.',
       'review-route-disabled': 'Codex inceleme yolu kapalı. Model yönlendirmesinde etkinleştirin.',
     },
-
     'address-help': 'Hizmet başka bir bilgisayarda çalışmıyorsa mevcut Manager adresini kullanın.',
     'invalid-address':
       'http:// veya https:// ile başlayan, oturum bilgisi ve ek parametre içermeyen bir Manager adresi kullanın.',
@@ -111,7 +141,6 @@ const tr = {
     unknown: 'Bilinmeyen',
     notAvailable: 'Yok',
     openMenu: 'Menüyü aç',
-
     'dismiss-notification': 'Bildirimi kapat',
     'reading-settings': 'Ayarlarınız okunuyor…',
   },
@@ -418,6 +447,194 @@ const tr = {
     },
   },
   settings: {
+    'defaults-writeback-failed':
+      'Bellekte bağımsız varsayılanlar kullanılıyor. İlk ayar dosyası kaydedilemedi. Dosya erişimini kontrol edip yeniden deneyin.',
+    'partial-save-failed':
+      'Bazı ayarlar kaydedilemedi. Kaydedilen değişiklikler korundu, başarısız olanlar taslakta kaldı.',
+    'service-apply-failed':
+      'Ayarlar kaydedildi ancak bazı çalışan hizmetler değişiklikleri uygulayamadı.',
+    'save-owner-service': 'Hizmet ayarları',
+    'save-owner-desktop': 'Masaüstü tercihleri',
+    'save-owner-accountAlertPolicy': 'Hesap uyarı ilkesi',
+    'save-state-saved': 'Kaydedildi',
+    'save-state-failed': 'Kaydedilmedi',
+    'retry-unsaved': 'Kaydedilmeyen değişiklikleri yeniden dene',
+    'apply-step-gateway-config': 'Ağ geçidi ayarları',
+    'apply-step-audit': 'Denetim depolaması',
+    'apply-step-thought-store': 'Düşünce geçmişi',
+    'apply-step-error-diagnostics': 'Hata tanılama',
+    'apply-step-runtime-status': 'Çalışma durumu',
+    'affected-fields': 'Etkilenen ayarlar: {{fields}}',
+    'restart-fields': 'Uygulamak için hizmeti yeniden başlatın: {{fields}}',
+    'cowork-runtime': {
+      'operation-description':
+        'Yerel Claude Cowork çalışma ortamlarını inceleyin ve desteklenen paketlerdeki değişiklikleri yönetin.',
+      'capability-note':
+        'Değişiklikler ve süreç denetimi için doğrulanmış bir paket gerekir. Diğer çalışma ortamları yalnızca incelenebilir.',
+      path: 'Yol',
+      package: 'Paket',
+      eligible: 'Paket, değişiklikler ve süreç denetimi için doğrulandı.',
+      mutating: 'İşlem sürüyor…',
+      'interrupted-help':
+        'Önceki işlem kesintiye uğradı. Değişiklikleri uygulamadan önce bu çalışma ortamını kurtarmak için geri yüklemeyi önizleyin.',
+      'preview-restore': 'Geri yüklemeyi önizle',
+      'process-status': 'Süreç durumu',
+      'refresh-process': 'Süreç durumunu yenile',
+      'write-blocked': 'Devam etmeden önce seçili örneğin süreç durumunu doğrulayın.',
+      'review-apply': 'İncele ve uygula',
+      'review-restore': 'İncele ve geri yükle',
+      'read-error': 'Bu çalışma ortamı okunamadı. Yeniden tarayın veya özel yolu kontrol edin.',
+      'backup-state': 'Yedekleme ve kurtarma',
+      'preview-ready': 'Önizleme hazır. Onaylamadan önce işlemi inceleyin.',
+      action: 'Eylem',
+      'backup-id': 'Yedek kimliği',
+      'backup-create': 'Değişiklik uygulandığında oluşturulur',
+      'backup-unavailable': 'Kullanılamıyor',
+      signature: 'İmzalama',
+      lifecycle: 'Süreç denetimi',
+      'confirm-process': 'Bu eylem yalnızca seçili örneği etkiler.',
+      'confirm-write': 'Seçili örnek çalışıyorsa durdurulur. Değişiklik yazılır ve doğrulanır.',
+      'confirm-restore':
+        'Geri yükleme yalnızca kurtarma günlüğünü güncelleyebilir. Dosyaların geri yüklenmesi gerekirse çalışan seçili örnek durdurulur.',
+      'restart-option': 'Yazma başarılı olursa seçili örneği başlat',
+      'restart-plan': 'Yazma doğrulandıktan sonra seçili örnek başlatılır.',
+      'leave-stopped-plan': 'Örnek yazma için durdurulursa durdurulmuş olarak kalır.',
+      'operation-result': 'İşlem sonucu',
+      'unknown-outcome':
+        'İşlemin ({{action}}) sonucu doğrulanamadı. Yeniden denemeden önce yeniden tarayın ve çalışma ortamıyla süreç durumunu inceleyin.',
+      'write-effect': 'Çalışma ortamı dosyalarına etkisi',
+      'rollback-result': 'Kurtarma sonucu',
+      'restart-result': 'Yeniden başlatma sonucu',
+      'operation-id': 'İşlem kimliği',
+      'recovery-location': 'Kurtarma konumu',
+      'rollback-error': 'Kurtarma başarısız oldu ({{reason}}).',
+      'recovery-required':
+        'Kurtarma gerekiyor. Yeniden denemeden önce çalışma ortamını ve kurtarma ayrıntılarını inceleyin.',
+      'restart-failed-help':
+        'Seçili örneği yeniden başlatmayı denemeden önce süreç durumunu yenileyin.',
+      'fresh-preview':
+        'Başka bir işlemden önce yeniden tarayın. Değişikliği uygulamadan veya geri yüklemeden önce yeni bir önizleme hazırlayın.',
+      backups: {
+        'not-inspected': 'Kontrol edilmedi',
+        none: 'Yedek yok',
+        available: 'Yedek mevcut',
+        interrupted: 'Kurtarma gerekiyor',
+      },
+      actions: {
+        apply: 'Değişikliği uygula',
+        restore: 'Geri yükle',
+        stop: 'Örneği durdur',
+        start: 'Örneği başlat',
+      },
+      signatures: {
+        'not-required': 'Gerekli değil',
+        unsupported: 'Desteklenmiyor',
+      },
+      lifecycles: {
+        'selected-instance': 'Yalnızca seçili örnek',
+        unsupported: 'Desteklenmiyor',
+      },
+      'process-states': {
+        running: 'Çalışıyor',
+        stopped: 'Durduruldu',
+        unknown: 'Bilinmiyor',
+        unsupported: 'Desteklenmiyor',
+      },
+      outcomes: {
+        applied: 'Değişiklik uygulandı',
+        restored: 'Çalışma ortamı geri yüklendi',
+        'already-current': 'Zaten istenen durumda',
+        failed: 'İşlem başarısız oldu',
+      },
+      effects: {
+        none: 'Değişiklik yok',
+        committed: 'Değişiklik kaydedildi',
+        'rolled-back': 'Değişiklik geri alındı',
+        uncertain: 'Dosya durumu doğrulanamadı',
+      },
+      recoveries: {
+        'not-needed': 'Gerekmedi',
+        verified: 'Kurtarma doğrulandı',
+        failed: 'Kurtarma başarısız oldu',
+      },
+      restarts: {
+        'not-requested': 'İstenmedi',
+        'not-attempted': 'Denenmedi',
+        verified: 'Başlatma doğrulandı',
+        failed: 'Başlatma başarısız oldu',
+      },
+      failures: {
+        'selection-expired': 'Çalışma ortamı seçiminin süresi doldu. Yeniden tarayın.',
+        'stale-target': 'Çalışma ortamı incelemeden sonra değişti. Yeniden tarayın.',
+        'unsupported-target': 'Bu çalışma ortamı istenen eylemi desteklemiyor.',
+        'unavailable-preview': 'Önizleme kullanılamıyor. Yeni bir önizleme hazırlayın.',
+        busy: 'Başka bir işlem sürüyor.',
+        'process-state-unknown': 'Seçili örneğin süreç durumu doğrulanamadı.',
+        'stop-failed': 'Seçili örnek durdurulamadı.',
+        'write-failed': 'Değişiklik yazılamadı.',
+        'verification-failed': 'Değişiklik doğrulanamadı.',
+        'backup-invalid': 'Yedeğin geçerliliği doğrulanamadı.',
+        'recovery-required': 'Başka değişiklikler yapmadan önce bu çalışma ortamını kurtarın.',
+        'lifecycle-failed': 'Süreç işlemi tamamlanamadı.',
+      },
+      'before-hash': 'Geçerli SHA-256',
+      'after-hash': 'Önizleme SHA-256',
+      'byte-range': 'Kaynak bayt aralığı',
+      'native-payload': 'Bun veri yükü (Mach-O arm64)',
+      'native-module-count': 'Paketteki modül sayısı',
+      'native-entry-point': 'Paketteki giriş noktası',
+      'native-payload-range': 'Bayt aralığı {{start}}–{{end}} (bitiş hariç)',
+      'native-payload-scope':
+        'Yalnızca inceleme amaçlıdır. Kapsayıcı tespit edildi. Paket ve JavaScript işlevi henüz doğrulanmadı.',
+      title: 'Claude Cowork çalışma zamanı',
+      description:
+        'Dosyaları veya süreçleri değiştirmeden yerel çalışma zamanlarını inceleyin ve değişiklikleri önizleyin.',
+      'history-note':
+        '8k ilkesi, sıkıştırma sırasında tutulan asgari yakın geçmişi belirler. Toplam istem veya model bağlam sınırı değildir.',
+      'custom-path': 'Özel çalışma zamanı yolu (isteğe bağlı)',
+      'path-help':
+        'Standart macOS konumlarını taramak için boş bırakın. Diğer platformlarda dosya veya dizin girin. En fazla 32 sonuç döner.',
+      scan: 'Çalışma zamanlarını tara',
+      targets: 'Çalışma zamanı seçin',
+      working: 'Çalışma zamanı okunuyor…',
+      empty: 'Çalışma zamanı bulunamadı. Özel bir dosya veya dizin yolu deneyin.',
+      state: 'Algılanan durum',
+      version: 'Sürüm',
+      matches: 'Eşleşen işlevler',
+      'read-only':
+        'Bu bölüm salt okunurdur. Uygulama, geri yükleme ve süreç denetimleri kullanılamaz.',
+      inspect: 'İncelemeyi yenile',
+      preview: 'Değişikliği önizle',
+      error:
+        'Çalışma zamanı incelenemedi. Seçimi yenilemek için yeniden tarayın veya özel yolu kontrol edin.',
+      states: {
+        original: 'Özgün ilke',
+        'legacy-return0': 'Eski sıfır döndürme ilkesi',
+        'legacy-35k': 'Eski 35k ilkesi',
+        'current-8k': '8k ilkesi algılandı',
+        unsupported: 'Tanınmayan çalışma zamanı',
+        ambiguous: 'Birden çok eşleşme',
+        unreadable: 'Çalışma zamanı okunamıyor',
+      },
+      reasons: {
+        'windows-recipe-unverified':
+          'Windows paket yöntemi doğrulanmadı. Yalnızca inceleme yapılabilir; değişiklik ve süreç işlemleri kullanılamaz.',
+        'native-payload-unverified':
+          'Yerel ikili yük desteği doğrulanmadı. Değişiklik ve süreç işlemleri kullanılamaz.',
+        'bundle-recovery-unverified':
+          'Uygulama paketi kurtarma ve imzalama doğrulanmadı. Değişiklik ve süreç işlemleri kullanılamaz.',
+        'package-ownership-unverified':
+          'Paket kimliği ve süreç sahipliği doğrulanmadı. Değişiklik ve süreç işlemleri kullanılamaz.',
+      },
+      previews: {
+        ready: 'Önizleme hazır. Bu bölüm salt okunur; değişiklik uygulanmadı.',
+        'inspection-only':
+          'Kaynak değişikliği önizlenebilir ancak bu paket değişiklik için desteklenmiyor. Değişiklik uygulanmadı.',
+        'already-current':
+          'Kaynakta 8k ilkesi zaten var. Bu, paket desteğini veya başarılı bir işlemi kanıtlamaz.',
+        unavailable: 'Güvenli değişiklik önizlemesi yok. Değişiklik uygulanmadı.',
+      },
+    },
     'service-unavailable':
       "Ayarlar şu anda açılamıyor veya kaydedilemiyor. Tekrar deneyin. Sorun sürerse Antigravity Manager'ı kapatıp yeniden açın.",
     'service-retry': 'Tekrar dene',
@@ -437,6 +654,34 @@ const tr = {
       groups: 'Isıtılacak kota grupları',
       group: { claude: 'Claude kota grupları', gemini: 'Gemini kota grupları' },
     },
+    thinkingBudget: {
+      title: 'Düşünme bütçesi',
+      description:
+        'Modelin ne kadar düşüneceğine kimin karar verdiğini ve her düzeyin bütçesini seçin.',
+      controlSource: 'Denetim kaynağı',
+      controlSourceHint:
+        'Gateway aşağıdaki bütçeleri uygular. İstemci istekteki bütçeyi veya effort düzeyini aktarır.',
+      gatewayHint:
+        '-1 veya pozitif bir bütçe girin. Flash Low ve Medium için -1 varsayılan bütçeyi, diğer alanlarda uyarlanabilir düşünmeyi kullanır. Kaynak ve bütçeler Kaydet ile birlikte uygulanır.',
+      clientHint:
+        'İstek kendi düşünme bütçesini veya effort düzeyini belirler. Aşağıdaki gateway bütçeleri uygulanmaz.',
+      adaptiveHint: '-1 modelin seçmesine izin verir',
+      'flash-low-default-hint': '-1, Flash Low varsayılanı olan 1000 token kullanır',
+      'flash-medium-default-hint': '-1, Flash Medium varsayılanı olan 4000 token kullanır',
+      invalid:
+        '-1 veya 1 ile 131072 arasında bir tam sayı girin. Kaydedilmiş 0 değerlerini düzeltin.',
+      'configuration-invalid':
+        'Bu düşünme bütçesi değerleri reddedildi. -1 veya 1 ile 131072 arasında bir tam sayı girin.',
+      source: { gateway: 'Gateway', client: 'İstemci' },
+      family: { flash: 'Gemini Flash', pro: 'Gemini Pro', claude: 'Claude' },
+      level: {
+        low: 'Düşük',
+        medium: 'Orta',
+        high: 'Yüksek',
+        tiered: 'Kademeli',
+        default: 'Varsayılan',
+      },
+    },
     title: 'Ayarlar',
     description: 'Uygulama tercihlerini yönetin.',
     general: 'Genel',
@@ -455,6 +700,10 @@ const tr = {
       light: 'Açık',
       dark: 'Karanlık',
     },
+    'interface-zoom': 'Arayüz yakınlaştırması',
+    'appearance-saving': 'Tercih kaydediliyor…',
+    'appearance-save-failed': 'Tercih kaydedilemedi.',
+    'appearance-retry': 'Tekrar dene',
     language: {
       title: 'Dil',
       description: 'Tercih ettiğiniz dili seçin.',
@@ -467,10 +716,7 @@ const tr = {
       portuguese: 'Portekizce (Brezilya)',
       japanese: 'Japonca',
     },
-    about: {
-      title: 'Hakkında',
-      description: 'Uygulama bilgileri.',
-    },
+    about: { title: 'Hakkında', description: 'Uygulama bilgileri.' },
     cache: {
       title: 'Antigravity Önbelleği',
       description:
@@ -488,7 +734,6 @@ const tr = {
       clearedDescription: 'Antigravity önbellek klasörlerinden {{size}} MB silindi.',
       failedTitle: 'Önbellek temizlenemedi',
       notFoundTitle: 'Antigravity önbelleği bulunamadı',
-
       'paths-failed': 'Önbellek konumları bulunamadı',
       'paths-retry-description': 'Önbelleği temizlemeden önce tekrar deneyin.',
       'partial-title': 'Önbelleğin bir kısmı temizlenemedi',
@@ -500,13 +745,8 @@ const tr = {
     license: 'Lisans',
     openLogDir: 'Aç',
     toast: {
-      saved: {
-        title: 'Ayarlar kaydedildi',
-        description: 'Yapılandırmanız güncellendi.',
-      },
-      saveFailed: {
-        title: 'Ayarlar kaydedilirken hata oluştu',
-      },
+      saved: { title: 'Ayarlar kaydedildi', description: 'Yapılandırmanız güncellendi.' },
+      saveFailed: { title: 'Ayarlar kaydedilirken hata oluştu' },
     },
     account: {
       'client-setup': 'İstemci konumu ve başlatma ayarları',
@@ -646,18 +886,18 @@ const tr = {
       saving: 'Kaydediliyor...',
     },
     autoSwitchModels: {
-      title: 'Auto-Switch Models Config',
+      title: 'Otomatik hesap değiştirme kuralları',
       description:
-        'Configure which models trigger auto-switch when depleted, and prioritize specific models when selecting the next active account.',
-      searchPlaceholder: 'Search models...',
-      noModels: 'No models found.',
-      noModelsFound: 'No models found.',
-      includeLabel: 'Include',
-      priorityLabel: 'Priority',
-      save: 'Save Config',
-      saving: 'Saving...',
-      saved: 'Auto-switch model configuration saved successfully.',
-      saveFailed: 'Failed to save auto-switch model configuration.',
+        'Hangi model kotalarının hesap değişikliğini tetikleyebileceğini ve sonraki hesap seçilirken hangi modellere öncelik verileceğini belirleyin.',
+      searchPlaceholder: 'Model ara…',
+      noModels: 'Kullanılabilir model yok.',
+      noModelsFound: 'Aramayla eşleşen model yok.',
+      includeLabel: 'Dahil et',
+      priorityLabel: 'Öncelik',
+      save: 'Kuralları kaydet',
+      saving: 'Kaydediliyor…',
+      saved: 'Otomatik hesap değiştirme kuralları kaydedildi.',
+      saveFailed: 'Otomatik hesap değiştirme kuralları kaydedilemedi.',
       noRestartTitle: 'Sorunsuz Canlı Eşitleme (IDE/Uygulama Yeniden Başlatılmaz)',
       noRestartDesc:
         'IDE pencerelerini kapatmadan kimlik bilgilerini doğrudan işletim sistemi kimlik deposuna eşitler.',
@@ -725,32 +965,160 @@ const tr = {
     save: 'Ayarları Kaydet',
   },
   toast: {
-    backupSuccess: {
-      title: 'Başarılı',
-      description: 'Hesap yedeği başarıyla oluşturuldu.',
-    },
-    backupError: {
-      title: 'Hata',
-      description: 'Yedek oluşturulamadı: {{error}}',
-    },
-    switchSuccess: {
-      title: 'Başarılı',
-      description: 'Hesap başarıyla değiştirildi.',
-    },
-    switchError: {
-      title: 'Hata',
-      description: 'Hesap değiştirilemedi: {{error}}',
-    },
-    deleteSuccess: {
-      title: 'Başarılı',
-      description: 'Hesap yedeği başarıyla silindi.',
-    },
-    deleteError: {
-      title: 'Hata',
-      description: 'Yedek silinemedi: {{error}}',
-    },
+    backupSuccess: { title: 'Başarılı', description: 'Hesap yedeği başarıyla oluşturuldu.' },
+    backupError: { title: 'Hata', description: 'Yedek oluşturulamadı: {{error}}' },
+    switchSuccess: { title: 'Başarılı', description: 'Hesap başarıyla değiştirildi.' },
+    switchError: { title: 'Hata', description: 'Hesap değiştirilemedi: {{error}}' },
+    deleteSuccess: { title: 'Başarılı', description: 'Hesap yedeği başarıyla silindi.' },
+    deleteError: { title: 'Hata', description: 'Yedek silinemedi: {{error}}' },
+  },
+  'client-config': {
+    'profiles-title': 'Bağlantı profilleri',
+    'profiles-help':
+      'Bağımsız bağlantılar ve anahtar başvuruları kaydedin. Profil kaydı istemciyi değiştirmez. Uygulamadan önce önizleyin.',
+    'profile-new': 'Yeni profil',
+    'profile-name': 'Profil adı',
+    'profile-client': 'İstemci',
+    'profile-credential': 'Kimlik bilgisi kaynağı',
+    'profile-key-keep': 'Bu profilin kayıtlı anahtarını koru',
+    'profile-key-manager': 'Geçerli Manager proxy anahtarı',
+    'profile-key-opencode': 'Mevcut özel OpenCode anahtarı',
+    'profile-key-client': 'Geçerli istemci yapılandırmasındaki anahtar',
+    'profile-save': 'Profili kaydet',
+    'profile-delete': 'Kayıtlı profili sil',
+    'profile-provider-mode': 'Bu istemci bu profil için ayrı bir sağlayıcıyı destekler.',
+    'profile-single-active':
+      'Bu profili uygulamak istemcinin etkin bağlantısını değiştirir. Diğer kayıtlı profiller korunur.',
+    'profile-delete-help':
+      '“{{name}}” profili silinsin mi? Önce istemciye uygulanan ayarlarını kaldırın.',
+    'profile-saved': 'Profil kaydedildi. İstemciye uygulamadan önce önizleyin.',
+    'profile-deleted': 'Kayıtlı profil silindi.',
+    'profile-required-default': 'Bu istemci için model listesinden varsayılan bir model seçin.',
+    'config-conflict':
+      'Ayarlar değişti veya Manager’a ait değil. Yenileyip yeni önizlemeyi inceleyin.',
+    'config-invalid':
+      'İstemci yapılandırma veya depolama biçimi desteklenmiyor. Dosyayı koruyup biçimini kontrol edin.',
+    'config-read-failed':
+      'İstemci ayarları okunamadı. Dosya izinlerini kontrol edip yeniden deneyin.',
+    'config-key-missing': 'Eşitlemeden önce Manager proxy API anahtarını ayarlayın.',
+    'config-backup-failed':
+      'Gerekli özel yedek doğrulanamadı veya oluşturulamadı. Yedeği ve izinleri kontrol edin.',
+    'config-unavailable':
+      'Yapılandırma sahibi kullanılamıyor veya kapanıyor. Hazır olduğunda yeniden deneyin.',
+    'config-home-missing': 'İstenen DSH profilini bulmak için arka uçta DSH_HOME ayarlayın.',
+    'config-write-failed':
+      'Yazma doğrulanamadı. Yeni önizlemeden önce istemci dosyasını ve yedeği inceleyin.',
+    'dsh-store-key': 'DSH içinde özel bir Manager anahtarı sakla',
+    'dsh-store-key-help':
+      'Bu profilde tanımlı yerel DSH v1 kimlik bilgisi deposu gerekir. Özel depolar reddedilir. Anahtar arka uçta kalır.',
+    'dsh-credential-retained':
+      'Başka bir profil kullanıyor olabileceğinden veya sahiplik doğrulanamadığından kimlik bilgisi korunacak.',
+    'dsh-credential-remove':
+      'Diğer profiller kontrol edildikten sonra değişmemiş özel kimlik bilgisini kaldır.',
+    'dsh-default-restore': 'Önceki varsayılan modeli geri yükle',
+    'client-description':
+      'Önizlemeyi inceleyerek {{name}} sağlayıcısını yapılandırın. İstemcide kullanım henüz doğrulanmadı.',
+    'version-unknown': 'Program bulundu; sürüm bilinmiyor',
+    'client-read-failed': 'İstemci ayarları okunamadı. Yapılandırmayı denetleyip yeniden deneyin.',
+    'discover-models': 'Model keşfini etkinleştir',
+    'openclaw-version': 'OpenClaw yapılandırma biçimi',
+    'choose-version': 'v1 veya v2 seçin',
+    'version-help': 'Kurulu OpenClaw sürümünün biçimini seçin. Bilinmeyen sürüm tahmin edilmez.',
+    activate: 'Bu sağlayıcıyı varsayılan yap',
+    'default-model': 'Varsayılan model',
+    'default-help': 'Varsayılan model seçilen listede olmalıdır.',
+    'backend-key':
+      'Manager anahtarını seçili backend sağlar. Diğer istemci kimlik bilgileri gösterilmez.',
+    'saved-client':
+      'Yapılandırma kaydedildi. {{name}} uygulamasını yeniden açıp bir istek doğrulayın.',
+    'invalid-client':
+      'URL, model kimlikleri, varsayılan model ve gerekli biçim seçimini denetleyin.',
+    'merge-models': 'Genel model modunu merge yap',
+    'merge-models-change': 'Bu önizleme genel model modunu merge olarak değiştirir.',
+    'dsh-description':
+      'Mevcut DSH profilini Manager’a bağlayın. Kaydetmek gerçek bir isteği doğrulamaz.',
+    profile: 'Profil',
+    protocol: 'Protokol',
+    'credential-reference': 'Kimlik bilgisi ortam değişkeni',
+    'credential-reference-help':
+      'Mevcut DSH değişkeninin adını girin. Gizli değer DSH içinde kalır.',
+    'model-ids': 'Virgülle veya yeni satırla ayrılmış model kimlikleri',
+    'profile-found': 'Profil bulundu',
+    'profile-missing': 'Profil bulunamadı',
+    'read-failed': 'Profil okunamadı. DSH_HOME değerini denetleyip yeniden deneyin.',
+    'preview-save': 'Yapılandırmayı önizle',
+    'preview-remove': 'Kaldırmayı önizle',
+    'review-save': 'Değişikliği incele',
+    'review-remove': 'Yönetilen sağlayıcı kaldırmasını incele',
+    'review-help':
+      'Yalnızca yönetilen sağlayıcı değiştirilir. Önizlemeden sonra değişen dosya reddedilir.',
+    confirm: 'İncelenen değişikliği uygula',
+    cancel: 'İptal',
+    'no-change': 'Değişiklik gerekmiyor.',
+    saved: 'Yapılandırma kaydedildi. DSH içinde yeni bir istekle doğrulayın.',
+    failed: 'Sonuç doğrulanamadı. Yeniden denemeden önce durumu ve önizlemeyi yenileyin.',
+    invalid: 'Profil, URL, değişken adı ve model kimliklerini denetleyin.',
+    'receipt-failed':
+      'Yapılandırma değişti ancak sahiplik kaydı yazılamadı. Devam etmeden önce profili inceleyin.',
   },
   cloud: {
+    'recommendation-target': 'Öneri için istemci',
+    'use-recommended-account': 'Önerilen hesabı kullan',
+    'no-target-recommendation': 'Bu istemci için uygun hesap yok',
+    'recommendation-target-classic': 'Classic',
+    'project-id': {
+      title: 'Proje kimliği',
+      empty: 'Ayarlanmamış',
+      help: 'Google bir kimlik döndürürse kayıtlı değer değiştirilir. Temizlendiğinde ağ geçidi gerekirse kimliği yeniden bulabilir.',
+      clear: 'Temizle',
+      fetch: 'Google’dan getir',
+      save: 'Kaydet',
+      loading: 'Proje kimliği yükleniyor…',
+      'load-failed': 'Proje kimliği yüklenemedi.',
+      retry: 'Yeniden dene',
+      updating: 'Proje kimliği güncelleniyor…',
+      updated: 'Proje kimliği güncellendi.',
+      conflict: 'Hesap veya proje kimliği değişti. Güncel değer yeniden yüklendi.',
+      'fetch-failed': 'Google’dan proje kimliği alınamadı.',
+      'update-failed': 'Proje kimliği güncellenemedi.',
+    },
+    'pool-summary': {
+      title: 'Hesap havuzu kotası',
+      'enabled-normal': 'Etkin ve normal',
+      'all-normal': 'Devre dışılar dahil tüm normal hesaplar',
+      disabled: 'Elle devre dışı',
+      exceptions: 'Doğrulama / OAuth / erişim sorunları',
+      'unknown-health': 'Sağlık doğrulanmadı',
+      'current-clients': 'İstemcideki mevcut hesap',
+      'rate-limited': 'Hız sınırlı',
+      scope: 'İstatistik kapsamı',
+      'filtered-scope': 'Mevcut plan filtresindeki hesaplar ({{total}} hesaptan {{visible}}).',
+      denominator: '{{total}} hesaptan {{known}} biliniyor',
+      'model-family': 'Model ailesi',
+      'five-hour': '5 saat',
+      weekly: 'Haftalık',
+      effective: 'Etkin en düşük',
+      weighted: 'Plan ağırlıklı',
+      unknown: 'Bilinmiyor',
+      empty: 'Bu kapsamda normal hesap yok. Kapsamı değiştirin veya hesap durumunu inceleyin.',
+      'no-families': 'Bu kapsam için bilinen görünür model kotası yok.',
+      ready: 'Kota kullanılabilir',
+      exhausted: 'Tükendi',
+      cooling: 'Bekleme / hız sınırı',
+      stale: 'Yenileme gerekli',
+      'weighted-note':
+        'Yalnızca kalan yüzde. Ultra ×2, Pro ×1,5, Free ×1. Bilinmeyen planlar ağırlıktan çıkarılır; model çeşitleri hesap başına bir kez sayılır.',
+      'status-note':
+        'Anlık kota durumu ağ geçidinden çağrı yapılabildiğini kanıtlamaz. Eksik model verisi bilinmiyor demektir. İstemci kimliği proxy uygunluğundan ayrıdır.',
+      'weighted-denominator':
+        '{{known}} ağırlıklı hesap; bilinmeyen plan nedeniyle {{unknown}} hariç',
+      zero: 'Bilinen kota yok',
+      'unknown-value': '—',
+      snapshot: 'Anlık durumlar',
+      'enabled-normal-count': 'Etkin ve normal',
+      'account-details': 'Hesap durumu ayrıntıları',
+      'missing-reset': 'Sıfırlama bilinmiyor',
+    },
     'total-accounts': 'Toplam hesap',
     title: 'Hesaplar',
     description: 'Google Gemini hesaplarınızı yönetin.',
@@ -833,7 +1201,7 @@ const tr = {
       'weekly-bucket-unavailable': 'Dönen bilgilerde haftalık kullanım bulunamadı.',
     },
     authDialog: {
-      'manual-sign-in': 'Kodu elle gir',
+      'manual-sign-in': 'Kod veya geri dönüş adresi yapıştır',
       'waiting-for-browser':
         'Tarayıcınızda oturum açmayı tamamlayın. Bu pencere otomatik olarak güncellenecek.',
       title: 'Google Hesabı Ekle',
@@ -842,9 +1210,10 @@ const tr = {
       oauthClient: 'Oturum açma yöntemi',
       oauthClientPlaceholder: 'Giriş yöntemi seçin',
       openLogin: 'Giriş Sayfasını Aç',
-      authCode: 'Yetkilendirme Kodu',
-      placeholder: '4/ ile başlayan kodu yapıştırın...',
-      instruction: 'Giriş otomatik tamamlanmazsa tarayıcıdaki kodu buraya yapıştırın.',
+      authCode: 'Kod veya geri dönüş adresi',
+      placeholder: 'Kodu veya tarayıcıdaki tam geri dönüş adresini yapıştırın',
+      instruction:
+        'Önce yukarıdan giriş başlatın, ardından o girişin kodunu veya geri dönüş adresini yapıştırın. Adres, bu girişin state değerini içermelidir.',
       verify: 'Doğrula ve Ekle',
     },
     card: {
@@ -901,6 +1270,26 @@ const tr = {
       resetUnknown: 'Bilinmeyen',
       detailedQuota: 'Ayrıntılı kota',
       quotaGroupUnknown: 'Kota grubu',
+      cycleUsage: 'Mevcut döngüdeki yerel kullanım',
+      cycleUsageLoading: 'Saklanan kullanım yükleniyor…',
+      cycleUsageQueryFailed: '{{group}} için kullanım sorgusu başarısız',
+      cycleUsageTokens: 'Bilinen: {{count}} token',
+      'cycle-usage-cached-tokens': 'Önbellek: {{count}} token',
+      'cycle-usage-cached-incomplete': '{{count}} istek için önbellek kullanımı bilinmiyor',
+      cycleUsageLocal: 'saklanan yerel denemeler',
+      cycleUsageRequests: 'Kullanımı eksiksiz {{count}} istek',
+      cycleUsageIncomplete:
+        '{{missing}} isteğin deneme kullanımı eksik · {{ambiguous}} belirsiz istek',
+      'cycle-usage-scope':
+        'Deneme başlangıcına göre · yalnızca yerel kayıtlar · fatura toplamı değildir',
+      'cycle-usage-verified-google-account':
+        'Doğrulanmış Google hesabı · bağlı önceki eklemeler dahil',
+      'cycle-usage-current-account-only':
+        'Yalnızca mevcut ekleme ve kimlik bilgileri · önceki eklemeler bağlı değil',
+      'cycle-usage-known-subtotal':
+        'Yalnızca denemelerin bilinen gerçek alt toplamları; eksik istekler de token içerebilir.',
+      'cycle-usage-legacy-ambiguity':
+        'Atanamayan eski istekler yalnızca belirsiz istek sayısı için istek başlangıç zamanına göre sayılabilir; kullanımları hariç tutulur.',
       gemini3Ready: 'Gemini 3 Hazır',
       groupGoogleGemini: 'Google Gemini',
       groupAnthropicClaude: 'Anthropic Claude',
@@ -913,6 +1302,9 @@ const tr = {
       'proxy-replace-placeholder': 'Yeni proxy adresi girin',
       'proxy-remove': "Proxy'yi kaldır",
       'proxy-save-failed': 'Proxy kaydedilemedi',
+      'proxy-routing-save-failed': 'Proxy yönlendirme ayarları kaydedilemedi',
+      'proxy-priority': 'Proxy önceliği (1–100)',
+      'proxy-enabled': 'Bu hesabı proxy istekleri için kullan',
       noProxy: 'Proxy yok',
       aiCredits: 'Yapay Zeka Kredileri',
       aiCreditsValue: '{{amount}} kredi',
@@ -951,7 +1343,6 @@ const tr = {
       deleteVersionSuccess: 'Geçmiş kimlik silindi',
       openFolderSuccess: 'Kimlik depolama klasörü açıldı',
       baseline: 'İlk cihaz bilgileri',
-
       description: 'Hesap değiştirirken kullanmak için bu hesabın cihaz bilgilerini kaydedin.',
       'load-failed': 'Cihaz bilgileri okunamadı',
       'retry-description': 'Tekrar deneyin. Kaydedilmiş cihaz bilgileri değiştirilmedi.',
@@ -1005,6 +1396,8 @@ const tr = {
           'login-failed': 'Hesap eklenemedi. Tekrar deneyin.',
           'proxy-configuration-invalid':
             'Ayarlarda geçerli bir proxy adresi kaydedin veya proxy’yi kapatın, ardından tekrar giriş yapın.',
+          'invalid-manual-input':
+            'Kod veya geri dönüş adresi geçersiz ya da başka bir girişe ait. Güncel girişteki bilgileri yeniden kopyalayıp deneyin.',
         },
       },
       quotaRefreshed: 'Kota yenilendi',
@@ -1076,6 +1469,8 @@ const tr = {
       quotaFlash: 'Flash Kotası',
     },
     exportImport: {
+      'transfer-menu': 'İçe / Dışa Aktar',
+      'import-from-file': 'Dosyadan içe aktar',
       'file-errors': {
         'file-too-large': 'Seçilen dosya çok büyük. Daha küçük bir hesap yedeği seçin.',
         'invalid-export': 'Bu hesap yedeği tanınamadı. Geçerli bir yedek dosyası seçin.',
@@ -1116,6 +1511,7 @@ const tr = {
         'antigravity-keyring': 'Sistemde kayıtlı giriş bilgileri',
         'antigravity-classic-db': 'Antigravity kayıtlı hesapları',
         'antigravity-ide-db': 'Antigravity IDE kayıtlı hesapları',
+        'antigravity-agy-file': 'Antigravity CLI kayıtlı oturumu',
       },
       validationErrors: {
         'credential-unavailable':
@@ -1146,12 +1542,9 @@ const tr = {
         'session-consumed':
           'Bu tarama sonuçları zaten kullanıldı. Daha fazla hesap aktarmak için tekrar tarayın.',
       },
-
       title: 'Bu bilgisayardan hesap aktar',
-
       trigger: 'Bu bilgisayardan hesap aktar',
     },
-
     feedback: {
       'loading-title': 'Hesaplarınız okunuyor',
       'loading-description': 'Hesap bilgileriniz hazır olduğunda burada görünecek.',
@@ -1335,6 +1728,14 @@ const tr = {
       start: 'Hizmeti Başlat',
       stop: 'Hizmeti Durdur',
       start_failed: 'Hizmet başlatılamadı',
+      'status-unavailable': 'Hizmet durumu okunamadı',
+      'persistence-diagnostic': 'Tanılama kimliği: {{diagnosticId}}',
+      'retry-save-failed': 'Başlatma seçimi kaydedilemedi. Kaydetmeyi yeniden deneyin.',
+      'stop-failed': 'Proxy durdurulamadı.',
+      'operation-failed': 'Proxy işlemi doğrulanamadı. Durumunu kontrol edip yeniden deneyin.',
+      'persistence-failed-started': 'Proxy başlatıldı ancak sonraki başlatma ayarı kaydedilemedi.',
+      'persistence-failed-stopped': 'Proxy durduruldu ancak sonraki başlatma ayarı kaydedilemedi.',
+      'retry-save': 'Kaydetmeyi yeniden dene',
       port_in_use_title: 'Port zaten kullanılıyor',
       port_in_use_description:
         '{{port}} portu başka bir işlem tarafından kullanılıyor. Bu işlemi kapatın veya Ayarlar bölümünden API proxy dinleme portunu değiştirip tekrar deneyin.',
@@ -1359,9 +1760,50 @@ const tr = {
       'global-system-prompt-character-count': '{{count}} karakter',
       'global-system-prompt-long-warning':
         '2.000 karakterden uzun talimatlar sohbet geçmişi için daha az yer bırakır. Talimatları kısaltmayı düşünün.',
+      compaction: {
+        'trusted-sources': 'Güvenilen anahtar kapsamları',
+        'trust-desc':
+          'Cowork koordinasyonu için geçerli proxy API anahtarını seçin. Bu anahtarı paylaşan tüm istemciler kapsama dahildir. Diğer istemcileri dışarıda tutmak için özel bir anahtar kullanın. Yalnızca anahtar parmak izi kaydedilir. Kapsam yalnızca bu anahtar geçerli proxy anahtarı olduğu sürece uygulanır.',
+        'trust-current-key': 'Geçerli proxy anahtarına güven',
+        'key-required':
+          'Güvenilen kapsamı seçmeden önce yukarıda bir proxy API anahtarı ayarlayın.',
+        'no-trusted-sources': 'Güvenilen kapsam seçilmedi. Cowork koordinasyonu etkin değil.',
+        'revoke-key': 'Güveni kaldır',
+        'revoke-key-label': '{{digest}} parmak izi için güveni kaldır',
+        'trust-limit': '32 kapsam kaydedildi. Yenisini eklemeden önce birini kaldırın.',
+        saving: 'Cowork ayarları kaydediliyor…',
+        'save-failed': 'Cowork ayarları kaydedilemedi. İşlemi tekrar deneyin.',
+        retry: 'Tekrar dene',
+        title: 'Cowork bağlam sıkıştırma',
+        description:
+          'Geçmişi özetleme ve değiştirme işlemini Cowork istemcisiyle koordine eder; normal oturumlar otomatik olarak kırpılmaz.',
+        auto: 'Otomatik sıkıştırma koordinasyonunu etkinleştir',
+        'auto-desc': 'Yalnızca tanınan ve eşiği aşan Cowork istekleri yerel kontrol yanıtı alır.',
+        manual: 'Manuel /compact koordinasyonunu etkinleştir',
+        'manual-desc':
+          'Açık bir Cowork /compact komutunun istemci kontrollü akışı başlatmasına izin verir.',
+        threshold: 'Otomatik eşik (tahmini giriş tokenları)',
+        'threshold-desc':
+          'Varsayılan 200.000; etkin eşik sabit sistem ve araç maliyetlerini de içerir.',
+      },
       local_access: 'Yerel ağ erişimi:',
       select_ip: 'IP Seç',
       no_token_warning: '⚠️ API anahtarı ayarlanmadı. Erişim herkese açık!',
+      lan_access: 'Yerel ağ erişimine izin ver',
+      lan_access_desc: 'Proxy yerel ağa bağlanır. API anahtarı gerekir.',
+      ip_access_title: 'IP erişim kuralları',
+      ip_access_desc:
+        'Model, WebSocket ve herkese açık yönetim isteklerini istemci adresine göre sınırlayın.',
+      ip_filter_mode: 'IP filtre modu',
+      ip_filter_off: 'Kapalı',
+      ip_filter_allowlist: 'Yalnızca izin listesi',
+      ip_filter_blocklist: 'Engel listesi',
+      ip_filter_both: 'İzin ve engel listesi',
+      ip_allowlist: 'İzin verilen IP veya CIDR',
+      ip_blocklist: 'Engellenen IP veya CIDR',
+      trusted_proxy_cidrs: 'Güvenilen proxy CIDR değerleri',
+      allowlist_precedence: 'İzin listesi öncelikli',
+      allowlist_precedence_desc: 'İzin listesindeki bir adres, eşleşen engel kuralını aşabilir.',
       show_key: 'Göster',
       hide_key: 'Gizle',
       cloud_code_meta: 'Cloud Code uyumluluğu',
@@ -1369,8 +1811,36 @@ const tr = {
         'Eski Cloud Code araçlarının ihtiyaç duyduğu ek yanıt bilgilerini ekler. Diğer araçlar bu bilgileri kabul etmeyebilir; yalnızca gerektiğinde açın.',
     },
     mapping: {
+      'alias-rules': 'Model takma adları',
+      'alias-rules-description':
+        'İstenen her ad için hedef seçin. Gizli takma adlar istekleri kabul eder. Otomatik hedefler hesap havuzundaki uygun modelleri kullanır.',
+      'no-rules': 'Özel takma ad yok. Bir kural ekleyin.',
+      'requested-model': 'İstenen model adı',
+      'target-model': 'Hedef model',
+      'routing-strategy': 'Yönlendirme stratejisi',
+      'fixed-target': 'Sabit model',
+      'auto-flash': 'Kullanılabilir Flash, düşük düşünme',
+      'auto-flash-description':
+        'Uygun bir Flash modelini düşük düşünme ile kullanır. Uygun model yoksa kullanılabilirlik hatası döner.',
+      'auto-opus': 'En yeni kullanılabilir Opus',
+      'auto-opus-description': 'Önce Opus 5.5, sonra 4.6. Opus ailesinde kalır.',
+      'auto-opus-compat': 'Önce Opus 4.7',
+      'auto-opus-compat-description':
+        'Uygun modeller arasından Opus 4.7, 4.6, 5.5 sırasıyla seçer.',
+      'route-enabled': 'İstekleri kabul et',
+      published: 'Model listelerinde göster',
+      'remove-rule': '{{index}}. kuralı kaldır',
+      'pattern-hidden': 'Joker desenler ve strateji adları model listelerine eklenmez.',
+      'add-rule': 'Takma ad ekle',
+      'save-rules': 'Takma adları kaydet',
+      'saving-rules': 'Kaydediliyor…',
+      'discard-rules': 'Değişiklikleri iptal et',
+      'invalid-rules': 'Her kural için benzersiz bir istek adı ve hedef girin.',
+      'save-failed': 'Kaydedilemedi. Düzenlemeleriniz korundu; tekrar kaydetmeyi deneyin.',
+      'rules-saved': 'Takma adlar kaydedildi.',
       title: 'Model Eşleme',
-      description: 'Her Claude model isteğini hangi Gemini modelinin karşılayacağını seçin.',
+      description:
+        'İstenen model adlarını sabit modellere veya hesap havuzunuzdaki uygun modellere eşleyin.',
       maps_to: 'Şu modele eşlenir:',
       restore: 'Varsayılanlara Sıfırla',
       'only-raw-quota-models': 'Yalnızca hesaplarınızda bulunan modelleri listele',
@@ -1434,7 +1904,6 @@ const tr = {
       'success-title': 'OpenCode yapılandırması güncellendi',
       'error-title': 'OpenCode güncellemesi başarısız',
       'unknown-error': 'Bilinmeyen OpenCode yapılandırma hatası',
-
       'choose-model-hint': 'Devam etmek için en az bir model seçin.',
       'config-retry-description': 'Tekrar deneyin. Kaydedilmiş ayarlarınız değiştirilmedi.',
     },
@@ -1445,6 +1914,9 @@ const tr = {
     persistence: {
       title: 'Request history and reasoning',
       description: 'Inspect bounded local records without slowing model traffic.',
+      'successful-probes': 'Capture successful probes',
+      'successful-probes-description':
+        'Save successful health checks and model-directory polling. Failures and other business requests are still recorded when request history is enabled.',
       'audit-title': 'İstek geçmişi',
       'audit-description':
         'İstekleri, yanıtları ve model hizmetine erişim denemelerini bu bilgisayarda hassas bilgileri gizleyerek kaydeder.',
@@ -1453,9 +1925,32 @@ const tr = {
       dropped:
         '{{count}} kayıt kaydedilemedi ({{reason}}). Model istekleri normal şekilde devam etti.',
       'disk-gib': 'Disk limit (GiB)',
-      'body-hours': 'Tam içeriğin saklanma süresi (saat)',
-      'summary-days': 'Summary retention (days)',
+      'capacity-window':
+        'Tam istekler, disk veya istek sınırına ulaşılana kadar saklanır. Önce en eski tamamlanmış istekler silinir; etkin istekler korunur.',
       'max-rows': 'Maximum rows',
+      'queue-records': 'Pending command limit (32–4,096)',
+      'queue-mib': 'Pending command bytes (16–64 MiB)',
+      'version-unavailable': 'Refresh or upgrade the owner before editing audit settings.',
+      'save-saving': 'Saving and applying settings…',
+      'save-applied': 'Settings saved and applied.',
+      maintenance: 'History maintenance: {{state}}',
+      'maintenance-running': 'running',
+      'maintenance-scheduled': 'scheduled',
+      'maintenance-idle': 'idle',
+      'maintenance-stopped': 'stopped',
+      'maintenance-unknown': 'unavailable',
+      'reload-failed': 'Settings could not be refreshed. Refresh this page before retrying.',
+      'save-partial-failure':
+        'Ayarlar kaydedildi ancak bazı değişiklikler çalışan hizmete uygulanamadı.',
+      'save-restart-required':
+        'Saved, but runtime application is incomplete. Check service status.',
+      'save-conflict': 'Settings changed elsewhere. Review refreshed settings before retrying.',
+      'save-failed': 'Save completion unconfirmed. Refresh and review before retrying.',
+      'invalid-number': 'Enter a finite number of at least {{min}}.',
+      'budget-current':
+        'Configured: {{disk}} MiB / {{rows}} requests. Queue: {{commands}} commands / {{queue}} MiB.',
+      'pressure-note':
+        'Reclamation is gradual and active captures/readers can delay it. The latest drop does not guarantee current write status.',
       'no-audit': 'No traffic records yet.',
       'audit-metadata': 'İstek ayrıntıları ve model hizmeti denemeleri',
       'audit-body-missing': 'İsteğin veya yanıtın tam içeriği artık saklanmıyor.',
@@ -1475,7 +1970,40 @@ const tr = {
       'thought-title': 'Reasoning history',
       'thought-description': 'Save reasoning so later turns can continue the conversation.',
       sessions: '{{count}} sessions',
-      'hard-limit': 'Her sohbet en fazla 200 tur ve 64 MiB içerik kaydedebilir.',
+      'hard-limit':
+        'Memory cache: {{turns}} turns / {{memory}} MiB per session. Durable history has its own {{disk}} MiB disk budget and retention.',
+      'thought-cache-turns': 'Cached turns per session (10–10,000)',
+      'thought-cache-mib': 'Session cache limit (1–64 MiB)',
+      'thought-disk-mib': 'Reasoning disk budget (128–16,384 MiB)',
+      'thought-stats-unavailable': 'Reasoning statistics are unavailable.',
+      'thought-count-unknown': 'Saved record count unavailable',
+      'thought-records': '{{count}} saved records',
+      'thought-memory': 'Memory: {{records}} records / {{bytes}}',
+      'thought-tool-links': 'Recoverable tool links: {{records}}',
+      'thought-recovery-partial':
+        'Thought records were processed, but some recovery-history cleanup is unconfirmed. Refresh and check before another operation.',
+      'no-thought-records': 'No saved reasoning records in this page.',
+      'thought-record-pages': 'Reasoning history pages',
+      'history-page-complete': 'Page {{page}} · end of this history window',
+      'history-page-more': 'Page {{page}} · more records available',
+      'record-unavailable': 'This record is no longer available. Refresh the session.',
+      'thought-delete-receipt': 'Deleted {{sessions}} sessions and {{records}} records.',
+      'thought-delete-scope':
+        'Delete all retained reasoning records in session {{session}}? Other sessions are unaffected.',
+      'thought-mutation-uncertain':
+        'The operation could not be confirmed. History was refreshed; check it before trying again.',
+      'cancel-action': 'Cancel',
+      'thought-failures':
+        'Failures: {{reads}} reads / {{admission}} cold admissions / {{writes}} writes',
+      'thought-write-failure':
+        'Last persistence failure: {{reason}}. Current memory does not guarantee recovery after restart.',
+      'thought-session-capacity': 'No durable session slot available',
+      'thought-maintenance-active-sessions': 'Maintenance deferred to protect active requests.',
+      'thought-maintenance-checkpoint-busy': 'Maintenance paused for a pinned SQLite reader.',
+      'thought-maintenance-no-progress':
+        'Disk reclamation made no progress; further pressure deletion paused.',
+      'thought-maintenance-oversized-record':
+        'An old record exceeds the bounded cleanup budget; manual diagnosis is required.',
       'retention-days': 'Retention (days)',
       'max-sessions': 'Maximum sessions',
       oversized: 'İçerik 64 MiB sınırını aştığı için tam kaydedilmedi.',
@@ -1484,12 +2012,30 @@ const tr = {
       'copy-signature': 'Copy signature',
       'no-thought': 'No reasoning history yet.',
       'clear-thought': 'Clear reasoning history',
+      'clear-failed': 'Akıl yürütme geçmişi temizlenemedi.',
+      'delete-failed': 'Bu oturum silinemedi.',
+      'load-failed': 'Akıl yürütme oturumları yüklenemedi.',
       'repair-thought': 'Repair reasoning history',
       'confirm-clear': 'Confirm clear',
       'confirm-repair': 'Confirm repair',
     },
   },
   traffic: {
+    'export-har': 'HAR dışa aktar',
+    'har-exporting': 'HAR dışa aktarılıyor…',
+    'har-export-saved': 'HAR dosyası kaydedildi.',
+    'har-export-failed':
+      'Dışa aktarma tamamlandığı doğrulanamadı. Dosyayı kontrol edin, isteği yenileyin ve tekrar deneyin.',
+    'har-export-wait': 'Dışa aktarmadan önce isteğin tamamlanmasını bekleyin.',
+    'attempt-timing': {
+      'upload-finished': 'Yükleme tamamlandı',
+      'response-headers': 'Yanıt başlıkları',
+      'first-byte': 'İlk yanıt baytı',
+      'first-output': 'İlk geçerli çıktı',
+      'previous-attempts': 'Önceki denemelerin toplamı',
+      description:
+        'Aşamalar bu denemenin başlangıcından ölçülür. Bağlantı sinyalleri geçerli çıktı sayılmaz. Önceki denemeler yalnızca kaydedilmiş süreleri toplar.',
+    },
     'recovered-badge': 'Kurtarıldı ({{count}} deneme)',
     'recovered-hint': '{{count}} denemeden sonra kurtarıldı',
     'fallback-diagnostics': 'Yedekleme teşhisleri',
@@ -1497,6 +2043,68 @@ const tr = {
     'fallback-attempt-recovered': 'Deneme {{index}} {{operation}}üzerinde kurtarıldı{{status}}',
     'reset-dropped': 'Sıfırla',
     'reset-dropped-failed': 'Sayaç sıfırlanamadı. Lütfen tekrar deneyin.',
+    'archive-storage-note':
+      'Backups are kept separately and are not automatically removed by the audit capacity window.',
+    'capture-interrupted-description':
+      'The previous application process stopped before capture finished. The model result is unknown; the recorded end time is when capture was reconciled.',
+    'live-storage': 'Live audit: {{size}}',
+    'archive-storage': 'Backups: {{size}} ({{count}} files)',
+    'archive-storage-unknown': 'Backup size unknown',
+    'storage-unavailable': 'Could not measure audit storage.',
+    'storage-loading': 'Measuring audit storage…',
+    'save-full': 'Export saved content',
+    'copy-loaded': 'Copy visible view',
+    capture: {
+      refresh: 'Refresh capture',
+      missing: 'No saved body',
+      'missing-description':
+        'No capture metadata is available for this selection. The reason is unknown.',
+      writing: 'Capture in progress',
+      'writing-description':
+        'Saved content may still change. Export is available after capture finishes.',
+      complete: 'Capture complete',
+      empty: 'Empty body captured',
+      summary: 'Binary summary saved',
+      'summary-description':
+        'Only a summary was captured; the original binary content is not stored.',
+      partial: 'Partially saved',
+      'not-saved': 'Body not saved',
+      expired: 'Previously expired body',
+      oversized: 'The capture exceeded its size limit. Only the saved portion is available.',
+      'incomplete-description':
+        'The capture is incomplete. Missing content cannot be reconstructed from this record.',
+      sizes: 'Saved {{stored}} · Observed {{logical}}',
+      'hash-full': 'Hash covers the captured safe representation.',
+      'hash-prefix': 'Hash covers only the saved prefix.',
+      'hash-unavailable': 'No verification hash is available.',
+      loaded: 'Loaded content: {{size}}',
+      'read-failed': 'Could not load saved content. Any loaded pages are kept; try again.',
+      retry: 'Retry loading',
+      loading: 'Loading saved content…',
+      cancel: 'Pause loading',
+      paused: 'Loading paused.',
+      resume: 'Resume loading',
+      'copy-failed': 'Could not copy the visible content. Try again.',
+      'save-failed': 'Could not export the saved content. Try again.',
+      copied: 'Visible content copied',
+      saved: 'Saved content exported',
+      reasons: {
+        'disk-budget': 'The audit disk budget was reached.',
+        'disk-unknown': 'Available audit storage could not be measured.',
+        'checkpoint-busy': 'A SQLite reader prevented disk reclamation.',
+        'reclaim-failed': 'Audit storage could not be reclaimed.',
+        'read-only': 'Audit storage is read-only.',
+        'disk-full': 'The storage volume is full.',
+        'capture-disabled': 'Capture was disabled before this body finished.',
+        'worker-restart': 'Capture was interrupted by an audit worker restart.',
+        retention: 'An earlier age-retention policy removed this content. It cannot be restored.',
+        'disk-pressure': 'An earlier disk-pressure policy removed this content.',
+        'write-failure': 'Some body chunks could not be queued or saved.',
+        'transfer-incomplete': 'The body transfer did not finish.',
+        'serialization-failure': 'The body could not be serialized for capture.',
+        unknown: 'Capture stopped without a recognized reason.',
+      },
+    },
     'detail-load-failed': 'Bu istek yüklenemedi. Tekrar deneyin.',
     'detail-not-found': 'Bu kayıt artık mevcut değil. Temizlenmiş olabilir.',
     fields: {
@@ -1514,6 +2122,7 @@ const tr = {
       query: 'Ek istek seçenekleri',
     },
     outcomes: {
+      capture_interrupted: 'Capture interrupted',
       in_progress: 'İşleniyor',
       completed: 'Tamamlandı',
       client_cancelled: 'İptal edildi',
@@ -1544,7 +2153,6 @@ const tr = {
     'parse-error': 'İçerik {{offset}} konumunda okunamadı.',
     'thought-oversized':
       'Düşünme içeriği 64 MiB sınırını aştığı için tam kaydedilmedi. Referans: {{hash}}',
-
     'loading-description': 'İstek kayıtlarınız hazır olduğunda burada görünecek.',
     'empty-description':
       'Proxy üzerinden gönderilen istekler burada görünür. Filtreleri de değiştirebilirsiniz.',
@@ -1554,6 +2162,52 @@ const tr = {
     'load-failed-description':
       'Lütfen tekrar deneyin. Bu, kayıtlarınızın silindiği anlamına gelmez.',
     'refresh-failed': 'Kayıtlar yenilenemedi. Önceden yüklenen kayıtlar gösterilmeye devam ediyor.',
+    searching: 'Aranıyor…',
+    jumping: 'Eşleşen bölüm açılıyor…',
+    'search-failed': 'Bu içerikte arama yapılamadı. Tekrar deneyin.',
+    clearing: 'Temizleniyor…',
+    'clear-failed':
+      'Temizleme işleminin tamamlandığı doğrulanamadı. Yeniden denemeden önce yenileyin; devam eden kayıt durdurulmuş olabilir.',
+    'resize-column': '{{column}} sütununu yeniden boyutlandır',
+    'reset-columns': 'Sütun genişliklerini sıfırla',
+    'columns-unsaved': 'Sütun genişlikleri bu görünümde değişti ancak kaydedilemedi.',
+    'clear-scope':
+      'Geçerli filtrelerin dışındakiler dahil tüm {{category}} kayıtları temizlensin mi? Düşünce deposu ve tanılama dosyaları etkilenmez.',
+    'clear-complete': '{{category}} kategorisinden {{count}} kayıt temizlendi.',
+    'exact-session': 'Tam kayıtlı oturum kimliği',
+    'apply-session': 'Oturumu uygula',
+    'reset-session': 'Oturumu sıfırla',
+    'recorded-usage': 'Recorded response usage',
+    'usage-source-unretained':
+      'Provider provenance is not retained for these counters. Local estimates are not mixed into this display.',
+    'cache-rate': 'Cached input / total input',
+    'cache-rate-missing': 'Unknown — input or cache count missing',
+    'cache-rate-zero-input': 'Not applicable — zero input',
+    'cache-rate-inconsistent': 'Inconsistent recorded counts',
+    'local-estimate': 'Local estimate',
+    'estimate-not-retained': 'Not retained in this audit record',
+    'measured-stages': 'Recorded gateway timing stages',
+    'stage-overlap-note':
+      'Stages can overlap; do not add them. Missing stages and legacy zeros remain unknown.',
+    'stage-clean': 'Request preparation',
+    'stage-normalization': 'Normalization',
+    'stage-thinking': 'Thought restoration',
+    'stage-ttft': 'Latest upstream attempt to first byte',
+    'wrap-lines': 'Wrap lines',
+    'view-mode-unsaved': 'Display mode changed, but could not be saved.',
+    'match-position': 'Match {{current}} of {{count}}',
+    'previous-match': 'Previous match',
+    'next-match': 'Next match',
+    'cancel-search': 'Cancel search',
+    'export-session': 'Export saved session',
+    'session-exporting': 'Exporting session…',
+    'session-export-scope':
+      'All saved model requests, attempts and bodies. Up to 2,000 settled requests and 100 MiB; partial captures stay partial.',
+    'session-export-needs-scope':
+      'Select a scoped saved-session key. Older records can be exported per body.',
+    'session-export-saved': 'Saved session export.',
+    'session-export-failed':
+      'Export completion could not be confirmed. Check the destination file. Wait for requests to settle, refresh and retry; active, changed, missing or oversized data is refused.',
   },
 };
 export default tr;

@@ -3,6 +3,9 @@ import { z } from 'zod';
 
 export const HashSchema = z.string().regex(/^[a-f0-9]{40}$/);
 export const TagSchema = z.string().regex(/^v\d+\.\d+\.\d+(?:-[\w.-]+)?$/);
+export const releaseBuildTargets = ['darwin', 'linux', 'win32'].flatMap((platform) =>
+  ['arm64', 'x64'].map((arch) => `${platform}-${arch}`),
+);
 const metadataFiles = new Set(['CHANGELOG.md', 'package.json', 'pnpm-lock.yaml']);
 
 export function git(cwd, args) {
@@ -27,11 +30,17 @@ function filesInCommit(cwd, hash) {
 }
 
 function isGeneratedReleaseCommit(cwd, commit, version) {
+  const recorded =
+    /^chore\(release\): \d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(commit.subject) &&
+    /\n\nAGM-Release-Candidate: (?:main|beta) [\w-]+$/.test(
+      git(cwd, ['show', '-s', '--format=%B', commit.hash]),
+    );
   const files = filesInCommit(cwd, commit.hash);
   return (
     files.length > 0 &&
-    commit.subject === `chore(release): ${version}` &&
-    files.every((file) => metadataFiles.has(file))
+    (recorded ||
+      (commit.subject === `chore(release): ${version}` &&
+        files.every((file) => metadataFiles.has(file))))
   );
 }
 

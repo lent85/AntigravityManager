@@ -9,18 +9,20 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises';
-import { createRequire } from 'node:module';
+import { createRequire, findPackageJSON } from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { nodeFileTrace } from '@vercel/nft';
 import { c as archiveTar, x as extractTar } from 'tar';
 import { pipeline } from 'node:stream/promises';
+import bundledDependencies from './standalone-bundled-dependencies.json' with { type: 'json' };
 
 const entries = [
   'core/main.cjs',
   'cli/main.cjs',
   'core/traffic-audit.worker.js',
   'core/thought-store.worker.js',
+  'core/error-window.worker.js',
 ];
 
 // These optional paths are already excluded by the core build aliases or have JS fallbacks.
@@ -58,6 +60,13 @@ export async function traceRuntime(root) {
     }
   }
   const require = createRequire(path.join(root, 'package.json'));
+  const sqliteRoot = path.dirname(require.resolve('better-sqlite3/package.json'));
+  // The bundled official Node distribution uses glibc on Linux.
+  const sqlitePrebuilds = path.join(sqliteRoot, 'prebuilds');
+  const sqliteBinary = path.join(sqlitePrebuilds, `${process.platform}-${process.arch}.node`);
+  const sqliteFallbacks = new Set(
+    ['Debug', 'Release'].map((type) => path.join(sqliteRoot, 'build', type, 'better_sqlite3.node')),
+  );
   const nativeLoaders = [
     'better-sqlite3',
     'keytar',
@@ -69,7 +78,7 @@ export async function traceRuntime(root) {
   const koffiTarget = `@koromix/koffi-${process.platform}-${process.arch}`;
   const sysinfoTarget = `@draculabo/sysinfo-process-enhanced-${process.platform}-${process.arch}${process.platform === 'win32' ? '-msvc' : process.platform === 'linux' ? '-gnu' : ''}`;
   const binaries = [
-    path.join(root, 'node_modules/better-sqlite3/build/Release/better_sqlite3.node'),
+    sqliteBinary,
     path.join(root, 'node_modules/keytar/build/Release/keytar.node'),
     require.resolve(keyringTarget),
     require.resolve(sysinfoTarget),
@@ -109,7 +118,14 @@ export async function traceRuntime(root) {
       fileIOConcurrency: 128,
       // Windows relative() returns an absolute path when a reference crosses drives.
       // NFT's default ../ filter alone does not exclude those host paths before globbing.
-      ignore: (file) => path.isAbsolute(file) || file === '..' || file.startsWith(`..${path.sep}`),
+      ignore: (file) => {
+        if (path.isAbsolute(file) || file === '..' || file.startsWith(`..${path.sep}`)) {
+          return true;
+        }
+        const target = path.resolve(root, file);
+        // The SQLite loader can resolve any of its prebuilds. This runtime has one target.
+        return path.dirname(target) === sqlitePrebuilds && target !== sqliteBinary;
+      },
       stat: (file) => withinRoot(file, stat),
       readlink: (file) => withinRoot(file, readlink),
       readFile: (file) =>
@@ -129,6 +145,10 @@ export async function traceRuntime(root) {
       warning.includes(
         `loaded from ${path.join(root, 'node_modules/@electron/asar/lib/wrapped-fs.js')}`,
       );
+    // The explicit target prebuild is mandatory. The SQLite loader probes these only without it.
+    const sqliteFallback =
+      sqliteFallbacks.has(missing) &&
+      warning.endsWith(`loaded from ${path.join(sqliteRoot, 'lib', 'binding.js')}`);
     // The generated napi-rs loader probes unpublished platforms too. Its target is mandatory above.
     const napiAlternative =
       missing &&
@@ -153,6 +173,7 @@ export async function traceRuntime(root) {
     assert(
       license ||
         electronAsarBuiltin ||
+        sqliteFallback ||
         (missing &&
           (optionalFrameworkImports.has(missing) ||
             optionalNativeImports.has(missing) ||
@@ -183,6 +204,7 @@ export async function traceRuntime(root) {
 }
 
 export async function materializeRuntime(root, output) {
+  root = await realpath(root);
   const trace = await traceRuntime(root);
   await mkdir(output);
   // Serialize tar jobs: concurrent hardlink entries can leave the pack queue unsettled.
@@ -190,6 +212,40 @@ export async function materializeRuntime(root, output) {
   for (const resource of ['node', 'assets', 'package.json', 'pnpm-lock.yaml', 'LICENSE']) {
     await cp(path.join(root, resource), path.join(output, resource), { recursive: true });
   }
+  const notices = [];
+  for (const [name, importers] of Object.entries(bundledDependencies)) {
+    const metadataPath =
+      importers.length === 0
+        ? path.join(root, 'node_modules', name, 'package.json')
+        : [...importers, name].reduce(
+            (importerPath, dependency) => {
+              const resolved = findPackageJSON(dependency, pathToFileURL(importerPath));
+              assert(resolved, `Cannot locate bundled dependency metadata for ${dependency}`);
+              return resolved;
+            },
+            path.join(root, 'package.json'),
+          );
+    assert(
+      (await realpath(metadataPath)).startsWith(`${root}${path.sep}`),
+      'Bundled dependency metadata escaped its runtime root',
+    );
+    const packageRoot = path.dirname(metadataPath);
+    const metadata = JSON.parse(await readFile(metadataPath, 'utf8'));
+    assert.equal(metadata.name, name, 'Bundled dependency metadata must match its package');
+    assert.equal(typeof metadata.version, 'string');
+    const filenames = await readdir(packageRoot);
+    const licenseName = ['LICENSE', 'LICENSE.md'].find((candidate) =>
+      filenames.includes(candidate),
+    );
+    const license = await readFile(
+      licenseName
+        ? path.join(packageRoot, licenseName)
+        : new URL(`licenses/${name}.LICENSE`, import.meta.url),
+      'utf8',
+    );
+    notices.push(`${name}@${metadata.version}\n\n${license.trimEnd()}`);
+  }
+  await writeFile(path.join(output, 'THIRD-PARTY-NOTICES.txt'), `${notices.join('\n\n')}\n`);
   await writeFile(
     path.join(output, 'runtime-trace.json'),
     `${JSON.stringify({ version: 1, tracer: '@vercel/nft@1.11.0', ...trace }, null, 2)}\n`,

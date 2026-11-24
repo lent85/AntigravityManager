@@ -5,11 +5,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_APP_CONFIG } from '@/modules/config/types';
 import { getServerConfig, setServerConfig } from '@/server/server-config';
-import { ProxyGuard } from '@/modules/proxy-gateway/server/guards/proxy.guard';
-import { OpenAIModelsController } from '@/modules/proxy-gateway/server/modules/openai/openai-models.controller';
-import { OpenAIOperations } from '@/modules/proxy-gateway/server/modules/openai/openai-operations.service';
-import { OpenAIService } from '@/modules/proxy-gateway/server/modules/openai/openai.service';
-import { AccountLeaseService } from '@/modules/proxy-gateway/server/modules/account-lease/account-lease.service';
+import { ProxyGuard } from '@/server/gateway/guards/proxy.guard';
+import { OpenAIModelsController } from '@/server/gateway/modules/openai/openai-models.controller';
+import { OpenAIOperations } from '@/server/gateway/modules/openai/openai-operations.service';
+import { OpenAIService } from '@/server/gateway/modules/openai/openai.service';
+import { AccountLeaseService } from '@/server/gateway/modules/account-lease/account-lease.service';
 
 vi.mock('@/modules/proxy-gateway/opencode-sync/opencode-credentials', () => ({
   openCodeCredentialService: { matches: () => false },
@@ -77,7 +77,12 @@ describe('OpenAI model queries HTTP', () => {
             created: 1770652800,
             owned_by: 'antigravity',
             context_length: 200000,
+            max_context_length: 200000,
+            max_input_tokens: 200000,
+            max_model_len: 200000,
+            max_tokens: 200000,
             max_completion_tokens: 64000,
+            max_output_tokens: 64000,
           },
           {
             id: 'gemini-3-flash',
@@ -85,7 +90,12 @@ describe('OpenAI model queries HTTP', () => {
             created: 1770652800,
             owned_by: 'antigravity',
             context_length: 1048576,
+            max_context_length: 1048576,
+            max_input_tokens: 1048576,
+            max_model_len: 1048576,
+            max_tokens: 1048576,
             max_completion_tokens: 65536,
+            max_output_tokens: 65536,
           },
         ],
       },

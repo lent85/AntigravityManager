@@ -3,7 +3,9 @@ import { PassThrough, Readable } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import { lastValueFrom, Observable, toArray } from 'rxjs';
 
-import { OpenAIService as ProxyService } from '@/modules/proxy-gateway/server/modules/openai/openai.service';
+import { MAX_SSE_EVENT_BYTES } from '@/modules/proxy-gateway/antigravity/internal-sse';
+import { OpenAIService as ProxyService } from '@/server/gateway/modules/openai/openai.service';
+import { createAccount } from './proxy-real-path.harness';
 
 function parseEvent(serializedEvent: string): Record<string, unknown> {
   const dataLine = serializedEvent.split('\n').find((line) => line.startsWith('data: '));
@@ -30,11 +32,10 @@ function createResponsesStream(
     'gemini-3-pro',
     undefined,
     undefined,
-    undefined,
     successContext?.model,
     undefined,
     undefined,
-    successContext?.accountId,
+    successContext ? createAccount(successContext.accountId) : undefined,
     imagePermit,
     responseId,
   ]);
@@ -45,6 +46,45 @@ function createResponsesStream(
 }
 
 describe('ProxyService Responses streaming', () => {
+  it.each([
+    ['incomplete UTF-8', Buffer.from([0xe2, 0x82]), 'stream_decode_error'],
+    [
+      'oversized unterminated line',
+      Buffer.from(`data: ${'x'.repeat(MAX_SSE_EVENT_BYTES)}`),
+      'stream_decode_error',
+    ],
+    ['invalid provider JSON', Buffer.from('data: not json\n\n'), 'invalid_upstream_response'],
+  ])('reports %s as a decoding failure', async (_label, bytes, errorCode) => {
+    const service = new ProxyService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    const upstreamStream = new PassThrough();
+    const chunks: string[] = [];
+    const completed = new Promise<void>((resolve, reject) => {
+      createResponsesStream(service, upstreamStream).subscribe({
+        complete: resolve,
+        error: reject,
+        next: (event) => chunks.push(String(event)),
+      });
+    });
+
+    upstreamStream.end(bytes);
+    await completed;
+
+    const events = chunks.filter((chunk) => chunk.includes('data: ')).map(parseEvent);
+    expect(events.map((event) => event.type)).toEqual([
+      'response.created',
+      'response.in_progress',
+      'response.failed',
+    ]);
+    expect(events.at(-1)).toMatchObject({ response: { error: { code: errorCode } } });
+  });
+
   it('uses the caller-owned response id for every lifecycle event', async () => {
     const service = new ProxyService(
       {} as never,
@@ -118,7 +158,6 @@ describe('ProxyService Responses streaming', () => {
       {} as never,
     );
     const upstreamStream = Readable.from([
-      Buffer.from('data: not json\n\n'),
       Buffer.from(
         'data: {"response":{"candidates":[{"content":{"parts":[{"text":"Checking docs"},{"functionCall":{"id":"call_search_1","name":"search_docs","args":{"query":"Gemini API"}}}]},"groundingMetadata":{"webSearchQueries":["Gemini API"]}}]}}\n\n',
       ),
@@ -165,8 +204,12 @@ describe('ProxyService Responses streaming', () => {
 
   it('clears image retry state only for image data followed by a clean upstream end', async () => {
     const markUpstreamSuccess = vi.fn();
+    const eligibility = {
+      isLeaseEligible: vi.fn(() => true),
+      acceptLeaseCompletion: vi.fn(() => true),
+    };
     const service = new ProxyService(
-      {} as never,
+      eligibility as never,
       {} as never,
       {} as never,
       {} as never,
@@ -174,7 +217,7 @@ describe('ProxyService Responses streaming', () => {
       {} as never,
     );
     const imageFrame = Buffer.from(
-      'data: {"response":{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"AQ=="}}]}}]}}\n\n',
+      'data: {"response":{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"AQ=="}}]},"finishReason":"STOP"}]}}\n\n',
     );
     const successfulStream = Readable.from([imageFrame]);
     const successfulPermit = { release: vi.fn() };
@@ -191,7 +234,15 @@ describe('ProxyService Responses streaming', () => {
       ).pipe(toArray()),
     );
 
-    expect(markUpstreamSuccess).toHaveBeenCalledWith('acc-openai-image', 'gemini-3-pro-image');
+    expect(markUpstreamSuccess).toHaveBeenCalledWith(
+      'acc-openai-image',
+      'gemini-3-pro-image',
+      expect.any(Function),
+    );
+    expect(markUpstreamSuccess.mock.calls[0][2]()).toBe(true);
+    expect(eligibility.acceptLeaseCompletion).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'acc-openai-image' }),
+    );
     expect(successfulPermit.release).toHaveBeenCalled();
 
     markUpstreamSuccess.mockClear();

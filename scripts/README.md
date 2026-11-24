@@ -24,7 +24,7 @@ owns the change-to-evidence matrix; this guide identifies existing tools and the
 | `acceptance/helpers/`     | Preparation or cleanup used by multiple acceptance runners.                                    |
 | `acceptance/fixtures/`    | Fixed media inputs; runtime-specific fixture constants stay with their runtime suite.          |
 | `development/`            | Development-server connection regression checks.                                               |
-| `release/`                | Release-note generation, source metadata and controlled publication tests.                     |
+| `release/`                | Release-note generation, source/asset metadata and controlled publication tests.               |
 | `github/`                 | Issue policy, official-SDK inference, validated write-back and workflow contracts.             |
 | `review-eval/`            | Manually prepared historical source audits, evaluator rubrics and adjudicated reports.         |
 | `agent-skills/`           | Read-only skill inventory, provenance policy and entry mirror contracts.                       |
@@ -97,6 +97,17 @@ installation; CI-only dependency setup skips lifecycle scripts in credentialed t
 ## Unified acceptance entry
 
 Release artifact verification uses `pnpm run test:acceptance release artifacts --source <directory>`.
+Release publication recovery fixtures use `pnpm run test:acceptance release delivery`.
+
+Native installer logging uses `pnpm run test:acceptance installers nsis-feedback <makensis.exe>`.
+The [installer verification procedure](../docs/testing/delivery.md) describes its Windows compiler
+prerequisite, isolated output, assertions and limits. It does not install the application.
+
+The NSIS artifact inventory uses `pnpm run test:acceptance installers nsis-inventory <packaged-app>
+<installer.exe> <report.json>`. All paths must be under `out/`, and the report path must be new and
+outside the inspected application directory. It records installer size and SHA-256, payload file
+counts and sizes, ASAR entry count, and byte-identical files. It does not extract or install the
+installer.
 It reads merged build outputs and optionally GitHub artifact inventory pages, without GitHub writes
 or installer execution. The [release workflow procedure](../docs/development/build-and-package.md#release-workflow-verification)
 owns prerequisites, inventory capture, dry-run behavior and evidence limits. Its synthetic negative
@@ -118,6 +129,34 @@ pnpm run test:acceptance runtime bootstrap --runtime-root C:\matching-node-runti
 pnpm run test:acceptance accounts prepare
 pnpm run test:acceptance agents report /path/to/report.json
 ```
+
+`scripts/release/build-source-manifest.mjs` is used by the publish workflow to record the exact
+source SHA, package version, platform, architecture and checksums for each matrix build. Build,
+verification and publication use the workflow's triggering commit. Directory validation checks
+one manifest per build target and matches their source and version to the checkout:
+
+```powershell
+node scripts/release/build-source-manifest.mjs --root . --validate-directory release-assets
+```
+
+Before creating a draft or uploading assets, the publish job fetches the selected tag from the
+repository and also passes `--release-tag <tag>`. The tag must already exist and match both the
+package version and the checked-out commit. For manual publication, run the workflow from the
+tagged revision. A dry run can validate a revision before its tag exists.
+
+The minimal Core/CLI container consumes the matching prepared Linux runtime and
+keeps its profile in `/var/lib/antigravity-manager`. It does not package
+Electron or the web UI:
+
+```bash
+pnpm run prepare:standalone
+docker build --build-arg RUNTIME_ARCH=x64 -f docker/standalone-core/Dockerfile .
+```
+
+The container entrypoint uses the existing CLI management endpoint for health
+and sends `service stop` before waiting for Core to drain on `SIGTERM`. Docker
+builds, native system-library availability and live gateway behavior require
+the Docker/target platform and are separate acceptance evidence.
 
 Use `pnpm run test:acceptance installers --help` to list installer checks, or another suite name
 for its help. There is no automatic all-platform, live-account or installer sequence. The fixture
@@ -205,6 +244,34 @@ failing case so a changed acceptance rule can demonstrate rejection as well as s
 - Installer fixture generators create disposable previous-version packages for upgrade checks.
 - The audit native entry imports separate persistence, thought-store and retention suites. The shared
   worker fixture owns their temporary databases and cleanup.
+  - The `runtime/thought-store-native.test.mjs` leaf accepts `AGM_THOUGHT_WORKER_ENTRY`
+    pointing to the rebuilt `dist/core/thought-store.worker.js`; every scenario uses
+    the selected artifact. It checks bounded decode/metadata/count reads, exact
+    control-character readback, preserved corrupt rows, cold suffixes and reopen.
+    Management cases add bounded metadata pages beyond 10,000 rows, a stable
+    high-water traversal, exact session/record receipts and failed-delete rollback.
+    It needs the matching Electron SQLite ABI and uses only fixture-owned databases.
+  - The `runtime/thought-retention-native.test.mjs` leaf uses the same optional
+    `AGM_THOUGHT_WORKER_ENTRY` after `build:core`. It checks bounded record deletion,
+    pinned-reader pause/resume, repeated no-progress stopping and recent-session
+    protection. The combined native entry imports it; its temporary databases and
+    Worker connections are owned by the shared fixture.
+  - The persistence leaf's exact-session scenario accepts `AGM_AUDIT_WORKER_ENTRY`
+    after `build:core`; it checks full saved-key equality, paging/count and exclusion
+    of sessionless admin events in disposable databases. Other persistence scenarios
+    retain their Forge artifact selection. See [native runtime acceptance](../docs/testing/native-runtime.md).
+    Its session-snapshot scenario also selects that Worker and checks active-record
+    refusal, fingerprint/change/deletion handling and bounded session admission.
+  - Audit admission scenarios also run through that native entry. After `build:core`, the
+    individual `runtime/audit-admission-native.test.mjs`, `runtime/audit-retention-native.test.mjs`, `runtime/audit-recovery-native.test.mjs` and `runtime/audit-clear-native.test.mjs` accept `AGM_AUDIT_WORKER_ENTRY`
+    pointing to the built production audit worker. It uses disposable databases and checks
+    budget rejection, continued reads and reopen. Retention checks cover age-independent
+    capacity windows, whole-parent cascades, active protection, 70% reclamation and
+    concurrent clear/delete. Recovery checks cover process-boundary reconciliation,
+    live Worker replacement, retained prefixes and separate archive accounting without
+    deletion. Clear checks cover class-scoped deletion, stale queued parent/admin rejection,
+    missing-owner payload/attempt writes and atomic rollback after an injected deletion
+    failure. Use the worker's matching native ABI; all fixtures are disposable.
 
 Keep setup shared only when multiple current runners use the same contract. Preserve scenario-specific
 assertions, bounded subprocess output, timeouts, profile isolation and verified cleanup targets.

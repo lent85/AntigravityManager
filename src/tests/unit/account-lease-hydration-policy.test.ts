@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AccountLeaseHydrationPolicy } from '@/modules/proxy-gateway/server/modules/account-lease/policies/account-lease-hydration.policy';
+import { AccountLeaseHydrationPolicy } from '@/server/gateway/modules/account-lease/policies/account-lease-hydration.policy';
 import type {
   AccountLeaseAccountStore,
   AccountLeaseUpstream,
-} from '@/modules/proxy-gateway/server/modules/account-lease/interfaces/account-lease-adapters';
-import type { AccountLeaseTokenData } from '@/modules/proxy-gateway/server/modules/account-lease/interfaces/account-lease-token-types';
+} from '@/server/gateway/modules/account-lease/interfaces/account-lease-adapters';
+import type { AccountLeaseTokenData } from '@/server/gateway/modules/account-lease/interfaces/account-lease-token-types';
 import { OAuthTokenRefreshError } from '@/modules/cloud-account/services/GoogleAPIService';
 
 function createToken(overrides: Partial<AccountLeaseTokenData> = {}): AccountLeaseTokenData {
@@ -149,6 +149,7 @@ describe('AccountLeaseHydrationPolicy', () => {
       'acc-1',
       expect.objectContaining({ refresh_token: 'rotated-refresh' }),
       expect.objectContaining({ refresh_token: 'refresh-token' }),
+      expect.any(Function),
     );
   });
 
@@ -181,7 +182,7 @@ describe('AccountLeaseHydrationPolicy', () => {
       expires_in: 3600,
       token_type: 'Bearer',
     });
-    await refresh;
+    await expect(refresh).rejects.toMatchObject({ name: 'AccountLeaseStaleTokenError' });
     await policy.drainBackgroundPersistence();
     expect(replacement.refresh_token).toBe('replacement-refresh');
     expect(persistTokenState).not.toHaveBeenCalled();
@@ -213,6 +214,7 @@ describe('AccountLeaseHydrationPolicy', () => {
         project_id: 'resolved-project',
       }),
       expect.any(Object),
+      expect.any(Function),
     );
   });
 
@@ -299,6 +301,7 @@ describe('AccountLeaseHydrationPolicy', () => {
       'acc-1',
       expect.objectContaining({ access_token: 'access-token-new', project_id: undefined }),
       expect.any(Object),
+      expect.any(Function),
     );
 
     releaseFirstPersistence?.();
@@ -313,6 +316,7 @@ describe('AccountLeaseHydrationPolicy', () => {
         project_id: 'resolved-project',
       }),
       expect.any(Object),
+      expect.any(Function),
     );
     await policy.drainBackgroundPersistence();
   });
@@ -363,6 +367,7 @@ describe('AccountLeaseHydrationPolicy', () => {
       'acc-2',
       expect.objectContaining({ project_id: 'project-2' }),
       expect.any(Object),
+      expect.any(Function),
     );
     releaseFirstPersistence?.();
     await policy.drainBackgroundPersistence();

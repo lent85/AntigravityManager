@@ -6,13 +6,20 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_APP_CONFIG } from '@/modules/config/types';
-import { OPENAI_COMPATIBILITY_ROUTES } from '@/modules/proxy-gateway/server/modules/openai/openai-compatibility';
+import { OPENAI_COMPATIBILITY_ROUTES } from '@/server/gateway/modules/openai/openai-compatibility';
 import { getServerConfig, setServerConfig } from '@/server/server-config';
 
 // Route/parser checks need no accounts and must never read the user's database at initialization.
 vi.mock('@/modules/cloud-account/persistence/cloudHandler', () => ({
   CloudAccountRepo: { getAccounts: async () => [] },
 }));
+vi.mock(
+  import('@/modules/cloud-account/persistence/oauth-recovery-service'),
+  async (importOriginal) => ({
+    ...(await importOriginal()),
+    recoverOAuthJournal: async () => new Map(),
+  }),
+);
 
 /**
  * A census of every HTTP route this gateway registers, and which test file is
@@ -26,7 +33,7 @@ vi.mock('@/modules/cloud-account/persistence/cloudHandler', () => ({
  *
  * `AGM_V1INTERNAL_PASSTHROUGH=1` is set before `AppModule` is imported so the
  * gated `/v1internal/*` diagnostic routes (off by default, see
- * `src/modules/proxy-gateway/server/README.md` section 4b) are included too:
+ * `src/server/gateway/README.md` section 4b) are included too:
  * the point of this census is the full route surface the codebase can
  * register, not just today's default configuration.
  *
@@ -77,13 +84,14 @@ const CENSUS: readonly CensusEntry[] = [
     ['POST', '/internal/thinking/repair'],
     ['POST', '/v1/thinking/end'],
     ['GET', '/v1/thinking/sessions/:sessionId'],
+    ['GET', '/v1/thinking/sessions/:sessionId/records'],
     ['DELETE', '/v1/thinking/sessions/:sessionId'],
   ].map(([method, routePath]) => ({
     method,
     routePath,
     testFile: 'observability-controller.integration.test.ts',
   })),
-  // Anthropic message batches (src/modules/proxy-gateway/server/modules/batch/anthropic-message-batches.controller.ts)
+  // Anthropic message batches (src/server/gateway/modules/batch/anthropic-message-batches.controller.ts)
   {
     method: 'POST',
     routePath: '/v1/messages/batches',
@@ -115,7 +123,7 @@ const CENSUS: readonly CensusEntry[] = [
     testFile: 'anthropic-message-batches.controller.test.ts',
   },
 
-  // Gemini batches (src/modules/proxy-gateway/server/modules/batch/gemini-batches.controller.ts)
+  // Gemini batches (src/server/gateway/modules/batch/gemini-batches.controller.ts)
   {
     method: 'GET',
     routePath: '/v1beta/batches',
@@ -123,7 +131,7 @@ const CENSUS: readonly CensusEntry[] = [
   },
   { method: 'GET', routePath: '/v1beta/batches/:name', testFile: 'gemini-batch.test.ts' },
 
-  // OpenAI batches (src/modules/proxy-gateway/server/modules/batch/openai-batches.controller.ts)
+  // OpenAI batches (src/server/gateway/modules/batch/openai-batches.controller.ts)
   { method: 'POST', routePath: '/v1/batches', testFile: 'openai-batches.controller.test.ts' },
   { method: 'GET', routePath: '/v1/batches', testFile: 'openai-batches.controller.test.ts' },
   { method: 'GET', routePath: '/v1/batches/:id', testFile: 'openai-batches.controller.test.ts' },
@@ -133,7 +141,7 @@ const CENSUS: readonly CensusEntry[] = [
     testFile: 'openai-batches.controller.test.ts',
   },
 
-  // Gemini protocol (src/modules/proxy-gateway/server/modules/gemini/gemini.controller.ts)
+  // Gemini protocol (src/server/gateway/modules/gemini/gemini.controller.ts)
   { method: 'GET', routePath: '/v1beta/models', testFile: 'gemini-controller.integration.test.ts' },
   {
     method: 'GET',
@@ -151,10 +159,12 @@ const CENSUS: readonly CensusEntry[] = [
     testFile: 'gemini-count-tokens.test.ts',
   },
 
-  // Anthropic /v1/complete legacy surface (src/modules/proxy-gateway/server/modules/anthropic/anthropic-complete.controller.ts)
+  // Anthropic /v1/complete legacy surface (src/server/gateway/modules/anthropic/anthropic-complete.controller.ts)
   { method: 'POST', routePath: '/v1/complete', testFile: 'anthropic-complete.controller.test.ts' },
 
-  // Anthropic Messages protocol (src/modules/proxy-gateway/server/modules/anthropic/anthropic.controller.ts)
+  // Anthropic Messages protocol (src/server/gateway/modules/anthropic/anthropic.controller.ts)
+  { method: 'GET', routePath: '/v1/models/claude', testFile: 'anthropic-models.test.ts' },
+  { method: 'GET', routePath: '/v1/models/claude/:model', testFile: 'anthropic-models.test.ts' },
   {
     method: 'POST',
     routePath: '/v1/messages/count_tokens',
@@ -162,7 +172,7 @@ const CENSUS: readonly CensusEntry[] = [
   },
   { method: 'POST', routePath: '/v1/messages', testFile: 'proxy-real-path-anthropic.test.ts' },
 
-  // Gemini Files API (src/modules/proxy-gateway/server/modules/files/gemini-files.controller.ts)
+  // Gemini Files API (src/server/gateway/modules/files/gemini-files.controller.ts)
   { method: 'POST', routePath: '/upload/v1beta/files', testFile: 'files-api.test.ts' },
   { method: 'GET', routePath: '/v1beta/files', testFile: 'files-api.test.ts' },
   { method: 'GET', routePath: '/v1beta/files/:name', testFile: 'files-api.test.ts' },
@@ -172,7 +182,7 @@ const CENSUS: readonly CensusEntry[] = [
     testFile: 'files-api.test.ts',
   },
 
-  // OpenAI/Anthropic client Files API (src/modules/proxy-gateway/server/modules/files/client-files.controller.ts)
+  // OpenAI/Anthropic client Files API (src/server/gateway/modules/files/client-files.controller.ts)
   { method: 'POST', routePath: '/v1/files', testFile: 'files-api.test.ts' },
   {
     method: 'GET',
@@ -183,13 +193,18 @@ const CENSUS: readonly CensusEntry[] = [
   { method: 'GET', routePath: '/v1/files/:id/content', testFile: 'files-api.test.ts' },
   { method: 'DELETE', routePath: '/v1/files/:id', testFile: 'files-api.test.ts' },
 
-  // OpenAI Uploads (src/modules/proxy-gateway/server/modules/uploads/openai-uploads.controller.ts)
+  // OpenAI Uploads (src/server/gateway/modules/uploads/openai-uploads.controller.ts)
   { method: 'POST', routePath: '/v1/uploads', testFile: 'openai-uploads.test.ts' },
   { method: 'POST', routePath: '/v1/uploads/:id/parts', testFile: 'openai-uploads.test.ts' },
   { method: 'POST', routePath: '/v1/uploads/:id/complete', testFile: 'openai-uploads.test.ts' },
   { method: 'POST', routePath: '/v1/uploads/:id/cancel', testFile: 'openai-uploads.test.ts' },
 
-  // OpenAI protocol entry controllers (src/modules/proxy-gateway/server/modules/openai/openai-*.controller.ts)
+  // OpenAI protocol entry controllers (src/server/gateway/modules/openai/openai-*.controller.ts)
+  ...['/props', '/v1/props', '/version', '/v1/version'].map((routePath) => ({
+    method: 'GET',
+    routePath,
+    testFile: 'openai-probes-http.integration.test.ts',
+  })),
   { method: 'GET', routePath: '/v1/models', testFile: 'openai-retrieve-model.test.ts' },
   {
     method: 'GET',
@@ -234,6 +249,11 @@ const CENSUS: readonly CensusEntry[] = [
   },
   {
     method: 'POST',
+    routePath: '/responses',
+    testFile: 'responses-media-http.integration.test.ts',
+  },
+  {
+    method: 'POST',
     routePath: '/v1/images/generations',
     testFile: 'proxy-controller.integration.test.ts',
   },
@@ -253,7 +273,7 @@ const CENSUS: readonly CensusEntry[] = [
     testFile: 'openai-audio-translations.test.ts',
   },
 
-  // OpenAI Responses store (src/modules/proxy-gateway/server/modules/openai/responses/openai-responses-store.controller.ts)
+  // OpenAI Responses store (src/server/gateway/modules/openai/responses/openai-responses-store.controller.ts)
   {
     method: 'GET',
     routePath: '/v1/responses/:responseId',
@@ -266,7 +286,7 @@ const CENSUS: readonly CensusEntry[] = [
   },
 
   // v1internal diagnostic passthrough, gated by AGM_V1INTERNAL_PASSTHROUGH
-  // (src/modules/proxy-gateway/server/modules/v1internal-passthrough/v1internal-passthrough.controller.ts)
+  // (src/server/gateway/modules/v1internal-passthrough/v1internal-passthrough.controller.ts)
   {
     method: 'POST',
     routePath: '/v1internal/countTokens',
@@ -448,6 +468,7 @@ describe('gateway endpoint coverage census', () => {
     '/v1/completions',
     '/v1/complete',
     '/v1/responses',
+    '/responses',
     '/v1/messages',
     '/v1/messages/count_tokens',
     '/v1/batches',
@@ -506,7 +527,7 @@ describe('gateway endpoint coverage census', () => {
   it('preserves every OpenAI protocol route while its entry controllers are split', () => {
     const routeKeys = new Set(registeredRoutes.map(routeKey));
 
-    expect(OPENAI_PROTOCOL_ROUTE_KEYS.filter((key) => !routeKeys.has(key))).toEqual([]);
+    expect(OPENAI_PROTOCOL_ROUTE_KEYS.filter((key: any) => !routeKeys.has(key))).toEqual([]);
   });
 
   it('has a census entry for every route the gateway actually registers', () => {

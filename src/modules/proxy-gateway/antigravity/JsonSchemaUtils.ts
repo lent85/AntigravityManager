@@ -20,26 +20,7 @@ function isJsonSchemaPrimitive(value: JsonSchemaValue): value is string | number
   return isString(value) || isNumber(value) || isBoolean(value);
 }
 
-function inferConstSchemaType(value: JsonSchemaValue): string | undefined {
-  if (isString(value)) {
-    return 'string';
-  }
-  if (isNumber(value)) {
-    return Number.isInteger(value) ? 'integer' : 'number';
-  }
-  if (isBoolean(value)) {
-    return 'boolean';
-  }
-  if (Array.isArray(value)) {
-    return 'array';
-  }
-  if (isJsonSchemaMap(value)) {
-    return 'object';
-  }
-  return undefined;
-}
-
-function stringifyConstEnumValue(value: JsonSchemaValue): string {
+function stringifyEnumValue(value: JsonSchemaValue): string {
   if (isString(value)) {
     return value;
   }
@@ -56,13 +37,7 @@ function normalizeConstKeyword(map: JsonSchemaMap): boolean {
 
   const constValue = map.const;
   delete map.const;
-
-  if (map.type === undefined) {
-    const inferredType = inferConstSchemaType(constValue);
-    if (inferredType) {
-      map.type = inferredType;
-    }
-  }
+  map.type = 'string';
 
   if (map.enum === undefined) {
     map.enum = [];
@@ -157,7 +132,7 @@ export function normalizeObjectJsonSchema(
       schema === undefined && policy === 'tool' ? { type: 'object', properties: {} } : schema;
     validateSchemaInput(input, batch);
     const normalizedSchema = resolveSchemaReferences(input, batch, policy, toolOrdinal);
-    cleanJsonSchemaRecursive(normalizedSchema);
+    cleanJsonSchemaRecursive(normalizedSchema, policy);
     if (!isString(normalizedSchema.type)) {
       normalizedSchema.type = 'object';
     }
@@ -176,11 +151,14 @@ export function normalizeObjectJsonSchema(
   }
 }
 
-function cleanJsonSchemaRecursive(value: JsonSchemaValue): void {
+function cleanJsonSchemaRecursive(
+  value: JsonSchemaValue,
+  policy: 'tool' | 'output' | 'compatibility' = 'compatibility',
+): void {
   if (Array.isArray(value)) {
     // Array: Recursively process each element
     for (const entry of value) {
-      cleanJsonSchemaRecursive(entry);
+      cleanJsonSchemaRecursive(entry, policy);
     }
     return;
   }
@@ -190,7 +168,7 @@ function cleanJsonSchemaRecursive(value: JsonSchemaValue): void {
   }
 
   const map = value;
-  const hadConst = normalizeConstKeyword(map);
+  normalizeConstKeyword(map);
 
   if (isJsonSchemaMap(map.properties)) {
     const properties = map.properties;
@@ -220,45 +198,32 @@ function cleanJsonSchemaRecursive(value: JsonSchemaValue): void {
   // Literal data (const/enum/default/examples) is not a schema traversal edge.
   if (isJsonSchemaMap(map.properties)) {
     for (const child of Object.values(map.properties)) {
-      cleanJsonSchemaRecursive(child);
+      cleanJsonSchemaRecursive(child, policy);
     }
   }
   if (isJsonSchemaMap(map.items)) {
-    cleanJsonSchemaRecursive(map.items);
+    cleanJsonSchemaRecursive(map.items, policy);
   }
   for (const keyword of ['allOf', 'anyOf', 'oneOf']) {
     if (Array.isArray(map[keyword])) {
-      cleanJsonSchemaRecursive(map[keyword]);
+      cleanJsonSchemaRecursive(map[keyword], policy);
     }
   }
 
   // 2. Collect and process validation fields (Migration logic: Downgrade constraints to Hints in description)
   const constraints: string[] = [];
 
-  if (hadConst && Array.isArray(map.enum)) {
-    map.enum = map.enum.map(stringifyConstEnumValue);
-  }
-
   const enumValues = map.enum;
   if (enumValues !== undefined) {
     if (!Array.isArray(enumValues)) {
       delete map.enum;
     } else {
-      const primitiveEnumValues = enumValues.filter(isJsonSchemaPrimitive);
-      const schemaType = isString(map.type) ? map.type.toLowerCase() : '';
-      const supportsGeminiStringEnum = ['string', 'integer', 'number'].includes(schemaType);
-
-      if (primitiveEnumValues.length === 0) {
+      const stringEnumValues = enumValues.map(stringifyEnumValue).filter((entry) => entry !== '');
+      if (stringEnumValues.length === 0) {
         delete map.enum;
-      } else if (supportsGeminiStringEnum) {
-        map.enum = primitiveEnumValues.map(String);
-      } else if (primitiveEnumValues.every(isString)) {
-        if (primitiveEnumValues.length !== enumValues.length) {
-          map.enum = primitiveEnumValues;
-        }
       } else {
-        constraints.push(`enum: ${primitiveEnumValues.join(', ')}`);
-        delete map.enum;
+        map.enum = stringEnumValues;
+        map.type = 'string';
       }
     }
   }
@@ -345,5 +310,8 @@ function cleanJsonSchemaRecursive(value: JsonSchemaValue): void {
       }
       map['type'] = selectedType;
     }
+  }
+  if (policy === 'tool' && map.type === 'array') {
+    delete map.properties;
   }
 }

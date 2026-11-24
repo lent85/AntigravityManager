@@ -1,0 +1,147 @@
+diff --git a/templates/nsis/include/allowOnlyOneInstallerInstance.nsh b/templates/nsis/include/allowOnlyOneInstallerInstance.nsh
+index a5cb3fe..5c7e031 100644
+--- a/templates/nsis/include/allowOnlyOneInstallerInstance.nsh
++++ b/templates/nsis/include/allowOnlyOneInstallerInstance.nsh
+@@ -118,4 +118,8 @@
+         Goto doStopProcess
+       ${endIf}
+       MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$(appRunning)" /SD IDOK IDOK doStopProcess
++      !ifmacrodef agmCancelEnvironmentCheck
++        !insertmacro agmCancelEnvironmentCheck
++        SetErrorLevel 2
++      !endif
+       Quit
+@@ -154,6 +158,9 @@
+         # Ask user to close it manually
+         ${if} $R1 > 1
+           MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY loop
++          !ifmacrodef agmAppStillRunning
++            !insertmacro agmAppStillRunning
++          !endif
+           Quit
+         ${else}
+           Goto loop
+diff --git a/templates/nsis/include/installUtil.nsh b/templates/nsis/include/installUtil.nsh
+index 4736774..c6bd951 100644
+--- a/templates/nsis/include/installUtil.nsh
++++ b/templates/nsis/include/installUtil.nsh
+@@ -19,3 +19,4 @@
++!ifmacrondef agmInstallApplication
+ Function GetInQuotes
+   Exch $R0
+   Push $R1
+@@ -80,3 +81,4 @@
+     Pop $R1
+     Exch $R0
+ FunctionEnd
++!endif
+@@ -95,4 +97,5 @@
+ # https://nsis-dev.github.io/NSIS-Forums/html/t-172971.html
++!ifmacrondef agmInstallApplication
+ !macro readReg VAR ROOT_KEY SUB_KEY NAME
+   ${if} "${ROOT_KEY}" == "SHELL_CONTEXT"
+     ReadRegStr "${VAR}" SHELL_CONTEXT "${SUB_KEY}" "${NAME}"
+@@ -246,3 +249,4 @@
+   Push "${ROOT_KEY}"
+   Call uninstallOldVersion
+ !macroend
++!endif
+diff --git a/templates/nsis/include/installer.nsh b/templates/nsis/include/installer.nsh
+index 300ef3d..5182ec9 100644
+--- a/templates/nsis/include/installer.nsh
++++ b/templates/nsis/include/installer.nsh
+@@ -197,4 +197,10 @@
++      !ifmacrodef agmObserveShortcut
++        ClearErrors
++      !endif
+       CreateShortCut "$newStartMenuLink" "$appExe" "" "$appExe" 0 "" "" "${APP_DESCRIPTION}"
++      !ifmacrodef agmObserveShortcut
++        !insertmacro agmObserveShortcut start-menu "$newStartMenuLink" $agmMenuShortcutAttempted "$(agmMenuWarning)"
++      !endif
+       # clear error (if shortcut already exists)
+       ClearErrors
+       WinShell::SetLnkAUMI "$newStartMenuLink" "${APP_ID}"
+@@ -207,3 +213,9 @@
++      !ifmacrodef agmObserveShortcut
++        ClearErrors
++      !endif
+       Rename $oldStartMenuLink $newStartMenuLink
++      !ifmacrodef agmObserveShortcut
++        !insertmacro agmObserveShortcut start-menu "$newStartMenuLink" $agmMenuShortcutAttempted "$(agmMenuWarning)"
++      !endif
+       WinShell::UninstShortcut "$oldStartMenuLink"
+       WinShell::SetLnkAUMI "$newStartMenuLink" "${APP_ID}"
+@@ -220,13 +232,25 @@
+       # The keepShortcuts mechanism is NOT enabled.
+       # Shortcuts will be recreated.
+       ${if} $keepShortcuts == "false"
++        !ifmacrodef agmObserveShortcut
++          ClearErrors
++        !endif
+         CreateShortCut "$newDesktopLink" "$appExe" "" "$appExe" 0 "" "" "${APP_DESCRIPTION}"
++        !ifmacrodef agmObserveShortcut
++          !insertmacro agmObserveShortcut desktop "$newDesktopLink" $agmDesktopShortcutAttempted "$(agmDesktopWarning)"
++        !endif
+         ClearErrors
+         WinShell::SetLnkAUMI "$newDesktopLink" "${APP_ID}"
+       # The keepShortcuts mechanism IS enabled.
+       # The desktop shortcut could exist in an obsolete location (due to name change).
+       ${elseif} $oldDesktopLink != $newDesktopLink
+       ${andIf} ${FileExists} "$oldDesktopLink"
++        !ifmacrodef agmObserveShortcut
++          ClearErrors
++        !endif
+         Rename $oldDesktopLink $newDesktopLink
++        !ifmacrodef agmObserveShortcut
++          !insertmacro agmObserveShortcut desktop "$newDesktopLink" $agmDesktopShortcutAttempted "$(agmDesktopWarning)"
++        !endif
+         WinShell::UninstShortcut "$oldDesktopLink"
+         WinShell::SetLnkAUMI "$newDesktopLink" "${APP_ID}"
+@@ -235,7 +259,13 @@
+       ${elseif} $oldDesktopLink != $newDesktopLink
+       ${orIfNot} ${FileExists} "$oldDesktopLink"
+         ${ifNot} ${isUpdated}
++          !ifmacrodef agmObserveShortcut
++            ClearErrors
++          !endif
+           CreateShortCut "$newDesktopLink" "$appExe" "" "$appExe" 0 "" "" "${APP_DESCRIPTION}"
++          !ifmacrodef agmObserveShortcut
++            !insertmacro agmObserveShortcut desktop "$newDesktopLink" $agmDesktopShortcutAttempted "$(agmDesktopWarning)"
++          !endif
+           ClearErrors
+           WinShell::SetLnkAUMI "$newDesktopLink" "${APP_ID}"
+         ${endIf}
+diff --git a/templates/nsis/installSection.nsh b/templates/nsis/installSection.nsh
+index 053772f..7054bc1 100644
+--- a/templates/nsis/installSection.nsh
++++ b/templates/nsis/installSection.nsh
+@@ -14,3 +14,7 @@
++!ifmacrodef agmConfirmUpgrade
++  !insertmacro agmConfirmUpgrade
++!endif
++
+ !ifdef ONE_CLICK
+   !ifdef HEADER_ICO
+     File /oname=$PLUGINSDIR\installerHeaderico.ico "${HEADER_ICO}"
+@@ -52,2 +56,9 @@
++!ifmacrodef agmBeforeInstallFiles
++  !insertmacro agmBeforeInstallFiles
++!endif
++
++!ifmacrodef agmInstallApplication
++  !insertmacro agmInstallApplication
++!else
+ !insertmacro uninstallOldVersion SHELL_CONTEXT
+ !insertmacro handleUninstallResult SHELL_CONTEXT
+@@ -66,4 +77,11 @@
+ !insertmacro installApplicationFiles
++!endif
+ !insertmacro registryAddInstallInfo
++!ifmacrodef agmCheckRegistration
++  !insertmacro agmCheckRegistration
++!endif
+ !insertmacro addStartMenuLink $keepShortcuts
+ !insertmacro addDesktopLink $keepShortcuts
++!ifmacrodef agmCheckShortcuts
++  !insertmacro agmCheckShortcuts
++!endif

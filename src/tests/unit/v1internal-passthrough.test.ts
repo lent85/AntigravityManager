@@ -1,8 +1,8 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 
-import { V1InternalPassthroughController } from '@/modules/proxy-gateway/server/modules/v1internal-passthrough/v1internal-passthrough.controller';
-import { V1InternalPassthroughService } from '@/modules/proxy-gateway/server/modules/v1internal-passthrough/v1internal-passthrough.service';
+import { V1InternalPassthroughController } from '@/server/gateway/modules/v1internal-passthrough/v1internal-passthrough.controller';
+import { V1InternalPassthroughService } from '@/server/gateway/modules/v1internal-passthrough/v1internal-passthrough.service';
 
 /**
  * The gated diagnostic that lets an operator measure what a vendor verb actually answers,
@@ -41,6 +41,7 @@ function createService(overrides: {
   upstream?: { body: string; headers: Record<string, string>; status: number };
 }) {
   const accountLeaseService = {
+    commitSession: vi.fn(),
     getNextToken: vi.fn(async () =>
       overrides.account === undefined
         ? {
@@ -70,9 +71,21 @@ function createService(overrides: {
 }
 
 describe('v1internal diagnostic passthrough', () => {
+  it.each([200, 204, 400, 429, 503])(
+    'commits diagnostic account affinity only for successful HTTP status %i',
+    async (status) => {
+      const { service, accountLeaseService } = createService({
+        upstream: { body: '{}', headers: {}, status },
+      });
+      await service.forward('countTokens', {});
+      expect(accountLeaseService.commitSession.mock.calls.map(([account]) => account.id)).toEqual(
+        status < 300 ? ['acc-probe'] : [],
+      );
+    },
+  );
   it('registers no route unless it was enabled at startup', async () => {
     const module =
-      await import('@/modules/proxy-gateway/server/modules/v1internal-passthrough/v1internal-passthrough.module');
+      await import('@/server/gateway/modules/v1internal-passthrough/v1internal-passthrough.module');
 
     // The suite runs without AGM_V1INTERNAL_PASSTHROUGH, which is the default posture.
     expect(process.env.AGM_V1INTERNAL_PASSTHROUGH).not.toBe('1');
@@ -120,6 +133,7 @@ describe('v1internal diagnostic passthrough', () => {
       'access-acc-probe',
       undefined,
     );
+    expect(JSON.stringify(body)).not.toContain('sessionId');
   });
 
   it('does not inject the leased device profile at the upstream request boundary', async () => {

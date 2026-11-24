@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AccountLeaseFulfillmentPolicy } from '@/modules/proxy-gateway/server/modules/account-lease/policies/account-lease-fulfillment.policy';
-import type { AccountLeaseHydrationPolicy } from '@/modules/proxy-gateway/server/modules/account-lease/policies/account-lease-hydration.policy';
-import { AccountLeaseRefreshRejectedError } from '@/modules/proxy-gateway/server/modules/account-lease/policies/account-lease-hydration.policy';
-import type { AccountLeaseTokenData } from '@/modules/proxy-gateway/server/modules/account-lease/interfaces/account-lease-token-types';
-import type { AccountLeaseAccountStore } from '@/modules/proxy-gateway/server/modules/account-lease/interfaces/account-lease-adapters';
+import { AccountLeaseFulfillmentPolicy } from '@/server/gateway/modules/account-lease/policies/account-lease-fulfillment.policy';
+import type { AccountLeaseHydrationPolicy } from '@/server/gateway/modules/account-lease/policies/account-lease-hydration.policy';
+import { AccountLeaseRefreshRejectedError } from '@/server/gateway/modules/account-lease/policies/account-lease-hydration.policy';
+import type { AccountLeaseTokenData } from '@/server/gateway/modules/account-lease/interfaces/account-lease-token-types';
+import type { AccountLeaseAccountStore } from '@/server/gateway/modules/account-lease/interfaces/account-lease-adapters';
 
 function createAccountStore(): AccountLeaseAccountStore {
   return {
@@ -52,11 +52,10 @@ function createToken(overrides: Partial<AccountLeaseTokenData> = {}): AccountLea
 }
 
 describe('AccountLeaseFulfillmentPolicy', () => {
-  it('hydrates the selected token, binds the session, and returns a cloud account lease', async () => {
+  it('hydrates the selected token and returns an uncommitted cloud account lease', async () => {
     const hydrationPolicy = {
       hydrateSelectedToken: vi.fn().mockResolvedValue('resolved-project'),
     } as unknown as AccountLeaseHydrationPolicy;
-    const bindSession = vi.fn();
     const logger = {
       error: vi.fn(),
     };
@@ -64,8 +63,6 @@ describe('AccountLeaseFulfillmentPolicy', () => {
       accountStore: createAccountStore(),
       isStillEligible: () => true,
       hydrationPolicy,
-      bindSession,
-      stickySessionTtlMs: 600_000,
       resolveFallbackProjectId: () => 'fallback-project',
       logger,
     });
@@ -74,7 +71,6 @@ describe('AccountLeaseFulfillmentPolicy', () => {
       accountId: 'acc-1',
       tokenData: createToken(),
       nowSeconds: 100,
-      sessionKey: 'openai:user-1',
     });
 
     expect(hydrationPolicy.hydrateSelectedToken).toHaveBeenCalledWith({
@@ -85,7 +81,6 @@ describe('AccountLeaseFulfillmentPolicy', () => {
       nowSeconds: 100,
       fallbackProjectId: 'fallback-project',
     });
-    expect(bindSession).toHaveBeenCalledWith('openai:user-1', 'acc-1', expect.any(Number));
     expect(lease).toEqual(
       expect.objectContaining({
         id: 'acc-1',
@@ -111,8 +106,6 @@ describe('AccountLeaseFulfillmentPolicy', () => {
       accountStore: createAccountStore(),
       isStillEligible: () => true,
       hydrationPolicy,
-      bindSession: vi.fn(),
-      stickySessionTtlMs: 600_000,
       resolveFallbackProjectId: () => 'fallback-project',
       logger,
     });
@@ -139,8 +132,6 @@ describe('AccountLeaseFulfillmentPolicy', () => {
       accountStore: createAccountStore(),
       isStillEligible: () => true,
       hydrationPolicy,
-      bindSession: vi.fn(),
-      stickySessionTtlMs: 600_000,
       resolveFallbackProjectId: () => 'fallback-project',
       logger: { error: vi.fn() },
     });
@@ -155,21 +146,18 @@ describe('AccountLeaseFulfillmentPolicy', () => {
   });
 
   it.each(['missing', 'ineligible'] as const)(
-    'does not bind a session or issue a lease when the account is %s',
+    'does not issue a lease when the account is %s',
     async (state) => {
       const accountStore = createAccountStore();
       if (state === 'missing') {
         vi.mocked(accountStore.getAccount).mockResolvedValue(undefined);
       }
-      const bindSession = vi.fn();
       const policy = new AccountLeaseFulfillmentPolicy({
         accountStore,
         isStillEligible: () => state !== 'ineligible',
         hydrationPolicy: {
           hydrateSelectedToken: vi.fn().mockResolvedValue('project'),
         } as unknown as AccountLeaseHydrationPolicy,
-        bindSession,
-        stickySessionTtlMs: 600_000,
         resolveFallbackProjectId: () => 'fallback',
         logger: { error: vi.fn() },
       });
@@ -178,10 +166,8 @@ describe('AccountLeaseFulfillmentPolicy', () => {
           accountId: 'acc-1',
           tokenData: createToken(),
           nowSeconds: 100,
-          sessionKey: 'session',
         }),
       ).resolves.toBeNull();
-      expect(bindSession).not.toHaveBeenCalled();
     },
   );
 });

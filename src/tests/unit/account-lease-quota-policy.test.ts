@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildAccountLeaseQuotaSnapshot } from '@/modules/proxy-gateway/server/modules/account-lease/policies/account-lease-quota.policy';
+import { buildAccountLeaseQuotaSnapshot } from '@/server/gateway/modules/account-lease/policies/account-lease-quota.policy';
 
 describe('account lease quota policy', () => {
   it('uses grouped Claude/GPT quota as a lower bound in quota snapshots', () => {
@@ -43,7 +43,7 @@ describe('account lease quota policy', () => {
       },
     });
 
-    expect(snapshot.modelQuotas['gemini-3-pro']).toBe(50);
+    expect(snapshot.modelQuotas['gemini-3-pro']).toBe(50.8);
     expect(snapshot.modelLimits['gemini-3-pro']).toBe(8192);
     expect(snapshot.modelForwardingRules['gemini-old']).toBe('gemini-new');
   });

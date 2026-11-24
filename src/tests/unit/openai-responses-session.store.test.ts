@@ -1,10 +1,11 @@
+import { responsesIdentityFixture } from './responses-identity.fixture';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   mergeOpenAIResponsesInputItems,
   OpenAIResponsesSessionStore,
   OpenAIResponsesSessionStoreImpl,
-} from '@/modules/proxy-gateway/server/modules/openai/responses/openai-responses-session.store';
+} from '@/server/gateway/modules/openai/responses/openai-responses-session.store';
 
 describe('OpenAIResponsesSessionStore', () => {
   it('preserves long tool arguments exactly within the history budget', () => {
@@ -15,7 +16,7 @@ describe('OpenAIResponsesSessionStore', () => {
       name: 'write_file',
       arguments: argumentsText,
     };
-    OpenAIResponsesSessionStore.save('long_tool', { model: 'fixture-model', inputItems: [item] });
+    OpenAIResponsesSessionStore.save('long_tool', { identity: responsesIdentityFixture, model: 'fixture-model', inputItems: [item] });
     expect(OpenAIResponsesSessionStore.get('long_tool')?.inputItems).toEqual([item]);
   });
 
@@ -30,8 +31,9 @@ describe('OpenAIResponsesSessionStore', () => {
       }));
       const write = () =>
         mode === 'save'
-          ? store.save('oversized', { model: 'fixture-model', inputItems })
+          ? store.save('oversized', { identity: responsesIdentityFixture, model: 'fixture-model', inputItems })
           : store.saveDelta('oversized', {
+              identity: responsesIdentityFixture,
               model: 'fixture-model',
               inputDelta: inputItems,
               responseOutput: [],
@@ -44,6 +46,7 @@ describe('OpenAIResponsesSessionStore', () => {
   it('includes retained response and instructions in the byte ceiling', () => {
     expect(() =>
       OpenAIResponsesSessionStore.save('oversized_metadata', {
+        identity: responsesIdentityFixture,
         model: 'fixture-model',
         inputItems: [],
         instructions: 'x'.repeat(4 * 1024 * 1024),
@@ -60,6 +63,7 @@ describe('OpenAIResponsesSessionStore', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-15T00:00:00.000Z'));
     OpenAIResponsesSessionStore.save('resp_expiring', {
+      identity: responsesIdentityFixture,
       inputItems: [{ type: 'message', role: 'user' }],
       model: 'gpt-4o',
     });
@@ -72,6 +76,7 @@ describe('OpenAIResponsesSessionStore', () => {
   it('keeps recently accessed sessions when capacity eviction runs', () => {
     for (let index = 0; index < 500; index += 1) {
       OpenAIResponsesSessionStore.save(`resp_${index}`, {
+        identity: responsesIdentityFixture,
         inputItems: [{ type: 'message', role: 'user', content: `${index}` }],
         model: 'gpt-4o',
       });
@@ -80,6 +85,7 @@ describe('OpenAIResponsesSessionStore', () => {
     expect(OpenAIResponsesSessionStore.get('resp_0')).not.toBeNull();
 
     OpenAIResponsesSessionStore.save('resp_500', {
+      identity: responsesIdentityFixture,
       inputItems: [{ type: 'message', role: 'user', content: 'new' }],
       model: 'gpt-4o',
     });
@@ -146,6 +152,26 @@ describe('OpenAIResponsesSessionStore', () => {
     ).toEqual([]);
   });
 
+  it('retains provider commentary messages when they have no local transcript marker', () => {
+    const merged = mergeOpenAIResponsesInputItems(
+      [
+        {
+          content: [{ text: 'Checking the repository', type: 'output_text' }],
+          id: 'msg_provider_progress',
+          phase: 'commentary',
+          role: 'assistant',
+          type: 'message',
+        },
+      ],
+      [{ content: 'Continue', role: 'user', type: 'message' }],
+    );
+
+    expect(merged).toEqual([
+      expect.objectContaining({ id: 'msg_provider_progress', phase: 'commentary' }),
+      expect.objectContaining({ role: 'user' }),
+    ]);
+  });
+
   it('retains native reasoning on the stored response but excludes it from continuation history', () => {
     const response = {
       id: 'resp_reasoning',
@@ -166,6 +192,7 @@ describe('OpenAIResponsesSessionStore', () => {
       ],
     };
     OpenAIResponsesSessionStore.saveDelta('resp_reasoning', {
+      identity: responsesIdentityFixture,
       inputDelta: [{ content: 'Start', id: 'msg_start', role: 'user', type: 'message' }],
       model: 'gpt-4o',
       response,
@@ -185,7 +212,7 @@ describe('OpenAIResponsesSessionStore', () => {
     ]);
   });
 
-  it('never retains raw inline media in durable continuation history', () => {
+  it('retains protocol media in an in-memory continuation store', () => {
     const inputItems = [
       {
         type: 'function_call_output',
@@ -195,17 +222,12 @@ describe('OpenAIResponsesSessionStore', () => {
     ];
 
     OpenAIResponsesSessionStore.save('resp_image', {
+      identity: responsesIdentityFixture,
       inputItems,
       model: 'gpt-4o',
     });
 
-    expect(OpenAIResponsesSessionStore.get('resp_image')?.inputItems).toEqual([
-      {
-        type: 'function_call_output',
-        call_id: 'call_image',
-        output: [{ type: 'input_text', text: '[historical image omitted]' }],
-      },
-    ]);
+    expect(OpenAIResponsesSessionStore.get('resp_image')?.inputItems).toEqual(inputItems);
     expect(JSON.stringify(inputItems)).toContain('data:image/');
   });
 });

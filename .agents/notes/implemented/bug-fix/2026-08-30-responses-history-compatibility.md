@@ -8,17 +8,49 @@ The target protocol behavior uses native `reasoning` items with `summary_text` f
 
 ## Decision
 
+`POST /responses` shares the existing `/v1/responses` HTTP controller, guard,
+body limit and Responses operations. Audit classification recognizes the alias.
+The explicit alias adds no compact operation or WebSocket upgrade path. Stored
+response GET and DELETE routes retain their versioned addresses.
+Chat Completions accepts Responses-shaped bodies when messages is absent and input,
+instructions or previous_response_id is present. The entry validates the alternate body
+before file expansion and reuses Responses preparation, including credential-owned history,
+media admission and tool pairing. It selects Chat output for unary and stream execution.
+Explicit storage saves only a Chat completion, so the returned Chat ID addresses the Chat
+GET route. Existing Responses parents remain readable through the owned history boundary.
+Malformed compatibility input returns 400, and absent or foreign parent IDs return 404
+before account execution. The completed Chat answer creates no implicit Responses node.
+
 This decision supersedes the non-stream reasoning, streaming-commentary, and camel-only tool decisions in [the earlier compatibility note](2026-08-30-openai-responses-tool-compatibility.md). Other safeguards in that note remain applicable. Current behavior is documented in [the proxy compatibility reference](../../../../docs/modules/proxy-gateway/compatibility.md).
 
 The object-content rule is refined by the bounded-media compatibility change: a single typed content object now follows the same text/media parser as an array, while an untyped object still contributes no message text. Top-level input objects and other primitive content are not changed. Tool outputs now unwrap nested `content`, retain recognized text and media together, and use the old JSON serialization only when nothing recognized is present. Empty-type assistant items also stop triggering WebSocket transcript replacement through the shared parser. The existing file-reference preflight remains a deliberate boundary decision: it can still reject an unresolved attachment inside an otherwise ignored item or object content. Input conversion does not bypass attachment error handling. Image URL validation is also retained: non-empty URLs, supported detail values and JSON extensions pass, while malformed image values are ignored at the request boundary. The same validated object form remains accepted for `input_image` so existing clients do not silently lose images. Unknown string roles follow the established shared rule: after system, developer, assistant and tool handling, the OpenAI conversion maps other roles to `user` rather than forwarding an unsupported role verbatim to Gemini. This behavior remains unchanged for Chat Completions.
 
-Live request data and durable history are separate values. After an existing `previous_response_id` is resolved, inline media preceding the latest user turn becomes a small placeholder before current-request validation; current-turn media remains available to the provider. Current inline images are constrained to 16 items, 20 MiB decoded per image and 32 MiB decoded in total. Every store write and read independently removes raw inline image/audio data from continuation input, covering non-stream responses, completed streams, direct store callers and pre-upgrade records without changing the stored GET response payload. Responses `audio_url` blocks keep data and HTTP(S) sources through the mapper; unreadable tool audio uses the upstream `[audio]` fallback.
+Live request data and durable history are separate values. The optional media send
+window trims an outbound copy after history restoration. Its protected operation
+includes the latest supplied user message and following tool results. Each submitted
+structured image retains its single-image validation, while the current operation
+and final send retain the 16-image and 32 MiB aggregate limits. Original image/audio
+bytes are externalized and restored by the [private media owner](../security/2026-10-19-private-responses-media.md).
+Legacy unsupported media records follow that owner's recovery policy. Responses
+`audio_url` blocks keep data and HTTP(S) sources through the mapper; unreadable tool
+audio uses the upstream `[audio]` fallback.
 
 Responses identity and durable history follow an immutable parent-linked graph. Each request allocates its public response ID before upstream execution. Signature replay reads under `previous_response_id` and writes under the new child response ID; account leasing instead uses a routing identity chosen in this order: nonblank request `session_id`, stored parent routing identity, `previous_response_id`, then the new response ID. Every retained node stores that routing identity, so sibling branches and continuations keep account stickiness without making the routing key a signature key. Legacy parent-linked and flat records without the field remain readable and use the addressed response ID as their routing fallback. A stored node contains only its input delta, response output and inherited request metadata. Materialization walks root to leaf, so deleting a parent's lookup key does not invalidate an already stored child. Stream completion is persisted before the terminal event becomes observable. Message item IDs use a separate random prefix and therefore do not alias the public response ID.
 
 Continuation deltas use the established compatibility precedence: compaction starts a new root; an exact or semantic stored prefix contributes only its suffix; otherwise the last shared non-empty item ID wins, followed by the last semantic match of the stored tail. Semantic comparison ignores volatile item IDs and compares only role, type and content, falling back to text when content is absent. If no boundary exists and the client input is at least as long as stored history, the client input is authoritative and only its final item is retained as the delta; shorter unmatched input appends normally. This prevents regenerated IDs from multiplying a full transcript while preserving explicit ID boundaries.
 
 Only explicit `store: false` disables retention. Such a request may read a valid parent and send the complete reconstructed input upstream, but it creates no child node, response payload, input delta, output, parent reference or tool-call cache. Its returned response and SSE remain normal, while GET or continuation using that transient response ID returns not found. Omitted or true storage behavior is unchanged, and an invalid parent still fails before upstream execution.
+
+Transient Responses use the existing bounded signature cache under the credential,
+initial-task and client-session scope when replaying a complete transcript. They write
+new signatures under that same scope. If they explicitly address a retained parent,
+signature reads still use the parent response ID. HTTP and WebSocket preparation both
+identify this mode. Stored Responses continue to read and write response-ID scopes,
+preserving their branch isolation. This fixes the live Codex `store: false` tool cycle,
+whose complete transcript lacks `previous_response_id` and otherwise cannot retrieve
+the signature cached under a discarded response ID. It adds no durable history or
+signature format. Reusing response IDs for these requests would leave the lookup
+unreachable, and changing every Responses signature key would change stored branches.
 
 Emit both tool configuration aliases for mapped function calls, with explicit source profiles at all OpenAI and Anthropic entry points. Keep the existing explicit Anthropic tool-choice semantics. Native Gemini aliases retain independently supplied valid fields and defaults. Strict request validation remains intentional: malformed aliases and non-array `tools` return a client error before account selection instead of forwarding invalid values to the provider.
 
@@ -41,7 +73,7 @@ For empty-text-plus-image input, the intermediate chat conversion now omits a te
 
 Non-stream and streaming reasoning both use native `reasoning` items with `summary_text`. Streaming emits the summary-part-added, summary-text-delta, summary-text-done, summary-part-done, and output-item-done lifecycle in that order, and closes reasoning before a visible message or tool item. Reasoning remains in the completed response and GET surface but is ignored during upstream history replay; old commentary is still removed. Normal assistant text is retained unless an existing transcript-only marker identifies it. Newline joining prevents adjacent text blocks from accidentally forming the reserved thinking prefix.
 
-History that relied on empty-type messages or untyped object content loses that contribution when continued, even though old GET response payloads remain unchanged. Typed object content is parsed as one content block. Historical media is intentionally represented by placeholders in new continuation records, preventing repeated base64 growth while preserving turn structure and tool-result association.
+History that relied on empty-type messages or untyped object content loses that contribution when continued, even though old GET response payloads remain unchanged. Typed object content is parsed as one content block. Durable media uses private references. A configured send window may replace an old image in the outbound view with an omission marker while preserving the original for a later continuation.
 
 The durable JSON representation changes from a flat materialized session to a leaf plus embedded parent-node snapshots. Routing identity is an optional additive node field and does not change the format version. The reader still accepts legacy flat records and parent-linked records without that field; no eager migration rewrites the backing file. Parent snapshots omit retrievable response payloads, keeping GET ownership at the addressed leaf while preserving continuation history across process restart. The configured TTL and entry-count limits still apply to directly addressable response IDs rather than to embedded ancestors.
 
@@ -49,11 +81,18 @@ Configuration extensions continue to reach generation, but bypass explicit cachi
 
 ## Verification
 
+The transient signature regression reproduces missing signatures before the fix in
+both unary and streaming Responses operations. It also keeps a different initial task
+unsigned. HTTP cases check the same transcript against changed tasks, session hints
+and credentials. Stored-parent and WebSocket checks retain their owning scenarios.
+
 Native streaming-reasoning regressions pin the complete summary lifecycle, multiple thought chunks, final-text and tool ordering, reasoning-only and truncated termination, independent `rs_` IDs, late-thought suppression, and monotonic SSE sequencing. Session-store regressions keep native reasoning in the stored completed response while excluding it from merged continuation history alongside legacy commentary transcripts.
 
 The old-session fixture was generated with the pre-change writer, before production edits. It remains unchanged while its assertions verify that recovered legacy continuation input is bounded on read, its completed GET response stays exact, and unsupported content is ignored during conversion. Regression tests exercise recovery, raw response equality, IDs, function output association, whitespace, usage details, SSE/WebSocket behavior, all three protocol service paths, and credentials. Loopback HTTP tests use the real GeminiClient and Axios Node adapter to observe serialized cache and generation requests, including cache failure and fallback.
 
-The input-rule regressions check full converted message lists, preservation of enclosing messages, empty-user fallback, tool output text/media partitioning, apply-patch compaction, and WebSocket append history. The Responses real-path harness exercises both streaming and non-streaming operations through the production service and mapper chain and compares complete upstream `contents`, including ordered `functionResponse` plus media; its account lease and upstream client are synthetic, not live Google or HTTP transport evidence. Boundary tests cover invalid base64, uppercase and additional metadata, remote-URL exclusion, 16-image count, 20 MiB per-image and 32 MiB total limits. Durable-store tests cover direct, non-stream and completed-stream writes plus pre-upgrade restart recovery with no replayed data URL. Real-path tests cover metadata-bearing tool images, message `audio_url` media, the unreadable tool-audio fallback, and missing-continuation 404 precedence. Before the production change, the tool-image path dropped media and raw inline bytes remained in continuation history.
+The input-rule regressions check full converted message lists, preservation of enclosing messages, empty-history propagation, tool output text/media partitioning, apply-patch compaction, and WebSocket append history. The Responses real-path harness exercises both streaming and non-streaming operations through the production service and mapper chain and compares complete upstream `contents`, including ordered `functionResponse` plus media; its account lease and upstream client are synthetic, not live Google or HTTP transport evidence. Boundary tests cover invalid base64, uppercase and additional metadata, remote-URL exclusion, 16-image count, 20 MiB per-image and 32 MiB total limits. Durable-store tests cover direct, non-stream and completed-stream writes plus pre-upgrade restart recovery with no replayed data URL. Real-path tests cover metadata-bearing tool images, message `audio_url` media, the unreadable tool-audio fallback, and missing-continuation 404 precedence. Before the production change, the tool-image path dropped media and raw inline bytes remained in continuation history.
+
+Generation admission and terminal prefill now follow the [prompt identity decision](../architecture/2026-10-19-prompt-identity-boundaries.md). Input conversion no longer changes an assistant tail to user or manufactures an empty user turn. This partial update leaves the lineage, persistence and protocol-format obligations in this note active.
 
 Identity and branching regressions additionally cover separate routing/signature keys, routing priority and restart recovery, caller-owned response IDs on every SSE lifecycle event, exact and regenerated-ID prefix replay, ID and semantic suffix boundaries, authoritative full-history fallback, sibling branches, parent-key deletion, durable restart from an embedded ancestor, legacy nodes without routing identity, compaction roots, and transient `store: false` responses. The streaming mapper test pins the independent message-item ID prefix.
 

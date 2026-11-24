@@ -11,6 +11,8 @@ import {
 import { DEFAULT_APP_CONFIG } from '../types';
 import { getAgentDir } from '@/shared/platform/paths';
 import { writeFileAtomic } from '@/shared/persistence/atomic-json-file';
+import { logger } from '@/shared/logging/logger';
+import { DEFAULT_DESKTOP_ZOOM, normalizeDesktopLanguage, type DesktopZoom } from '@/modules/app-shell/desktop-appearance';
 
 const StoredPreferencesSchema = z.strictObject({
   version: z.literal(1),
@@ -21,6 +23,8 @@ const defaults = () => DesktopPreferencesSchema.strip().parse(DEFAULT_APP_CONFIG
 /** The file's existence is the one-time seed marker. Corrupt files fail closed; they are never reseeded. */
 export function createDesktopPreferencesStore(filePath: () => string, legacyPath: () => string) {
   let queue: Promise<unknown> = Promise.resolve();
+  let accepting = true;
+  let pending = 0;
   function read(): DesktopPreferences {
     const target = filePath();
     if (fs.existsSync(target)) {
@@ -38,10 +42,10 @@ export function createDesktopPreferencesStore(filePath: () => string, legacyPath
     if (!fs.existsSync(legacy)) {
       return defaults();
     }
-    if (fs.statSync(legacy).size > 1024 * 1024) {
-      throw new Error('Legacy preferences are invalid.');
-    }
     try {
+      if (fs.statSync(legacy).size > 1024 * 1024) {
+        throw new Error('Legacy preferences exceed the seed limit.');
+      }
       const seed: unknown = JSON.parse(fs.readFileSync(legacy, 'utf8'));
       // Ownership activation must come from desktop-local preferences, never shared legacy config.
       const known = DesktopPreferencesSchema.omit({ owner_mode: true })
@@ -49,13 +53,17 @@ export function createDesktopPreferencesStore(filePath: () => string, legacyPath
         .strip()
         .parse(seed);
       return DesktopPreferencesSchema.parse({ ...defaults(), ...known });
-    } catch {
-      throw new Error('Legacy preferences are invalid.');
+    } catch (error) {
+      logger.warn('Legacy configuration cannot seed desktop preferences; independent desktop defaults are used.', error);
+      return defaults();
     }
   }
   async function save(preferences: DesktopPreferences): Promise<DesktopPreferences> {
     const accepted = DesktopPreferencesSchema.parse(preferences);
-    const content = JSON.stringify({ version: 1, preferences: accepted }, null, 2);
+    const { zoom_percent, ...previousFormat } = accepted;
+    // Keep the default profile readable by releases that reject unknown preference fields.
+    const stored = zoom_percent === DEFAULT_DESKTOP_ZOOM ? previousFormat : accepted;
+    const content = JSON.stringify({ version: 1, preferences: stored }, null, 2);
     if (Buffer.byteLength(content) > 128 * 1024) {
       throw new Error('Desktop preferences are too large.');
     }
@@ -63,11 +71,23 @@ export function createDesktopPreferencesStore(filePath: () => string, legacyPath
     return accepted;
   }
   function serialized<T>(work: () => Promise<T>): Promise<T> {
-    const task = queue.catch(() => undefined).then(work);
+    if (!accepting || pending >= 32) {
+      return Promise.reject(new Error('Desktop settings are shutting down or the save queue is full.'));
+    }
+    pending += 1;
+    const task = queue.catch(() => undefined).then(work).finally(() => {
+      pending -= 1;
+    });
     queue = task;
     return task;
   }
   return {
+    closeAdmission: () => {
+      accepting = false;
+    },
+    drain: async () => {
+      await queue.catch(() => undefined);
+    },
     load: () =>
       serialized(async () => {
         const preferences = read();
@@ -87,6 +107,8 @@ const store = createDesktopPreferencesStore(
 );
 let current: DesktopPreferences | undefined;
 export const desktopPreferencesStore = {
+  closeAdmission: store.closeAdmission,
+  drain: store.drain,
   load: async () => {
     current = await store.load();
     return current;
@@ -97,5 +119,9 @@ export const desktopPreferencesStore = {
   },
 };
 export function getDesktopPreferencesLanguage(fallback: string): string {
-  return current?.language ?? fallback;
+  return normalizeDesktopLanguage(current?.language ?? fallback);
+}
+
+export function getDesktopPreferencesZoom(): DesktopZoom {
+  return current?.zoom_percent ?? DEFAULT_DESKTOP_ZOOM;
 }

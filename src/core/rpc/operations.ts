@@ -16,6 +16,7 @@ import type { listCloudAccountSummaries } from '@/modules/cloud-account/services
 import type { CloudAccountViewSchema } from '@/modules/cloud-account/services/cloud-account-view';
 import type { cloudAccountListService } from '@/modules/cloud-account/services/cloud-account-list.service';
 import type { CloudAccountMutationResultSchema } from '@/modules/cloud-account/services/cloud-account-mutation.schema';
+import type { CloudAccountProjectIdOperations } from '@/modules/cloud-account/services/cloud-account-project-id.schema';
 import type { CloudAccountSecurityStatus } from '@/modules/cloud-account/services/cloud-account-security-status.schema';
 import type { AccountValidationUrlResultSchema } from '@/modules/cloud-account/services/account-validation-link.schema';
 import type { CloudAccountSwitchResultSchema } from '@/modules/cloud-account/services/cloud-account-switch.schema';
@@ -43,6 +44,8 @@ import type {
 import type { AuditCurlOperations } from '@/modules/proxy-gateway/traffic-monitor/audit-curl-owner.service';
 import type { OpenCodeOperations } from '@/modules/proxy-gateway/opencode-sync/opencode-owner.service';
 import type { AgentToolsOperations } from '@/modules/proxy-gateway/agent-tools/agent-tools.service';
+import type { DshOperations } from '@/modules/proxy-gateway/dsh-sync/dsh-owner.service';
+import type { ClientConfigOperations } from '@/modules/proxy-gateway/agent-tools/client-config-owner.service';
 
 import type { AuditFileOperations } from '@/modules/proxy-gateway/audit/audit-file-owner.service';
 import type { ThoughtOperations } from '@/modules/proxy-gateway/thought-store/thought-owner.service';
@@ -50,6 +53,10 @@ import type { AuditOperations } from '@/modules/proxy-gateway/audit/audit-owner.
 import { ErrorReportingOperations } from '@/modules/config/error-reporting.service';
 
 export interface CoreRpcOperations {
+  gatewayManualStart(port: number): Promise<import('@/modules/proxy-gateway/services/gateway-management.schema').GatewayManualStartResult>;
+  gatewayManualStop(): Promise<import('@/modules/proxy-gateway/services/gateway-management.schema').GatewayManualStopResult>;
+  gatewayRetrySaveChoice(choice: import('@/modules/proxy-gateway/services/gateway-management.schema').GatewayRememberChoice): Promise<import('@/modules/proxy-gateway/services/gateway-management.schema').GatewayChoicePersistence>;
+  errorDiagnostics: import('@/modules/error-diagnostics/public').ErrorDiagnosticOperations;
   playground: import('@/modules/proxy-gateway/playground/playground.service').PlaygroundOperations;
   diagnosticLogs: import('@/modules/app-shell/diagnostic-logs/core-router').CoreLogReader;
   errorReporting: ErrorReportingOperations;
@@ -73,6 +80,9 @@ export interface CoreRpcOperations {
   auditFile: AuditFileOperations;
   openCode: OpenCodeOperations;
   agentTools: AgentToolsOperations;
+  dsh?: DshOperations;
+  clientConfig: ClientConfigOperations;
+  connectionProfiles: import('@/modules/proxy-gateway/connection-profiles/connection-profiles.owner').ConnectionProfilesOperations;
   localAccount: LocalAccountOperations;
   accountAlertPolicy: CloudAccountAlertPolicyOperations;
   serviceConfig: ServiceConfigOperations;
@@ -128,6 +138,12 @@ export interface CoreRpcOperations {
   accountSetProxy(
     accountId: string,
     proxyUrl: string | null,
+  ): Promise<z.infer<typeof CloudAccountMutationResultSchema>>;
+  accountProjectId: CloudAccountProjectIdOperations;
+  accountSetRouting?(
+    accountId: string,
+    proxyPriority: number,
+    proxyEnabled: boolean,
   ): Promise<z.infer<typeof CloudAccountMutationResultSchema>>;
   accountDelete(accountId: string): Promise<z.infer<typeof CloudAccountMutationResultSchema>>;
   oauthClientList(): ReturnType<typeof listOAuthClients>;

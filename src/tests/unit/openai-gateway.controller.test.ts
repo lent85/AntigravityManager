@@ -2,14 +2,14 @@ import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_APP_CONFIG } from '@/modules/config/types';
-import { AdminGuard } from '@/modules/proxy-gateway/server/guards/admin.guard';
-import { ProxyGuard } from '@/modules/proxy-gateway/server/guards/proxy.guard';
+import { AdminGuard } from '@/server/gateway/guards/admin.guard';
+import { ProxyGuard } from '@/server/gateway/guards/proxy.guard';
 import {
   OpenAIBillingController,
   OpenAIGatewayController,
-} from '@/modules/proxy-gateway/server/modules/openai/openai-gateway.controller';
-import { OpenAIOperations } from '@/modules/proxy-gateway/server/modules/openai/openai-operations.service';
-import { proxyUsageStore } from '@/modules/proxy-gateway/server/shared/services/proxy-usage.store';
+} from '@/server/gateway/modules/openai/openai-gateway.controller';
+import { OpenAIOperations } from '@/server/gateway/modules/openai/openai-operations.service';
+import { proxyUsageStore } from '@/server/gateway/shared/services/proxy-usage.store';
 import { getServerConfig, setServerConfig } from '@/server/server-config';
 
 function createReply() {

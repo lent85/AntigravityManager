@@ -31,8 +31,9 @@ import { BrowserWindow, shell } from 'electron';
 import { IPC_CHANNELS } from '@/shared/constants';
 import fs from 'fs';
 import { isEmpty, isString } from 'lodash-es';
-import { updateTrayMenu } from '@/modules/app-shell/ipc/tray/handler';
-import { proxyModelAvailabilityStore } from '@/modules/proxy-gateway/server/shared/services/model-availability.service';
+import { refreshTrayAccount } from '@/modules/app-shell/ipc/tray/handler';
+import { proxyModelAvailabilityStore } from '@/server/gateway/shared/services/model-availability.service';
+import { captureDeviceBindingWriteGuard } from '../services/cloud-account-device-binding-guard';
 import {
   ensureGlobalOriginalFromCurrentStorage,
   generateDeviceProfile,
@@ -54,7 +55,6 @@ import { readAgyCliToken } from '@/modules/cloud-account/persistence/agyCliToken
 import {
   buildCredentialStorePayload,
   readAntigravityCredentialStoreToken,
-  writeAntigravityCredentialStoreToken,
 } from '@/modules/antigravity-runtime/credentials/antigravityCredentialStore';
 import { writeAgyCliToken } from '@/modules/antigravity-runtime/credentials/agyCliTokenStore';
 import { matchAccountFromCredentialToken } from '@/modules/cloud-account/services/accountTokenMatcher';
@@ -90,7 +90,7 @@ function notifyTrayUpdate(account: CloudAccount) {
     // Fetch language setting. Default to 'en' if not set.
 
     const lang = CloudAccountSettingsStore.getSetting('language', 'en', z.string());
-    updateTrayMenu(account, lang);
+    void refreshTrayAccount();
   } catch (error) {
     logger.warn('Failed to update tray after cloud account update', error);
   }
@@ -950,10 +950,12 @@ export async function switchCloudAccount(
 
               if (!account.device_profile) {
                 const generated = generateDeviceProfile();
+                const guard = captureDeviceBindingWriteGuard(account);
                 CloudAccountDeviceBindingStore.setDeviceBinding(
                   account.id,
                   generated,
                   'auto_generated',
+                  guard,
                 );
                 saveGlobalOriginalProfile(generated);
                 account.device_profile = generated;
@@ -1275,7 +1277,8 @@ export async function bindCloudIdentityProfile(
 
   ensureGlobalOriginalFromCurrentStorage();
   saveGlobalOriginalProfile(profile);
-  CloudAccountDeviceBindingStore.setDeviceBinding(account.id, profile, mode);
+  const guard = captureDeviceBindingWriteGuard(account);
+  CloudAccountDeviceBindingStore.setDeviceBinding(account.id, profile, mode, guard);
 
   return profile;
 }
@@ -1291,7 +1294,8 @@ export async function bindCloudIdentityProfileWithPayload(
 
   ensureGlobalOriginalFromCurrentStorage();
   saveGlobalOriginalProfile(profile);
-  CloudAccountDeviceBindingStore.setDeviceBinding(account.id, profile, 'generated');
+  const guard = captureDeviceBindingWriteGuard(account);
+  CloudAccountDeviceBindingStore.setDeviceBinding(account.id, profile, 'generated', guard);
 
   return profile;
 }

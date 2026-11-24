@@ -47,7 +47,7 @@ import {
   CloudAccountLoadError,
   CloudAccountLoadingState,
 } from '@/modules/cloud-account/components/CloudAccountListFallbacks';
-import { CloudAccountListSummary } from '@/modules/cloud-account/components/CloudAccountListSummary';
+import { CloudAccountRecommendation } from '@/modules/cloud-account/components/CloudAccountRecommendation';
 import { CloudAccountToolbar } from '@/modules/cloud-account/components/CloudAccountToolbar';
 import type { QuotaWindow } from '@/modules/cloud-account/utils/quota-groups';
 import {
@@ -79,6 +79,7 @@ function CloudAccountListContent() {
   const {
     data: accounts,
     isLoading,
+    isFetching,
     isError,
     error,
     errorUpdatedAt,
@@ -130,6 +131,7 @@ function CloudAccountListContent() {
   };
 
   const currentSort: AccountSortKey = (config?.account_sort as AccountSortKey) || 'recently-used';
+  const [recommendationTarget, setRecommendationTarget] = useState<AntigravityAppTarget>('classic');
 
   const {
     sortedAccounts,
@@ -139,16 +141,7 @@ function CloudAccountListContent() {
     effectiveSelectedTierKeySet,
     hasActiveTierFilter,
     visibleAccountIds,
-    totalAccounts,
-    activeAccounts,
-    rateLimitedAccounts,
-    overallQuotaPercentage,
-    effectiveQuotaStatus,
-    geminiQuota,
-    claudeQuota,
-    overallWeeklyQuotaPercentage,
-    effectiveWeeklyQuotaStatus,
-  } = useCloudAccountListView(accounts, config, currentSort);
+  } = useCloudAccountListView(accounts, config, currentSort, recommendationTarget);
 
   const [originFilter, setOriginFilter] = useState<'all' | 'real' | 'emulated'>('all');
   const filteredByOriginAccounts = useMemo(() => {
@@ -493,18 +486,7 @@ function CloudAccountListContent() {
 
   return (
     <div data-slot="cloud-account-list" className="flex flex-col gap-6 pb-20">
-      <CloudAccountListSummary
-        totalAccounts={totalAccounts}
-        activeAccounts={activeAccounts}
-        rateLimitedAccounts={rateLimitedAccounts}
-        overallQuotaPercentage={overallQuotaPercentage}
-        effectiveQuotaStatus={effectiveQuotaStatus}
-        overallWeeklyQuotaPercentage={overallWeeklyQuotaPercentage}
-        effectiveWeeklyQuotaStatus={effectiveWeeklyQuotaStatus}
-        geminiQuota={geminiQuota}
-        claudeQuota={claudeQuota}
-        isMinimalMode={isMinimalMode}
-      />
+      <h1 className="sr-only">{t('cloud.title')}</h1>
 
       <CloudAccountToolbar
         visibleAccountIds={visibleAccountIds}
@@ -562,6 +544,20 @@ function CloudAccountListContent() {
         onQuotaGroupVisibilityChange={setQuotaGroupVisibility}
         onToggleMinimalMode={setIsMinimalMode}
       />
+
+      {Boolean(accounts?.length) && (
+        <CloudAccountRecommendation
+          appTarget={recommendationTarget}
+          recommendation={manualRecommendation}
+          recommendedEmail={
+            sortedAccounts.find((account) => account.id === manualRecommendation?.accountId)?.email
+          }
+          isSwitching={switchMutation.isPending}
+          isRefreshingAccounts={isFetching}
+          onTargetChange={setRecommendationTarget}
+          onSwitch={handleSwitch}
+        />
+      )}
 
       <CloudAccountGrid
         accounts={filteredByOriginAccounts}

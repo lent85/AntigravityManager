@@ -19,11 +19,13 @@ import { cloudAccountWeeklyWarmupRunner } from '@/modules/cloud-account/services
 import type { CloudAccount } from '@/modules/cloud-account/types';
 import { configureCoreOwnerPresentation } from '@/modules/cloud-account/services/account-owner-presentation.service';
 import { accountOwnerEvents } from '@/modules/cloud-account/services/account-owner-events.service';
+import { mockCoreGatewayLifecycle } from '../support/core-gateway-lifecycle';
 
 const settings = vi.hoisted(() => new Map<string, unknown>());
 vi.mock('@/modules/cloud-account/persistence/cloudHandler', () => ({
   CloudAccountRepo: {
     getAccounts: vi.fn(async () => []),
+    getAccount: vi.fn(),
     updateToken: vi.fn(),
     updateQuota: vi.fn(),
     setAccountStatus: vi.fn(),
@@ -95,6 +97,12 @@ beforeEach(async () => {
   settings.clear();
   settings.set('metrics_poll_interval_minutes', 0);
   vi.mocked(CloudAccountRepo.getAccounts).mockResolvedValue([]);
+  vi.mocked(CloudAccountRepo.getAccount).mockImplementation(async (id) => {
+    const latest: CloudAccount[] | undefined = await vi
+      .mocked(CloudAccountRepo.getAccounts)
+      .mock.results.at(-1)?.value;
+    return latest?.find((account) => account.id === id);
+  });
   CloudMonitorService.resetStateForTesting();
   CloudMonitorService.configureEffects({ onQuotaUpdated: () => {} });
   AutoSwitchService.configureEffects({
@@ -119,7 +127,7 @@ async function remote() {
     process.platform === 'win32'
       ? `\\\\.\\pipe\\agm-monitor-${path.basename(directory)}`
       : path.join(directory, 'core.sock');
-  const operations = createCoreRpcOperations({ startGateway: vi.fn(), stopGateway: vi.fn() });
+  const operations = createCoreRpcOperations(mockCoreGatewayLifecycle());
   server = new ManagementServer({
     endpoint,
     getStatus: () => ({ state: 'running', pid: 123, gateway: { running: false, port: null } }),
@@ -186,11 +194,16 @@ it('remote force poll writes quota/status only through the core owner and schedu
   vi.mocked(GoogleAPIService.fetchQuota).mockResolvedValue(quota);
   const warmup = vi.spyOn(cloudAccountWeeklyWarmupRunner, 'run').mockResolvedValue();
   expect(await renderer.forcePollCloudMonitor()).toBeUndefined();
-  expect(CloudAccountRepo.updateQuota).toHaveBeenCalledExactlyOnceWith('current', quota);
+  expect(CloudAccountRepo.updateQuota).toHaveBeenCalledExactlyOnceWith(
+    'current',
+    quota,
+    expect.any(Function),
+  );
   expect(CloudAccountRepo.setAccountStatus).toHaveBeenCalledExactlyOnceWith(
     'current',
     'active',
     null,
+    expect.any(Function),
   );
   expect(warmup).toHaveBeenCalledExactlyOnceWith([
     expect.objectContaining({ id: 'current', quota }),

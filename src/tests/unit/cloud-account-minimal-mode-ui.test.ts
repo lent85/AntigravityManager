@@ -1,20 +1,13 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { CloudAccountListSummary } from '@/modules/cloud-account/components/CloudAccountListSummary';
 import { CloudAccountToolbar } from '@/modules/cloud-account/components/CloudAccountToolbar';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
+    i18n: { language: 'en' },
     t: (key: string) => {
       const translations: Record<string, string> = {
-        'cloud.title': 'Accounts',
-        'cloud.description': 'Manage your Google Gemini accounts.',
-        'cloud.total-accounts': 'Total accounts',
-        'cloud.card.active': 'Active',
-        'cloud.card.rateLimited': 'Rate Limited',
-        'cloud.globalQuota': 'Global Quota',
-        'cloud.weeklyQuota': 'Weekly Quota',
         'cloud.auto-switch-client': 'Auto-switch client account',
         'cloud.minimal-mode': 'Minimal mode',
       };
@@ -26,11 +19,8 @@ vi.mock('react-i18next', () => ({
 vi.mock('@/modules/cloud-account/components/CloudAccountLoginDialog', () => ({
   CloudAccountLoginDialog: () => null,
 }));
-vi.mock('@/modules/cloud-account/components/CloudAccountFileDialogs', () => ({
-  CloudAccountFileDialogs: () => null,
-}));
-vi.mock('@/modules/cloud-account/local-import/components/LocalAccountImportDialog', () => ({
-  LocalAccountImportDialog: () => null,
+vi.mock('@/modules/cloud-account/components/CloudAccountTransferMenu', () => ({
+  CloudAccountTransferMenu: () => null,
 }));
 vi.mock('@/modules/cloud-account/components/CloudAccountSelectAllButton', () => ({
   CloudAccountSelectAllButton: () => null,
@@ -41,67 +31,6 @@ vi.mock('@/modules/cloud-account/components/AccountTierFilterDropdown', () => ({
 vi.mock('@/modules/cloud-account/components/QuotaGroupVisibilityMenu', () => ({
   QuotaGroupVisibilityMenu: () => null,
 }));
-
-describe('CloudAccountListSummary minimal mode', () => {
-  it('renders standard full-size cards when minimal mode is off', () => {
-    const { container } = render(
-      React.createElement(CloudAccountListSummary, {
-        totalAccounts: 5,
-        activeAccounts: 1,
-        rateLimitedAccounts: 0,
-        overallQuotaPercentage: 82.8,
-        effectiveQuotaStatus: 'high',
-        isMinimalMode: false,
-      }),
-    );
-
-    expect(screen.getByText('Accounts')).not.toBeNull();
-    expect(screen.getByText('Manage your Google Gemini accounts.')).not.toBeNull();
-    expect(screen.getByText('5')).not.toBeNull();
-    expect(screen.getByText('1')).not.toBeNull();
-    expect(screen.getByText('0')).not.toBeNull();
-    expect(screen.getByText('82.8%')).not.toBeNull();
-
-    const standardDl = container.querySelector('dl[data-slot="cloud-account-summary-metrics"]');
-    expect(standardDl).not.toBeNull();
-  });
-
-  it('renders compact inline stats on the right of header when minimal mode is on', () => {
-    const { container } = render(
-      React.createElement(CloudAccountListSummary, {
-        totalAccounts: 5,
-        activeAccounts: 1,
-        rateLimitedAccounts: 0,
-        overallQuotaPercentage: 82.8,
-        effectiveQuotaStatus: 'high',
-        overallWeeklyQuotaPercentage: 91.5,
-        effectiveWeeklyQuotaStatus: 'high',
-        isMinimalMode: true,
-      }),
-    );
-
-    expect(screen.getByText('Accounts')).not.toBeNull();
-    expect(screen.getByText('Manage your Google Gemini accounts.')).not.toBeNull();
-    expect(screen.getByText('5')).not.toBeNull();
-    expect(screen.getByText('1')).not.toBeNull();
-    expect(screen.getByText('0')).not.toBeNull();
-    expect(screen.getByText('82.8%')).not.toBeNull();
-    expect(screen.getByText('Weekly Quota')).not.toBeNull();
-    expect(screen.getByText('91.5%')).not.toBeNull();
-
-    // The standard metrics strip should not exist
-    const standardDl = container.querySelector('dl[data-slot="cloud-account-summary-metrics"]');
-    expect(standardDl).toBeNull();
-
-    // The compact summary dl should exist with background color styling
-    const compactDl = container.querySelector('dl.divide-border');
-    expect(compactDl).not.toBeNull();
-    expect(container.querySelector('.bg-info-soft')).not.toBeNull();
-    expect(container.querySelector('.bg-success-soft')).not.toBeNull();
-    expect(container.querySelector('.bg-warning-soft')).not.toBeNull();
-    expect(container.querySelectorAll('.bg-card').length).toBe(2);
-  });
-});
 
 describe('CloudAccountToolbar minimal mode', () => {
   const baseProps = {

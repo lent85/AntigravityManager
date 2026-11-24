@@ -6,7 +6,7 @@ import {
   canCacheGeminiToolConfig,
   toSnakeToolConfig,
 } from '@/modules/proxy-gateway/antigravity/GeminiToolConfigCompat';
-import { ExplicitContextCacheManager } from '@/modules/proxy-gateway/server/modules/gemini/explicit-context-cache.store';
+import { ExplicitContextCacheManager } from '@/server/gateway/modules/gemini/explicit-context-cache.store';
 import type { GeminiToolConfig } from '@/modules/proxy-gateway/antigravity/types';
 
 afterEach(() => vi.unstubAllEnvs());
@@ -17,7 +17,7 @@ describe('Gemini tool configuration compatibility', () => {
     'auto',
     'required',
     { type: 'function', function: { name: 'read_file' } },
-  ])('emits both aliases for OpenAI function choice %j', (tool_choice) => {
+  ])('emits both aliases for function choice %j', (tool_choice) => {
     const result = transformClaudeRequestIn(
       {
         model: 'gemini-3-flash',
@@ -28,47 +28,47 @@ describe('Gemini tool configuration compatibility', () => {
       '',
       'test',
       undefined,
-      'openai',
     ).request;
-    const mode =
+    const functionCallingConfig =
       tool_choice === undefined
-        ? 'VALIDATED'
-        : tool_choice === 'none'
-          ? 'NONE'
-          : tool_choice === 'auto'
-            ? 'AUTO'
-            : 'ANY';
+        ? {}
+        : {
+            functionCallingConfig: {
+              mode: tool_choice === 'none' ? 'NONE' : tool_choice === 'auto' ? 'AUTO' : 'ANY',
+              ...(typeof tool_choice === 'object' ? { allowedFunctionNames: ['read_file'] } : {}),
+            },
+          };
     expect(result.toolConfig).toEqual({
-      functionCallingConfig: {
-        mode,
-        ...(typeof tool_choice === 'object' ? { allowedFunctionNames: ['read_file'] } : {}),
-      },
+      ...functionCallingConfig,
       includeServerSideToolInvocations: true,
     });
     expect(result.tool_config).toEqual({
-      function_calling_config: {
-        mode,
-        ...(typeof tool_choice === 'object' ? { allowed_function_names: ['read_file'] } : {}),
-      },
+      ...(tool_choice === undefined
+        ? {}
+        : {
+            function_calling_config: {
+              mode: tool_choice === 'none' ? 'NONE' : tool_choice === 'auto' ? 'AUTO' : 'ANY',
+              ...(typeof tool_choice === 'object' ? { allowed_function_names: ['read_file'] } : {}),
+            },
+          }),
       include_server_side_tool_invocations: true,
     });
     expect(result.tools).toHaveLength(1);
     expect(result.tools?.[0]).not.toHaveProperty('googleSearch');
   });
-  it('keeps the different OpenAI and Anthropic search-only behavior', () => {
+  it('emits both aliases for search-only requests', () => {
     const request = {
       model: 'gemini-3-flash',
       messages: [{ role: 'user', content: 'Search' }],
       tools: [{ name: 'web_search', type: 'web_search_20250305' }],
     };
-    const openai = transformClaudeRequestIn(request, '', 'test', undefined, 'openai').request;
-    const anthropic = transformClaudeRequestIn(request, '', 'test', undefined, 'anthropic').request;
-    expect(openai.tools).toBeDefined();
-    expect(openai.toolConfig).toBeUndefined();
-    expect(openai.tool_config).toBeUndefined();
-    expect(anthropic.tool_config).toEqual({
-      function_calling_config: { mode: 'VALIDATED' },
-      include_server_side_tool_invocations: true,
+    const result = transformClaudeRequestIn(request, '', 'test').request;
+    expect(result.tools).toBeDefined();
+    expect(result.toolConfig).toEqual({ includeServerSideToolInvocations: true });
+    expect(result.tool_config).toEqual({ include_server_side_tool_invocations: true });
+    expect(normalizeGeminiToolConfigAliases(result)).toEqual({
+      toolConfig: { includeServerSideToolInvocations: true },
+      tool_config: { include_server_side_tool_invocations: true },
     });
   });
   it('treats empty tools, empty config and missing config separately', () => {

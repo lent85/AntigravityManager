@@ -1,4 +1,5 @@
 import type { CloudAccount } from '@/modules/cloud-account/types';
+import { isRetiredModel } from '../antigravity/retired-models';
 
 export interface ProxyExampleModel {
   id: string;
@@ -19,7 +20,6 @@ export const FALLBACK_PROXY_EXAMPLE_MODELS: readonly ProxyExampleModel[] = [
   { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite' },
   { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite' },
   { id: 'gemini-3.1-pro-low', name: 'Gemini 3.1 Pro (Low)' },
-  { id: 'gemini-3.1-pro-high', name: 'Gemini 3.1 Pro (High)' },
   { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
   { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite' },
   { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
@@ -90,7 +90,7 @@ export function buildProxyExampleModels(
   for (const account of accounts) {
     for (const [rawModelId, info] of Object.entries(account.quota?.models ?? {})) {
       const modelId = rawModelId.replace(/^models\//i, '').trim();
-      if (!modelId) {
+      if (!modelId || isRetiredModel(modelId)) {
         continue;
       }
 

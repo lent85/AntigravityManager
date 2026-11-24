@@ -5,7 +5,7 @@ export const LOCAL_STORAGE_KEYS = {
 
 export const IPC_CHANNELS = {
   START_ORPC_SERVER: 'start-orpc-server',
-  CHANGE_LANGUAGE: 'change-language',
+  DESKTOP_ZOOM_COMMAND: 'desktop-zoom-command',
   CHECK_FOR_UPDATES: 'check-for-updates',
   DOWNLOAD_UPDATE: 'download-update',
   INSTALL_UPDATE: 'install-update',
@@ -16,7 +16,10 @@ export const IPC_CHANNELS = {
   OPEN_EXTERNAL_URL: 'open-external-url',
   START_PERFORMANCE_RECORDING: 'start-performance-recording',
   STOP_PERFORMANCE_RECORDING: 'stop-performance-recording',
+  CHANGE_LANGUAGE: 'change-language',
   ACCOUNT_SYNC_STATUS: 'cloud-account:sync-status',
   TRAFFIC_AUDIT_EVENT: 'traffic-audit-event',
   SAVE_TRAFFIC_AUDIT_BODY: 'save-traffic-audit-body',
+  SAVE_TRAFFIC_AUDIT_SESSION: 'save-traffic-audit-session',
+  SAVE_TRAFFIC_AUDIT_HAR: 'save-traffic-audit-har',
 };

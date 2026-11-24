@@ -5,7 +5,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigManager } from '@/modules/config/ipc/manager';
 import { getNestServerStatus, type NestServerStartResult } from '@/server/main';
-import { explicitContextCacheManager } from '../server/modules/gemini/explicit-context-cache.store';
+import { explicitContextCacheManager } from '../../../server/gateway/modules/gemini/explicit-context-cache.store';
 import { gatewayLifecycleService } from '../services/gateway-lifecycle.service';
 
 /**
@@ -44,11 +44,11 @@ export const getContextCacheStatus = () => {
   };
 };
 
-import { proxyUsageStore } from '../server/shared/services/proxy-usage.store';
+import { proxyUsageStore } from '@/server/gateway/shared/services/proxy-usage.store';
 import type {
   GetUsageLogsOptions,
   GetUsageStatsOptions,
-} from '../server/shared/services/proxy-usage.types';
+} from '@/server/gateway/shared/services/proxy-usage.types';
 import type { ProxyApiKey } from '@/modules/config/types';
 
 /**

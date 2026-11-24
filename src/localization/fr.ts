@@ -1,6 +1,39 @@
 import en from './en';
 const fr = {
+  'image-send-window': en['image-send-window'],
+  'error-diagnostics': en['error-diagnostics'],
   'workspace-profile': en['workspace-profile'],
+  'account-evidence': {
+    'subscription-unavailable':
+      'Actualisation de l’abonnement échouée ; aucun niveau précédemment confirmé n’est disponible.',
+    'observed-at': 'Dernière observation : {{time}}',
+    'checked-at': 'Dernière vérification : {{time}}',
+    'unknown-time': 'Non enregistré',
+    'invalid-data': 'Données de quota invalides ; actualisez pour vérifier.',
+    'reset-unknown': 'Date de réinitialisation inconnue.',
+    'exhausted-unknown-reset': 'Fenêtre épuisée ; date de réinitialisation inconnue.',
+    'recheck-required':
+      'La fenêtre épuisée est terminée ; actualisez pour confirmer la récupération.',
+    'window-ended': 'Fenêtre terminée ; le solde n’a pas été reconfirmé.',
+    'weekly-exhausted':
+      'Fenêtre hebdomadaire épuisée ; le solde d’une autre fenêtre ne lève pas cette restriction.',
+    'window-exhausted': 'Fenêtre de quota épuisée.',
+    'group-restrictions': 'Restrictions des groupes de quotas',
+    'group-limited':
+      'Fenêtre épuisée. Dernière réinitialisation connue : {{time}} ; la récupération reste à confirmer.',
+    'subscription-failed':
+      'Actualisation de l’abonnement échouée ou incomplète ; affichage de l’enregistrement précédent.',
+    'subscription-unrecognized':
+      'Niveau d’abonnement non reconnu ; niveau Free utilisé par défaut.',
+    'subscription-missing': 'Aucune identité d’abonnement reçue ; niveau Free utilisé par défaut.',
+    'subscription-observed': 'Identité d’abonnement observée.',
+    'subscription-unknown': 'Source de l’abonnement non enregistrée.',
+    'source-paid': 'Source : abonnement payant',
+    'source-current': 'Source : abonnement actuel',
+    'source-free': 'Source : niveau gratuit explicite',
+    'source-unknown': 'Source : inconnue',
+    'small-positive': 'Petit solde positif ; cette fenêtre n’est pas épuisée.',
+  },
   'operation-diagnostics': en['operation-diagnostics'],
   'agent-tools': {
     title: 'Connecter vos outils de programmation',
@@ -69,7 +102,6 @@ const fr = {
       'review-route-disabled':
         'La route de vérification Codex est désactivée. Activez-la dans le routage des modèles.',
     },
-
     'address-help':
       'Gardez l’adresse actuelle de Manager, sauf si le service fonctionne sur un autre ordinateur.',
     'invalid-address':
@@ -122,7 +154,6 @@ const fr = {
     unknown: 'Inconnu',
     notAvailable: 'N/A',
     openMenu: 'Ouvrir le menu',
-
     'dismiss-notification': 'Fermer la notification',
     'reading-settings': 'Lecture de vos paramètres…',
   },
@@ -427,6 +458,21 @@ const fr = {
   },
   traffic: {
     ...en.traffic,
+    'export-har': 'Exporter en HAR',
+    'har-exporting': 'Export HAR…',
+    'har-export-saved': 'Fichier HAR enregistré.',
+    'har-export-failed':
+      'La fin de l’export n’a pas été confirmée. Vérifiez le fichier, actualisez la requête et réessayez.',
+    'har-export-wait': 'Attendez la fin de la requête avant d’exporter.',
+    'attempt-timing': {
+      'upload-finished': 'Envoi terminé',
+      'response-headers': 'En-têtes de réponse',
+      'first-byte': 'Premier octet reçu',
+      'first-output': 'Premier contenu valide',
+      'previous-attempts': 'Tentatives précédentes, total',
+      description:
+        'Les étapes sont mesurées depuis le début de cette tentative. Les signaux de maintien de connexion ne comptent pas comme contenu valide. Seules les durées enregistrées des tentatives précédentes sont additionnées.',
+    },
     'recovered-badge': 'Rétabli ({{count}} tentatives)',
     'recovered-hint': 'Rétabli après {{count}} tentatives',
     'fallback-diagnostics': 'Diagnostics de secours',
@@ -452,6 +498,7 @@ const fr = {
     },
     'account-email': 'E-mail du compte',
     outcomes: {
+      capture_interrupted: 'Capture interrompue',
       in_progress: 'En cours',
       completed: 'Terminé',
       client_cancelled: 'Annulé',
@@ -480,7 +527,6 @@ const fr = {
     'parse-error': 'Impossible de lire ce contenu à la position {{offset}}.',
     'thought-oversized':
       'Le raisonnement dépasse 64 MiB et n’a pas été enregistré en entier. Référence : {{hash}}',
-
     'loading-description': 'Les requêtes apparaîtront ici dès qu’elles seront prêtes.',
     'empty-description':
       'Les requêtes envoyées via le proxy apparaissent ici. Vous pouvez aussi modifier les filtres.',
@@ -491,6 +537,22 @@ const fr = {
       'Réessayez. Cela ne signifie pas que vos enregistrements ont été supprimés.',
     'refresh-failed':
       'Impossible d’actualiser les enregistrements. Les données précédentes restent affichées.',
+    searching: 'Recherche…',
+    jumping: 'Ouverture de la section correspondante…',
+    'search-failed': 'Impossible de rechercher dans ce contenu. Réessayez.',
+    clearing: 'Nettoyage…',
+    'clear-failed':
+      'La fin de l’effacement n’est pas confirmée. Actualisez avant de réessayer ; la capture en cours a pu s’arrêter.',
+    'resize-column': 'Redimensionner la colonne {{column}}',
+    'reset-columns': 'Réinitialiser la largeur des colonnes',
+    'columns-unsaved':
+      'La largeur des colonnes a changé dans cette vue, mais n’a pas pu être enregistrée.',
+    'clear-scope':
+      'Effacer tous les enregistrements de {{category}}, y compris ceux masqués par les filtres ? Le stockage des pensées et les fichiers de diagnostic restent inchangés.',
+    'clear-complete': '{{count}} enregistrements effacés dans {{category}}.',
+    'exact-session': 'ID de session enregistré exact',
+    'apply-session': 'Filtrer la session',
+    'reset-session': 'Réinitialiser la session',
   },
   editionSelection: {
     title: 'Choisissez votre edition Antigravity',
@@ -532,6 +594,199 @@ const fr = {
     },
   },
   settings: {
+    'defaults-writeback-failed':
+      'Les réglages par défaut sont utilisés en mémoire. Le fichier initial n’a pas été enregistré. Vérifiez les permissions puis réessayez.',
+    'partial-save-failed':
+      'Certains réglages n’ont pas été enregistrés. Les autres sont conservés et les changements échoués restent en brouillon.',
+    'service-apply-failed':
+      'Réglages enregistrés, mais certains services n’ont pas appliqué les changements.',
+    'save-owner-service': 'Réglages du service',
+    'save-owner-desktop': 'Préférences du bureau',
+    'save-owner-accountAlertPolicy': 'Alertes des comptes',
+    'save-state-saved': 'Enregistré',
+    'save-state-failed': 'Non enregistré',
+    'retry-unsaved': 'Réessayer les changements non enregistrés',
+    'apply-step-gateway-config': 'Réglages de la passerelle',
+    'apply-step-audit': 'Stockage d’audit',
+    'apply-step-thought-store': 'Historique de réflexion',
+    'apply-step-error-diagnostics': 'Diagnostic des erreurs',
+    'apply-step-runtime-status': 'État d’exécution',
+    'affected-fields': 'Réglages concernés : {{fields}}',
+    'restart-fields': 'Redémarrez le service pour appliquer : {{fields}}',
+    'cowork-runtime': {
+      'operation-description':
+        'Inspectez les environnements Claude Cowork locaux et gérez les modifications des paquets pris en charge.',
+      'capability-note':
+        'Les modifications et le contrôle des processus nécessitent un paquet vérifié. Les autres environnements sont accessibles en lecture seule.',
+      path: 'Chemin',
+      package: 'Paquet',
+      eligible: 'Paquet vérifié pour les modifications et le contrôle des processus.',
+      mutating: 'Opération en cours…',
+      'interrupted-help':
+        'Une opération précédente a été interrompue. Prévisualisez une restauration pour récupérer cet environnement avant toute modification.',
+      'preview-restore': 'Prévisualiser la restauration',
+      'process-status': 'État du processus',
+      'refresh-process': 'Actualiser l’état du processus',
+      'write-blocked':
+        'Vérifiez l’état du processus de l’instance sélectionnée avant de continuer.',
+      'review-apply': 'Vérifier et appliquer',
+      'review-restore': 'Vérifier et restaurer',
+      'read-error':
+        'Impossible de lire cet environnement. Relancez la recherche ou vérifiez le chemin personnalisé.',
+      'backup-state': 'Sauvegarde et récupération',
+      'preview-ready': 'Aperçu prêt. Vérifiez l’opération avant de confirmer.',
+      action: 'Action',
+      'backup-id': 'Identifiant de sauvegarde',
+      'backup-create': 'Créée à l’application de la modification',
+      'backup-unavailable': 'Indisponible',
+      signature: 'Signature',
+      lifecycle: 'Contrôle du processus',
+      'confirm-process': 'Cette action concerne uniquement l’instance sélectionnée.',
+      'confirm-write':
+        'L’instance sélectionnée sera arrêtée si elle est en cours d’exécution. La modification sera écrite et vérifiée.',
+      'confirm-restore':
+        'La restauration peut se limiter à mettre à jour le journal de récupération. Si des fichiers doivent être restaurés, l’instance sélectionnée sera arrêtée si elle est en cours d’exécution.',
+      'restart-option': 'Démarrer l’instance sélectionnée après une écriture réussie',
+      'restart-plan': 'L’instance sélectionnée sera démarrée après vérification de l’écriture.',
+      'leave-stopped-plan': 'Si l’instance est arrêtée pour l’écriture, elle restera arrêtée.',
+      'operation-result': 'Résultat de l’opération',
+      'unknown-outcome':
+        'Impossible de confirmer le résultat de l’action « {{action}} ». Relancez la recherche, puis inspectez l’environnement et l’état du processus avant de réessayer.',
+      'write-effect': 'Effet sur les fichiers de l’environnement',
+      'rollback-result': 'Résultat de la récupération',
+      'restart-result': 'Résultat du redémarrage',
+      'operation-id': 'Identifiant d’opération',
+      'recovery-location': 'Emplacement de récupération',
+      'rollback-error': 'La récupération a échoué ({{reason}}).',
+      'recovery-required':
+        'Une récupération est nécessaire. Inspectez l’environnement et consultez les détails de récupération avant de réessayer.',
+      'restart-failed-help':
+        'Actualisez l’état du processus avant de tenter de redémarrer l’instance sélectionnée.',
+      'fresh-preview':
+        'Relancez la recherche avant toute autre action. Préparez un nouvel aperçu avant d’appliquer une modification ou de restaurer l’environnement.',
+      backups: {
+        'not-inspected': 'Non vérifiée',
+        none: 'Aucune sauvegarde',
+        available: 'Sauvegarde disponible',
+        interrupted: 'Récupération requise',
+      },
+      actions: {
+        apply: 'Appliquer la modification',
+        restore: 'Restaurer',
+        stop: 'Arrêter l’instance',
+        start: 'Démarrer l’instance',
+      },
+      signatures: {
+        'not-required': 'Non requise',
+        unsupported: 'Non prise en charge',
+      },
+      lifecycles: {
+        'selected-instance': 'Instance sélectionnée uniquement',
+        unsupported: 'Non pris en charge',
+      },
+      'process-states': {
+        running: 'En cours d’exécution',
+        stopped: 'Arrêté',
+        unknown: 'Inconnu',
+        unsupported: 'Non pris en charge',
+      },
+      outcomes: {
+        applied: 'Modification appliquée',
+        restored: 'Environnement restauré',
+        'already-current': 'Déjà dans l’état demandé',
+        failed: 'Échec de l’opération',
+      },
+      effects: {
+        none: 'Aucune modification',
+        committed: 'Modification enregistrée',
+        'rolled-back': 'Modification annulée',
+        uncertain: 'Impossible de confirmer l’état des fichiers',
+      },
+      recoveries: {
+        'not-needed': 'Non nécessaire',
+        verified: 'Récupération vérifiée',
+        failed: 'Échec de la récupération',
+      },
+      restarts: {
+        'not-requested': 'Non demandé',
+        'not-attempted': 'Non tenté',
+        verified: 'Démarrage vérifié',
+        failed: 'Échec du démarrage',
+      },
+      failures: {
+        'selection-expired': 'La sélection a expiré. Relancez la recherche.',
+        'stale-target': 'L’environnement a changé après l’inspection. Relancez la recherche.',
+        'unsupported-target': 'Cet environnement ne prend pas en charge l’action demandée.',
+        'unavailable-preview': 'L’aperçu est indisponible. Préparez un nouvel aperçu.',
+        busy: 'Une autre opération est en cours.',
+        'process-state-unknown':
+          'Impossible de vérifier l’état du processus de l’instance sélectionnée.',
+        'stop-failed': 'Impossible d’arrêter l’instance sélectionnée.',
+        'write-failed': 'Impossible d’écrire la modification.',
+        'verification-failed': 'Impossible de vérifier la modification.',
+        'backup-invalid': 'Impossible de valider la sauvegarde.',
+        'recovery-required': 'Récupérez cet environnement avant toute autre modification.',
+        'lifecycle-failed': 'Impossible de terminer l’action sur le processus.',
+      },
+      'before-hash': 'SHA-256 actuel',
+      'after-hash': 'SHA-256 prévisualisé',
+      'byte-range': 'Plage d’octets du code source',
+      'native-payload': 'Charge utile Bun (Mach-O arm64)',
+      'native-module-count': 'Modules intégrés',
+      'native-entry-point': 'Point d’entrée intégré',
+      'native-payload-range': 'Octets {{start}} à {{end}} (borne supérieure exclue)',
+      'native-payload-scope':
+        'Inspection uniquement. Le conteneur a été détecté. Le paquet et la fonction JavaScript restent à vérifier.',
+      title: 'Runtime Claude Cowork',
+      description:
+        'Inspectez les runtimes locaux et prévisualisez les modifications sans changer les fichiers ni les processus.',
+      'history-note':
+        'La politique 8k concerne le minimum d’historique récent conservé lors de la compression, pas la limite totale du prompt ou du contexte du modèle.',
+      'custom-path': 'Chemin du runtime personnalisé (facultatif)',
+      'path-help':
+        'Laissez vide pour analyser les emplacements macOS habituels. Sur les autres plateformes, indiquez un fichier ou un dossier. Jusqu’à 32 résultats.',
+      scan: 'Rechercher les runtimes',
+      targets: 'Choisir un runtime',
+      working: 'Lecture du runtime…',
+      empty: 'Aucun runtime trouvé. Essayez un chemin de fichier ou de dossier personnalisé.',
+      state: 'État détecté',
+      version: 'Version',
+      matches: 'Fonctions correspondantes',
+      'read-only':
+        'Cette section est en lecture seule. Application, restauration et contrôle des processus indisponibles.',
+      inspect: 'Actualiser l’inspection',
+      preview: 'Prévisualiser',
+      error:
+        'Impossible d’inspecter ce runtime. Relancez la recherche ou vérifiez le chemin personnalisé.',
+      states: {
+        original: 'Politique d’origine',
+        'legacy-return0': 'Ancienne politique de retour à zéro',
+        'legacy-35k': 'Ancienne politique 35k',
+        'current-8k': 'Politique 8k détectée',
+        unsupported: 'Runtime non reconnu',
+        ambiguous: 'Plusieurs correspondances',
+        unreadable: 'Runtime illisible',
+      },
+      reasons: {
+        'windows-recipe-unverified':
+          'La procédure du paquet Windows n’est pas vérifiée. Inspection uniquement, sans modification ni contrôle des processus.',
+        'native-payload-unverified':
+          'La prise en charge du contenu natif n’est pas vérifiée. Modification et contrôle des processus indisponibles.',
+        'bundle-recovery-unverified':
+          'La restauration et la signature du bundle ne sont pas vérifiées. Modification et contrôle des processus indisponibles.',
+        'package-ownership-unverified':
+          'L’identité du paquet et la propriété des processus ne sont pas vérifiées. Modification et contrôle des processus indisponibles.',
+      },
+      previews: {
+        ready:
+          'Prévisualisation prête. Cette section reste en lecture seule, aucune modification appliquée.',
+        'inspection-only':
+          'Une modification du code source est visible, mais ce paquet ne peut pas être modifié. Aucun changement appliqué.',
+        'already-current':
+          'La politique 8k est déjà présente dans le code source. Cela ne confirme ni la prise en charge du paquet ni la réussite d’une opération.',
+        unavailable: 'Aucune prévisualisation sûre disponible. Aucun changement appliqué.',
+      },
+    },
     'service-unavailable':
       'Impossible d’ouvrir ou d’enregistrer les paramètres pour le moment. Réessayez. Si le problème persiste, fermez puis rouvrez Antigravity Manager.',
     'service-retry': 'Réessayer',
@@ -551,6 +806,33 @@ const fr = {
       enabled: 'Activer le préchauffage hebdomadaire',
       groups: 'Groupes de quotas à préchauffer',
       group: { claude: 'Groupes de quotas Claude', gemini: 'Groupes de quotas Gemini' },
+    },
+    thinkingBudget: {
+      title: 'Budget de réflexion',
+      description:
+        'Choisissez qui décide de la durée de réflexion du modèle, et le budget de chaque niveau.',
+      controlSource: 'Source de contrôle',
+      controlSourceHint:
+        'La passerelle applique les budgets ci-dessous. Le client transmet le budget ou le niveau effort de la requête.',
+      gatewayHint:
+        'Saisissez -1 ou un budget positif. Pour Flash Low et Medium, -1 utilise le budget par défaut ; les autres champs conservent la réflexion adaptative. La source et les budgets sont appliqués ensemble à l’enregistrement.',
+      clientHint:
+        'La requête décide de son propre budget de réflexion ou niveau effort. Les budgets de passerelle ci-dessous ne sont pas appliqués.',
+      adaptiveHint: '-1 laisse le modèle décider',
+      'flash-low-default-hint': '-1 utilise le budget Flash Low par défaut de 1000 tokens',
+      'flash-medium-default-hint': '-1 utilise le budget Flash Medium par défaut de 4000 tokens',
+      invalid: 'Saisissez -1 ou un entier de 1 à 131072. Corrigez les valeurs 0 enregistrées.',
+      'configuration-invalid':
+        'Ces valeurs de budget de réflexion ont été refusées. Saisissez -1 ou un entier de 1 à 131072.',
+      source: { gateway: 'Passerelle', client: 'Client' },
+      family: { flash: 'Gemini Flash', pro: 'Gemini Pro', claude: 'Claude' },
+      level: {
+        low: 'Bas',
+        medium: 'Moyen',
+        high: 'Élevé',
+        tiered: 'Progressif',
+        default: 'Par défaut',
+      },
     },
     title: 'Parametres',
     description: 'Gerez les preferences de l application.',
@@ -576,6 +858,10 @@ const fr = {
       light: 'Clair',
       dark: 'Sombre',
     },
+    'interface-zoom': 'Zoom de l’interface',
+    'appearance-saving': 'Enregistrement de la préférence…',
+    'appearance-save-failed': 'Impossible d’enregistrer la préférence.',
+    'appearance-retry': 'Réessayer',
     language: {
       title: 'Langue',
       description: 'Selectionnez votre langue preferee.',
@@ -588,10 +874,7 @@ const fr = {
       portuguese: 'Portugais (Brésil)',
       japanese: 'Japonais',
     },
-    about: {
-      title: 'A propos',
-      description: 'Informations sur l application.',
-    },
+    about: { title: 'A propos', description: 'Informations sur l application.' },
     cache: {
       title: 'Cache Antigravity',
       description:
@@ -609,7 +892,6 @@ const fr = {
       clearedDescription: '{{size}} Mo ont été supprimés des dossiers de cache Antigravity.',
       failedTitle: 'Échec du nettoyage du cache',
       notFoundTitle: 'Aucun cache Antigravity trouvé',
-
       'paths-failed': 'Impossible de trouver les emplacements du cache',
       'paths-retry-description': 'Réessayez avant de vider le cache.',
       'partial-title': 'Une partie du cache n’a pas été supprimée',
@@ -628,9 +910,7 @@ const fr = {
         title: 'Parametres enregistres',
         description: 'Votre configuration a ete mise a jour.',
       },
-      saveFailed: {
-        title: 'Erreur lors de l enregistrement des parametres',
-      },
+      saveFailed: { title: 'Erreur lors de l enregistrement des parametres' },
     },
     account: {
       'client-setup': 'Emplacement et lancement des clients',
@@ -760,7 +1040,7 @@ const fr = {
       searchPlaceholder: 'Rechercher des modeles...',
       showAll: 'Tout afficher',
       hideAll: 'Tout masquer',
-      reset: 'Reinitialiser par defaut',
+      reset: 'Rétablir les valeurs par défaut',
       save: 'Enregistrer les modifications',
       noModels: 'Aucun modele trouve',
       modelsShown: '{{visible}} sur {{total}} modeles visibles',
@@ -773,18 +1053,18 @@ const fr = {
       saving: 'Enregistrement...',
     },
     autoSwitchModels: {
-      title: 'Auto-Switch Models Config',
+      title: 'Règles de changement automatique de compte',
       description:
-        'Configure which models trigger auto-switch when depleted, and prioritize specific models when selecting the next active account.',
-      searchPlaceholder: 'Search models...',
-      noModels: 'No models found.',
-      noModelsFound: 'No models found.',
-      includeLabel: 'Include',
-      priorityLabel: 'Priority',
-      save: 'Save Config',
-      saving: 'Saving...',
-      saved: 'Auto-switch model configuration saved successfully.',
-      saveFailed: 'Failed to save auto-switch model configuration.',
+        'Choisissez les modèles dont les quotas peuvent déclencher un changement de compte et ceux à privilégier pour choisir le compte suivant.',
+      searchPlaceholder: 'Rechercher un modèle…',
+      noModels: 'Aucun modèle disponible.',
+      noModelsFound: 'Aucun modèle correspondant.',
+      includeLabel: 'Inclure',
+      priorityLabel: 'Priorité',
+      save: 'Enregistrer les règles',
+      saving: 'Enregistrement…',
+      saved: 'Les règles de changement automatique ont été enregistrées.',
+      saveFailed: 'Impossible d’enregistrer les règles de changement automatique.',
       noRestartTitle: 'Live Sync transparent (Sans redémarrage pour IDE/App)',
       noRestartDesc:
         'Synchronise les jetons directement dans le trousseau de clés du système sans fermer les fenêtres de l’IDE.',
@@ -796,7 +1076,7 @@ const fr = {
       title: 'Groupements de fournisseurs',
       description: 'Regrouper les modeles par fournisseur pour une meilleure organisation',
       enabled: 'Activer les groupements de fournisseurs',
-      models: '{{count}} modeles',
+      models: '{{count}} modèles',
       avgLabel: 'moy.',
       resetLabel: 'reset',
       overall: 'Global',
@@ -852,32 +1132,196 @@ const fr = {
     save: 'Enregistrer les parametres',
   },
   toast: {
-    backupSuccess: {
-      title: 'Succes',
-      description: 'Sauvegarde du compte creee avec succes.',
-    },
+    backupSuccess: { title: 'Succes', description: 'Sauvegarde du compte creee avec succes.' },
     backupError: {
       title: 'Erreur',
       description: 'Echec de la creation de la sauvegarde : {{error}}',
     },
-    switchSuccess: {
-      title: 'Succes',
-      description: 'Compte bascule avec succes.',
-    },
-    switchError: {
-      title: 'Erreur',
-      description: 'Echec du basculement de compte : {{error}}',
-    },
-    deleteSuccess: {
-      title: 'Succes',
-      description: 'Sauvegarde du compte supprimee avec succes.',
-    },
+    switchSuccess: { title: 'Succes', description: 'Compte bascule avec succes.' },
+    switchError: { title: 'Erreur', description: 'Echec du basculement de compte : {{error}}' },
+    deleteSuccess: { title: 'Succes', description: 'Sauvegarde du compte supprimee avec succes.' },
     deleteError: {
       title: 'Erreur',
       description: 'Echec de la suppression de la sauvegarde : {{error}}',
     },
   },
+  'client-config': {
+    'quick-no-models': 'Actualisez le quota des comptes pour trouver un modèle de texte.',
+    'quick-dsh-missing': 'Ouvrez une fois le profil Web de DSH pour le rendre disponible ici.',
+    'connections-title': 'Profils de connexion',
+    'connections-empty': 'Aucun profil enregistré.',
+    'add-connection': 'Ajouter une connexion',
+    'connection-unverified': 'Configuration gérée · à vérifier',
+    'save-and-preview': 'Enregistrer et prévisualiser',
+    'connection-removed': 'Connexion supprimée du client.',
+    'connection-saved': 'Enregistrée · non appliquée',
+    'connection-details': 'Détails',
+    'connection-details-name': 'Détails de {{name}}',
+    'connection-options': 'Options avancées de connexion',
+    'optional-default': 'Laissez vide pour conserver le modèle par défaut du client.',
+    'verify-in-traffic':
+      'Envoyez une requête depuis ce client, puis vérifiez le résultat dans Trafic.',
+    'open-traffic': 'Ouvrir Trafic',
+    'tools-title': 'Outils de développement',
+    'tool-connect': 'Connecter',
+    'tool-disconnect': 'Déconnecter',
+    'tool-disconnected': 'Non connecté',
+    'tool-status-unavailable': 'État de la connexion indisponible',
+    'tool-more': 'Autres actions pour {{name}}',
+    'tool-disconnect-description':
+      'Déconnecter toutes les connexions gérées de {{name}}. Les réglages indépendants restent en place.',
+    'tool-revoke-description':
+      'Les requêtes utilisant la clé de connexion OpenCode actuelle seront refusées.',
+    'kimi-code': 'Kimi Code',
+    'qwen-code': 'Qwen Code',
+    'gemini-cli': 'Gemini CLI',
+    pi: 'Pi',
+    'profiles-title': 'Profils de connexion',
+    'profiles-help':
+      'Enregistrez des connexions et références de clés indépendantes. L’enregistrement ne modifie pas le client. Prévisualisez avant d’appliquer.',
+    'profile-new': 'Nouveau profil',
+    'profile-name': 'Nom du profil',
+    'profile-client': 'Client',
+    'profile-credential': 'Source des identifiants',
+    'profile-key-keep': 'Conserver la clé de ce profil',
+    'profile-key-manager': 'Clé actuelle du proxy Manager',
+    'profile-key-opencode': 'Clé dédiée OpenCode existante',
+    'profile-key-client': 'Clé de la configuration actuelle du client',
+    'profile-save': 'Enregistrer le profil',
+    'profile-delete': 'Supprimer le profil enregistré',
+    'profile-provider-mode': 'Ce client accepte un fournisseur distinct pour ce profil.',
+    'profile-single-active':
+      'L’application change la connexion active du client. Les autres profils enregistrés restent disponibles.',
+    'profile-delete-help':
+      'Supprimer le profil « {{name}} » ? Retirez d’abord ses réglages appliqués au client.',
+    'profile-saved': 'Profil enregistré. Prévisualisez-le avant de l’appliquer au client.',
+    'profile-deleted': 'Profil enregistré supprimé.',
+    'profile-required-default': 'Choisissez un modèle par défaut dans la liste de ce client.',
+    'config-conflict':
+      'Les réglages ont changé ou n’appartiennent pas à Manager. Actualisez puis prévisualisez à nouveau.',
+    'config-invalid':
+      'Format de configuration ou de stockage non pris en charge. Conservez le fichier et vérifiez son format.',
+    'config-read-failed':
+      'Impossible de lire les réglages du client. Vérifiez les permissions et réessayez.',
+    'config-key-missing': 'Définissez la clé API du proxy Manager avant la synchronisation.',
+    'config-backup-failed':
+      'Impossible de vérifier ou de créer la sauvegarde privée requise. Vérifiez les permissions.',
+    'config-unavailable':
+      'Le gestionnaire de configuration est indisponible ou en cours d’arrêt. Réessayez lorsqu’il sera prêt.',
+    'config-home-missing': 'Définissez DSH_HOME côté serveur pour localiser le profil DSH voulu.',
+    'config-write-failed':
+      'L’écriture n’a pas pu être confirmée. Vérifiez le fichier client et sa sauvegarde avant de prévisualiser à nouveau.',
+    'dsh-store-key': 'Enregistrer une clé Manager dédiée dans DSH',
+    'dsh-store-key-help':
+      'Requiert le stockage natif DSH v1 déclaré dans ce profil. Les stockages personnalisés sont refusés. La clé reste côté serveur.',
+    'dsh-credential-retained':
+      'Les identifiants seront conservés car un autre profil peut les utiliser ou leur appartenance reste inconnue.',
+    'dsh-credential-remove':
+      'Supprimer les identifiants dédiés inchangés après vérification des autres profils.',
+    'dsh-default-restore': 'Restaurer le modèle par défaut précédent',
+    'client-description':
+      'Configurez le fournisseur {{name}} après aperçu. Son utilisation réelle reste à vérifier.',
+    'version-unknown': 'Programme trouvé ; version inconnue',
+    'client-read-failed':
+      'Lecture des paramètres impossible. Vérifiez la configuration puis réessayez.',
+    'discover-models': 'Activer la découverte des modèles',
+    'openclaw-version': 'Format de configuration OpenClaw',
+    'choose-version': 'Choisir v1 ou v2',
+    'version-help':
+      'Choisissez le format de votre version OpenClaw. Une version inconnue n’est pas devinée.',
+    activate: 'Définir ce fournisseur par défaut',
+    'default-model': 'Modèle par défaut',
+    'default-help': 'Le modèle par défaut doit figurer dans la liste sélectionnée.',
+    'backend-key':
+      'Le backend choisi fournit la clé Manager. Les autres secrets du client ne sont pas affichés.',
+    'saved-client': 'Configuration enregistrée. Rouvrez {{name}} et vérifiez une requête.',
+    'invalid-client': 'Vérifiez l’URL, les ID, le modèle par défaut et le format.',
+    'merge-models': 'Définir le mode global des modèles sur merge',
+    'merge-models-change': 'Cet aperçu définit le mode global des modèles sur merge.',
+    'dsh-description':
+      'Connectez un profil DSH existant à Manager. Une configuration enregistrée ne valide pas une requête réelle.',
+    profile: 'Profil',
+    protocol: 'Protocole',
+    'credential-reference': 'Variable d’environnement du secret',
+    'credential-reference-help':
+      'Indiquez le nom d’une variable DSH existante. Sa valeur secrète reste dans DSH.',
+    'model-ids': 'ID de modèles séparés par virgules ou lignes',
+    'profile-found': 'Profil trouvé',
+    'profile-missing': 'Profil introuvable',
+    'read-failed': 'Lecture impossible. Vérifiez DSH_HOME puis réessayez.',
+    'preview-save': 'Aperçu de la configuration',
+    'preview-remove': 'Aperçu du retrait',
+    'review-save': 'Vérifier la modification',
+    'review-remove': 'Vérifier le retrait du fournisseur géré',
+    'review-help':
+      'Seul le fournisseur géré change. Un fichier modifié après cet aperçu est refusé.',
+    confirm: 'Appliquer la modification vérifiée',
+    cancel: 'Annuler',
+    'no-change': 'Aucune modification nécessaire.',
+    saved: 'Configuration enregistrée. Vérifiez avec une nouvelle requête dans DSH.',
+    failed: 'Résultat non confirmé. Actualisez l’état et l’aperçu avant de réessayer.',
+    invalid: 'Vérifiez le profil, l’URL, le nom de variable et les ID de modèles.',
+    'receipt-failed':
+      'La configuration a changé mais son reçu de propriété n’a pas été enregistré. Vérifiez le profil avant de poursuivre.',
+  },
   cloud: {
+    'recommendation-target': 'Client cible de la recommandation',
+    'use-recommended-account': 'Utiliser le compte recommandé',
+    'no-target-recommendation': 'Aucun compte admissible pour ce client',
+    'recommendation-target-classic': 'Classic',
+    'project-id': {
+      title: 'ID du projet',
+      empty: 'Non défini',
+      help: 'Si Google renvoie un ID, il remplace la valeur enregistrée. Après effacement, la passerelle peut le retrouver au besoin.',
+      clear: 'Effacer',
+      fetch: 'Récupérer depuis Google',
+      save: 'Enregistrer',
+      loading: 'Chargement de l’ID du projet…',
+      'load-failed': 'Impossible de charger l’ID du projet.',
+      retry: 'Réessayer',
+      updating: 'Mise à jour de l’ID du projet…',
+      updated: 'ID du projet mis à jour.',
+      conflict: 'Le compte ou son ID de projet a changé. La valeur actuelle a été rechargée.',
+      'fetch-failed': 'Impossible de récupérer un ID de projet depuis Google.',
+      'update-failed': 'Impossible de mettre à jour l’ID du projet.',
+    },
+    'pool-summary': {
+      title: 'Quota du pool de comptes',
+      'enabled-normal': 'Activés et normaux',
+      'all-normal': 'Tous les comptes normaux, désactivés inclus',
+      disabled: 'Désactivés manuellement',
+      exceptions: 'Vérification / OAuth / accès en erreur',
+      'unknown-health': 'État non confirmé',
+      'current-clients': 'Compte courant d’un client',
+      'rate-limited': 'Limitation de débit',
+      scope: 'Périmètre des statistiques',
+      'filtered-scope': 'Comptes du filtre de forfait actuel ({{visible}} sur {{total}}).',
+      denominator: '{{known}} connus / {{total}} comptes',
+      'model-family': 'Famille de modèles',
+      'five-hour': '5 h',
+      weekly: 'Semaine',
+      effective: 'Minimum effectif',
+      weighted: 'Pondération du forfait',
+      unknown: 'Inconnu',
+      empty: 'Aucun compte normal dans ce périmètre. Changez de périmètre ou vérifiez leur état.',
+      'no-families': 'Aucun quota de modèle visible connu pour ce périmètre.',
+      ready: 'Quota disponible',
+      exhausted: 'Épuisé',
+      cooling: 'Attente / limitation',
+      stale: 'Actualisation requise',
+      'weighted-note':
+        'Pourcentage restant uniquement. Ultra ×2, Pro ×1,5, Free ×1. Les forfaits inconnus sont exclus ; chaque variante ne compte qu’une fois par compte.',
+      'status-note':
+        'Le quota disponible dans cet instantané ne confirme pas l’accès par la passerelle. Une donnée absente reste inconnue. L’identité du client est distincte de l’éligibilité au proxy.',
+      'weighted-denominator':
+        '{{known}} comptes pondérés ; {{unknown}} exclus pour forfait inconnu',
+      zero: 'Aucun quota connu',
+      'unknown-value': '—',
+      snapshot: 'États de l’instantané',
+      'enabled-normal-count': 'Activés et normaux',
+      'account-details': 'Détails des comptes',
+      'missing-reset': 'Réinitialisation inconnue',
+    },
     'total-accounts': 'Total des comptes',
     title: 'Comptes',
     description: 'Gérez vos comptes Google Gemini.',
@@ -1071,15 +1515,10 @@ const fr = {
     recommendation: {
       badge: 'Prochain recommandé',
       description: 'Sélectionné automatiquement à partir du dernier quota {{context}} récupéré.',
-      context: {
-        overall: 'global',
-        claude: 'Claude',
-        pro3: 'Gemini Pro',
-        flash: 'Gemini Flash',
-      },
+      context: { overall: 'global', claude: 'Claude', pro3: 'Gemini Pro', flash: 'Gemini Flash' },
     },
     authDialog: {
-      'manual-sign-in': 'Saisir un code manuellement',
+      'manual-sign-in': 'Coller un code ou une adresse de retour',
       'waiting-for-browser':
         'Terminez la connexion dans votre navigateur. Cette fenêtre se mettra à jour automatiquement.',
       title: 'Ajouter un compte Google',
@@ -1088,10 +1527,10 @@ const fr = {
       oauthClient: 'Méthode de connexion',
       oauthClientPlaceholder: 'Choisir une méthode de connexion',
       openLogin: 'Ouvrir la page de connexion',
-      authCode: 'Code d autorisation',
-      placeholder: 'Collez le code commencant par 4/...',
+      authCode: 'Code ou adresse de retour',
+      placeholder: 'Collez le code ou l’adresse de retour complète du navigateur',
       instruction:
-        'Si la connexion ne se termine pas automatiquement, collez ici le code du navigateur.',
+        'Démarrez la connexion ci-dessus, puis collez son code ou son adresse de retour. L’adresse doit contenir le state de cette connexion.',
       verify: 'Verifier et ajouter',
     },
     localImport: {
@@ -1104,6 +1543,7 @@ const fr = {
         'antigravity-keyring': 'Connexions enregistrées par le système',
         'antigravity-classic-db': 'Comptes enregistrés dans Antigravity',
         'antigravity-ide-db': 'Comptes enregistrés dans Antigravity IDE',
+        'antigravity-agy-file': 'Connexion enregistrée dans Antigravity CLI',
       },
       validationErrors: {
         ...en.cloud.localImport['validationErrors'],
@@ -1139,9 +1579,7 @@ const fr = {
         'session-consumed':
           'Ces résultats ont déjà été utilisés. Relancez la recherche pour importer d’autres comptes.',
       },
-
       title: 'Importer depuis cet ordinateur',
-
       trigger: 'Importer depuis cet ordinateur',
     },
     card: {
@@ -1200,7 +1638,27 @@ const fr = {
       detailedQuota: 'Quota détaillé',
       quotaGroupUnknown: 'Groupe de quota',
       quotaStatus: 'Quota restant',
-      gemini3Ready: 'Gemini 3 Pret',
+      cycleUsage: 'Utilisation locale du cycle actuel',
+      cycleUsageLoading: 'Chargement de l’utilisation conservee…',
+      cycleUsageQueryFailed: 'Echec de la requete d’utilisation pour {{group}}',
+      cycleUsageTokens: 'Connus : {{count}} tokens',
+      'cycle-usage-cached-tokens': 'Cache : {{count}} tokens',
+      'cycle-usage-cached-incomplete': 'Usage du cache indisponible pour {{count}} requêtes',
+      cycleUsageLocal: 'tentatives locales conservées',
+      cycleUsageRequests: '{{count}} requêtes avec usage complet',
+      cycleUsageIncomplete:
+        '{{missing}} requêtes avec usage des tentatives incomplet · {{ambiguous}} requêtes ambiguës',
+      'cycle-usage-scope':
+        'Par début de tentative · enregistrements locaux uniquement · hors total de facturation',
+      'cycle-usage-verified-google-account':
+        'Compte Google vérifié · ajouts précédents liés inclus',
+      'cycle-usage-current-account-only':
+        'Ajout et identifiants actuels uniquement · ajouts précédents non liés',
+      'cycle-usage-known-subtotal':
+        'Uniquement les sous-totaux réels connus des tentatives ; les requêtes incomplètes peuvent aussi contribuer aux tokens.',
+      'cycle-usage-legacy-ambiguity':
+        'Les anciennes requêtes non attribuées peuvent être comptées selon leur heure de début parmi les requêtes ambiguës uniquement ; leur usage est exclu.',
+      gemini3Ready: 'Pret pour Gemini 3',
       groupGoogleGemini: 'Google Gemini',
       groupAnthropicClaude: 'Anthropic Claude',
       proxy: 'Proxy',
@@ -1212,6 +1670,9 @@ const fr = {
       'proxy-replace-placeholder': 'Saisir une nouvelle adresse proxy',
       'proxy-remove': 'Supprimer le proxy',
       'proxy-save-failed': "Impossible d'enregistrer le proxy",
+      'proxy-routing-save-failed': "Impossible d'enregistrer le routage du proxy",
+      'proxy-priority': 'Priorité du proxy (1–100)',
+      'proxy-enabled': 'Utiliser ce compte pour les requêtes proxy',
       noProxy: 'Aucun proxy',
       aiCredits: 'Credits IA',
       aiCreditsValue: '{{amount}} credits',
@@ -1251,7 +1712,6 @@ const fr = {
       deleteVersionSuccess: 'Identite historique supprimee',
       openFolderSuccess: 'Stockage d identite ouvert',
       baseline: 'Informations d’origine',
-
       description:
         'Enregistrez les informations de l’appareil pour ce compte afin de les utiliser lors du changement de compte.',
       'load-failed': 'Impossible de lire les informations de l’appareil',
@@ -1320,15 +1780,14 @@ const fr = {
           'login-failed': 'Impossible d ajouter le compte. Reessayez.',
           'proxy-configuration-invalid':
             'Enregistrez une adresse de proxy valide ou désactivez le proxy dans les paramètres, puis réessayez de vous connecter.',
+          'invalid-manual-input':
+            'Le code ou l’adresse de retour est invalide ou provient d’une autre connexion. Copiez à nouveau les données de la connexion actuelle et réessayez.',
         },
       },
       quotaRefreshed: 'Quota actualise',
       refreshFailed: 'Echec de l actualisation du quota',
       pollFailed: 'Echec de l interrogation du quota pour tous les comptes',
-      switched: {
-        title: 'Compte bascule !',
-        description: 'Redemarrage d Antigravity...',
-      },
+      switched: { title: 'Compte bascule !', description: 'Redemarrage d Antigravity...' },
       switchFailed: 'Echec du basculement de compte',
       switchFailureCodes: {
         'account-not-found': "Ce compte n'est plus disponible.",
@@ -1391,6 +1850,8 @@ const fr = {
       quotaFlash: 'Quota Flash',
     },
     exportImport: {
+      'transfer-menu': 'Importer / Exporter',
+      'import-from-file': 'Importer depuis un fichier',
       'file-errors': {
         'file-too-large':
           'Le fichier choisi est trop volumineux. Choisissez une sauvegarde plus petite.',
@@ -1427,7 +1888,6 @@ const fr = {
       invalidJson: 'Format de fichier JSON invalide',
       readFileFailed: 'Echec de la lecture du fichier',
     },
-
     feedback: {
       'loading-title': 'Lecture de vos comptes',
       'loading-description':
@@ -1439,6 +1899,20 @@ const fr = {
     },
   },
   proxy: {
+    workspace: {
+      'port-invalid': 'Utilisez un numéro de port entier entre 1024 et 65535.',
+      'timeout-invalid': 'Saisissez un délai entre 1 et 3600 secondes.',
+      title: 'Passerelle',
+      settings: 'Paramètres de la passerelle',
+      back: 'Retour aux connexions',
+      manual: 'Configuration manuelle',
+      listener: 'Écoute et accès',
+      lan: 'Réseau local',
+      local: 'Cet ordinateur uniquement',
+      models: 'Modèles et règles des requêtes',
+      upstream: 'Réseau amont et fonctions expérimentales',
+      records: 'Journalisation et conservation',
+    },
     'advanced-options': 'Autres réglages du service',
     'advanced-description': 'Choix des comptes, instructions communes et compatibilité des outils.',
     'account-strategy': {
@@ -1451,6 +1925,9 @@ const fr = {
         'Répartit les nouvelles conversations entre les comptes disponibles. Une conversation existante conserve son compte tant que celui-ci reste disponible.',
       'account-first-description':
         'Pour chaque modèle, conserve le même compte. Change de compte si son quota est épuisé, si son utilisation est temporairement limitée ou si la requête ne peut pas être traitée. Les conversations existantes conservent leur compte disponible.',
+      'weekly-priority': 'Prioriser les quotas hebdomadaires qui expirent bientôt',
+      'weekly-priority-description':
+        'Pour les nouvelles sessions, privilégie les comptes admissibles dont le quota hebdomadaire est connu et se renouvelle dans les 24 heures. Les sessions existantes et les comptes explicitement préférés restent prioritaires.',
       'client-description':
         'Ce réglage ne change pas le compte connecté dans Antigravity, IDE ou CLI. Le changement automatique dans les clients se règle sur la page Comptes.',
     },
@@ -1612,6 +2089,18 @@ const fr = {
       start: 'Demarrer le service',
       stop: 'Arreter le service',
       start_failed: 'Echec du demarrage du service',
+      'status-unavailable': 'Impossible de lire l’état du service',
+      'persistence-diagnostic': 'Référence du diagnostic : {{diagnosticId}}',
+      'retry-save-failed':
+        'Le choix de démarrage n’a pas été enregistré. Réessayez l’enregistrement.',
+      'stop-failed': 'Impossible d’arrêter le proxy.',
+      'operation-failed':
+        'Résultat de l’opération inconnu. Vérifiez l’état du proxy avant de réessayer.',
+      'persistence-failed-started':
+        'Le proxy a démarré, mais le paramètre du prochain démarrage n’a pas été enregistré.',
+      'persistence-failed-stopped':
+        'Le proxy est arrêté, mais le paramètre du prochain démarrage n’a pas été enregistré.',
+      'retry-save': 'Réessayer l’enregistrement',
       port_in_use_title: 'Port deja utilise',
       port_in_use_description:
         'Le port {{port}} est deja utilise par un autre processus. Fermez ce processus, ou modifiez le port d ecoute du proxy API dans les parametres puis reessayez.',
@@ -1639,15 +2128,86 @@ const fr = {
       'global-system-prompt-character-count': '{{count}} caractères',
       'global-system-prompt-long-warning':
         'Plus de 2 000 caractères laissent moins de place à l’historique de conversation. Pensez à raccourcir ces consignes.',
+      compaction: {
+        'trusted-sources': 'Périmètres de clés approuvés',
+        'trust-desc':
+          'Sélectionnez la clé API actuelle du proxy pour la coordination Cowork. Tous les clients partageant cette clé sont inclus. Utilisez une clé dédiée pour exclure les autres clients de ce périmètre. Seule une empreinte est enregistrée. Le périmètre reste actif uniquement tant que cette clé est la clé actuelle du proxy.',
+        'trust-current-key': 'Approuver la clé actuelle du proxy',
+        'key-required':
+          'Définissez une clé API du proxy ci-dessus avant de sélectionner un périmètre.',
+        'no-trusted-sources': 'Aucun périmètre approuvé. La coordination Cowork est inactive.',
+        'revoke-key': 'Révoquer la confiance',
+        'revoke-key-label': 'Révoquer la confiance pour l’empreinte {{digest}}',
+        'trust-limit': '32 périmètres enregistrés. Révoquez-en un avant tout ajout.',
+        saving: 'Enregistrement des paramètres Cowork…',
+        'save-failed': 'Impossible d’enregistrer les paramètres Cowork. Réessayez.',
+        retry: 'Réessayer',
+        title: 'Compression du contexte Cowork',
+        description:
+          'Coordonne le résumé et le remplacement de l’historique avec Cowork ; les sessions ordinaires ne sont jamais tronquées automatiquement.',
+        auto: 'Activer la coordination automatique',
+        'auto-desc':
+          'Seules les requêtes Cowork identifiées dépassant le seuil reçoivent la réponse de contrôle locale.',
+        manual: 'Activer la coordination /compact',
+        'manual-desc':
+          'Autorise une commande Cowork /compact explicite à démarrer le flux géré par le client.',
+        threshold: 'Seuil automatique (tokens d’entrée estimés)',
+        'threshold-desc':
+          '200 000 par défaut ; le seuil effectif inclut aussi les coûts fixes système et outils.',
+      },
       local_access: 'Acces reseau local :',
       select_ip: 'Selectionner une IP',
       no_token_warning: 'La cle API n est pas definie. L acces est ouvert a tout le monde !',
+      lan_access: 'Autoriser l acces au reseau local',
+      lan_access_desc: 'Lier le proxy au reseau local. Une cle API est requise.',
+      ip_access_title: 'Regles d acces IP',
+      ip_access_desc:
+        'Limitez les requetes de modele, WebSocket et administration publique par adresse client.',
+      ip_filter_mode: 'Mode de filtrage IP',
+      ip_filter_off: 'Desactive',
+      ip_filter_allowlist: 'Liste autorisee uniquement',
+      ip_filter_blocklist: 'Liste bloquee',
+      ip_filter_both: 'Liste autorisee et bloquee',
+      ip_allowlist: 'IP ou CIDR autorises',
+      ip_blocklist: 'IP ou CIDR bloques',
+      trusted_proxy_cidrs: 'CIDR des proxys de confiance',
+      allowlist_precedence: 'Priorite a la liste autorisee',
+      allowlist_precedence_desc:
+        'Une adresse autorisee peut contourner une regle de blocage correspondante.',
       show_key: 'Afficher',
       hide_key: 'Masquer',
     },
     mapping: {
+      'alias-rules': 'Alias de modèles',
+      'alias-rules-description':
+        'Choisissez une cible par nom demandé. Les alias masqués acceptent les requêtes. Les cibles automatiques utilisent les modèles admissibles de vos comptes.',
+      'no-rules': 'Aucun alias personnalisé. Ajoutez une règle.',
+      'requested-model': 'Nom du modèle demandé',
+      'target-model': 'Modèle cible',
+      'routing-strategy': 'Stratégie de routage',
+      'fixed-target': 'Modèle fixe',
+      'auto-flash': 'Flash disponible, réflexion faible',
+      'auto-flash-description':
+        'Utilise un modèle Flash admissible avec une réflexion faible. Sans modèle admissible, renvoie une erreur de disponibilité.',
+      'auto-opus': 'Dernier Opus disponible',
+      'auto-opus-description': 'Privilégie Opus 5.5, puis 4.6, sans quitter la famille Opus.',
+      'auto-opus-compat': 'Opus 4.7 en priorité',
+      'auto-opus-compat-description':
+        'Privilégie Opus 4.7, puis 4.6, puis 5.5 parmi les modèles admissibles.',
+      'route-enabled': 'Accepter les requêtes',
+      published: 'Afficher dans les listes de modèles',
+      'remove-rule': 'Supprimer la règle {{index}}',
+      'pattern-hidden': 'Les motifs et noms de stratégie ne figurent jamais dans les listes.',
+      'add-rule': 'Ajouter un alias',
+      'save-rules': 'Enregistrer les alias',
+      'saving-rules': 'Enregistrement…',
+      'discard-rules': 'Annuler les modifications',
+      'invalid-rules': 'Indiquez un nom demandé unique et une cible pour chaque règle.',
+      'save-failed': 'Échec de l’enregistrement. Vos modifications sont conservées ; réessayez.',
+      'rules-saved': 'Alias enregistrés.',
       title: 'Mappage des modeles',
-      description: 'Choisissez le modèle Gemini utilisé pour chaque demande de modèle Claude.',
+      description:
+        'Associez les noms demandés à des modèles fixes ou aux modèles admissibles de vos comptes.',
       maps_to: 'Mappe vers',
       restore: 'Restaurer les valeurs par defaut',
       'only-raw-quota-models': 'Afficher uniquement les modèles trouvés dans vos comptes',
@@ -1711,7 +2271,6 @@ const fr = {
       'success-title': 'Configuration OpenCode mise à jour',
       'error-title': 'Échec de la mise à jour OpenCode',
       'unknown-error': 'Erreur de configuration OpenCode inconnue',
-
       'choose-model-hint': 'Choisissez au moins un modèle pour continuer.',
       'config-retry-description':
         'Réessayez. Votre configuration enregistrée n’a pas été modifiée.',
@@ -1721,6 +2280,9 @@ const fr = {
       description: 'Exemples de commandes pour appeler le proxy API local.',
     },
     persistence: {
+      'successful-probes': 'Enregistrer les sondes réussies',
+      'successful-probes-description':
+        'Enregistrer les vérifications de santé et les interrogations du catalogue de modèles réussies. Les erreurs et les autres requêtes métier restent enregistrées lorsque l’historique est activé.',
       title: 'Request history and reasoning',
       description: 'Inspect bounded local records without slowing model traffic.',
       'audit-title': 'Historique des requêtes',
@@ -1731,9 +2293,33 @@ const fr = {
       dropped:
         '{{count}} enregistrements n’ont pas pu être sauvegardés ({{reason}}). Les requêtes ont continué normalement.',
       'disk-gib': 'Disk limit (GiB)',
-      'body-hours': 'Conservation du contenu complet (heures)',
-      'summary-days': 'Summary retention (days)',
+      'capacity-window':
+        'Les requêtes complètes sont conservées dans les limites de stockage et de nombre. Les plus anciennes requêtes terminées sont supprimées en premier ; les requêtes actives sont protégées.',
       'max-rows': 'Maximum rows',
+      'queue-records': 'Pending command limit (32–4,096)',
+      'queue-mib': 'Pending command bytes (16–64 MiB)',
+      'version-unavailable': 'Refresh or upgrade the owner before editing audit settings.',
+      'save-saving': 'Saving and applying settings…',
+      'save-applied': 'Settings saved and applied.',
+      maintenance: 'Entretien de l’historique : {{state}}',
+      'maintenance-running': 'en cours',
+      'maintenance-scheduled': 'planifié',
+      'maintenance-idle': 'en attente',
+      'maintenance-stopped': 'arrêté',
+      'maintenance-unknown': 'indisponible',
+      'reload-failed':
+        'Impossible d’actualiser les paramètres. Actualisez cette page avant de réessayer.',
+      'save-partial-failure':
+        'Réglages enregistrés, mais certains changements ne sont pas appliqués au service actif.',
+      'save-restart-required':
+        'Saved, but runtime application is incomplete. Check service status.',
+      'save-conflict': 'Settings changed elsewhere. Review refreshed settings before retrying.',
+      'save-failed': 'Save completion unconfirmed. Refresh and review before retrying.',
+      'invalid-number': 'Enter a finite number of at least {{min}}.',
+      'budget-current':
+        'Configured: {{disk}} MiB / {{rows}} requests. Queue: {{commands}} commands / {{queue}} MiB.',
+      'pressure-note':
+        'Reclamation is gradual and active captures/readers can delay it. The latest drop does not guarantee current write status.',
       'no-audit': 'No traffic records yet.',
       'audit-metadata': 'Détails des requêtes et tentatives vers le service de modèles',
       'audit-body-missing':
@@ -1754,7 +2340,40 @@ const fr = {
       'thought-title': 'Reasoning history',
       'thought-description': 'Save reasoning so later turns can continue the conversation.',
       sessions: '{{count}} sessions',
-      'hard-limit': 'Chaque conversation conserve au maximum 200 échanges et 64 MiB de contenu.',
+      'hard-limit':
+        'Memory cache: {{turns}} turns / {{memory}} MiB per session. Durable history has its own {{disk}} MiB disk budget and retention.',
+      'thought-cache-turns': 'Cached turns per session (10–10,000)',
+      'thought-cache-mib': 'Session cache limit (1–64 MiB)',
+      'thought-disk-mib': 'Reasoning disk budget (128–16,384 MiB)',
+      'thought-stats-unavailable': 'Reasoning statistics are unavailable.',
+      'thought-count-unknown': 'Saved record count unavailable',
+      'thought-records': '{{count}} saved records',
+      'thought-memory': 'Memory: {{records}} records / {{bytes}}',
+      'thought-tool-links': 'Recoverable tool links: {{records}}',
+      'thought-recovery-partial':
+        'Thought records were processed, but some recovery-history cleanup is unconfirmed. Refresh and check before another operation.',
+      'no-thought-records': 'No saved reasoning records in this page.',
+      'thought-record-pages': 'Reasoning history pages',
+      'history-page-complete': 'Page {{page}} · end of this history window',
+      'history-page-more': 'Page {{page}} · more records available',
+      'record-unavailable': 'This record is no longer available. Refresh the session.',
+      'thought-delete-receipt': 'Deleted {{sessions}} sessions and {{records}} records.',
+      'thought-delete-scope':
+        'Delete all retained reasoning records in session {{session}}? Other sessions are unaffected.',
+      'thought-mutation-uncertain':
+        'The operation could not be confirmed. History was refreshed; check it before trying again.',
+      'cancel-action': 'Cancel',
+      'thought-failures':
+        'Failures: {{reads}} reads / {{admission}} cold admissions / {{writes}} writes',
+      'thought-write-failure':
+        'Last persistence failure: {{reason}}. Current memory does not guarantee recovery after restart.',
+      'thought-session-capacity': 'No durable session slot available',
+      'thought-maintenance-active-sessions': 'Maintenance deferred to protect active requests.',
+      'thought-maintenance-checkpoint-busy': 'Maintenance paused for a pinned SQLite reader.',
+      'thought-maintenance-no-progress':
+        'Disk reclamation made no progress; further pressure deletion paused.',
+      'thought-maintenance-oversized-record':
+        'An old record exceeds the bounded cleanup budget; manual diagnosis is required.',
       'retention-days': 'Retention (days)',
       'max-sessions': 'Maximum sessions',
       oversized: 'Le contenu dépasse 64 MiB et n’a pas été enregistré en entier.',
@@ -1763,6 +2382,9 @@ const fr = {
       'copy-signature': 'Copy signature',
       'no-thought': 'No reasoning history yet.',
       'clear-thought': 'Clear reasoning history',
+      'clear-failed': 'Impossible de supprimer l’historique de raisonnement.',
+      'delete-failed': 'Impossible de supprimer cette session.',
+      'load-failed': 'Impossible de charger les sessions de raisonnement.',
       'repair-thought': 'Repair reasoning history',
       'confirm-clear': 'Confirmer la suppression',
       'confirm-repair': 'Confirmer la reparation',

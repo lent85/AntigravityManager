@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AccountLeaseService } from '@/modules/proxy-gateway/server/modules/account-lease/account-lease.service';
+import { AccountLeaseService } from '@/server/gateway/modules/account-lease/account-lease.service';
 import type {
   AccountLeaseAccountStore,
   AccountLeaseUpstream,
-} from '@/modules/proxy-gateway/server/modules/account-lease/interfaces/account-lease-adapters';
+} from '@/server/gateway/modules/account-lease/interfaces/account-lease-adapters';
 import type { CloudAccount } from '@/modules/cloud-account/types';
 
 describe('AccountLeaseService adapters', () => {
@@ -25,9 +25,13 @@ describe('AccountLeaseService adapters', () => {
 
     const accountStore: AccountLeaseAccountStore = {
       getAccounts: vi.fn().mockResolvedValue([account]),
-      getAccount: vi.fn().mockResolvedValue(account),
+      getAccount: vi.fn(async () => structuredClone(account)),
       updateToken: vi.fn().mockResolvedValue(undefined),
-      compareAndUpdateToken: vi.fn().mockResolvedValue(true),
+      compareAndUpdateToken: vi.fn(async (_id, _expected, token, guard) => {
+        guard?.(structuredClone(account));
+        account.token = structuredClone(token);
+        return true;
+      }),
       updateQuota: vi.fn().mockResolvedValue(undefined),
       mutateHealth: vi.fn(),
     };
@@ -51,6 +55,7 @@ describe('AccountLeaseService adapters', () => {
       expect.objectContaining({
         project_id: 'resolved-project',
       }),
+      expect.any(Function),
     );
   });
 });

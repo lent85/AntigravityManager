@@ -22,7 +22,7 @@ describe('GoogleAPIService project-context fallback policy', () => {
     vi.useRealTimers();
   });
 
-  it.each(['quota', 'credits'] as const)(
+it.each(['quota', 'credits'] as const)(
     'cancels %s without falling back or swallowing cancellation',
     async (operation) => {
       const started = Promise.withResolvers<AbortSignal>();
@@ -55,12 +55,12 @@ describe('GoogleAPIService project-context fallback policy', () => {
     },
   );
 
-  it('tries daily-prod before sandbox after the production endpoint is rate limited', async () => {
+  it.each([408, 429])('tries Sandbox after Daily returns retryable HTTP %i', async (status) => {
     const transport = vi
       .fn()
-      .mockResolvedValueOnce({ status: 429, text: async () => 'RESOURCE_EXHAUSTED' })
+      .mockResolvedValueOnce({ status, text: async () => 'temporary project-context failure' })
       .mockResolvedValueOnce(projectContext('daily-project'));
-    mockAxiosRequests(transport);
+    mockAxiosRequests(transport as unknown as MockHttpTransport);
     const { GoogleAPIService } = await import('@/modules/cloud-account/services/GoogleAPIService');
 
     await expect(
@@ -68,8 +68,8 @@ describe('GoogleAPIService project-context fallback policy', () => {
     ).resolves.toBe('daily-project');
 
     expect(transport.mock.calls.map(([url]) => url)).toEqual([
-      PROD_LOAD_PROJECT,
       DAILY_LOAD_PROJECT,
+      SANDBOX_LOAD_PROJECT,
     ]);
     for (const [, options] of transport.mock.calls) {
       expect(options.headers).not.toHaveProperty('X-Goog-Api-Client');
@@ -77,7 +77,7 @@ describe('GoogleAPIService project-context fallback policy', () => {
     }
   });
 
-  it('continues from daily-prod to sandbox for retryable HTTP failures', async () => {
+  it('continues Daily to Sandbox to Prod for retryable HTTP failures', async () => {
     const transport = vi
       .fn()
       .mockResolvedValueOnce({ status: 404, text: async () => 'NOT_FOUND' })
@@ -91,13 +91,15 @@ describe('GoogleAPIService project-context fallback policy', () => {
     ).resolves.toBe('sandbox-project');
 
     expect(transport.mock.calls.map(([url]) => url)).toEqual([
-      PROD_LOAD_PROJECT,
       DAILY_LOAD_PROJECT,
       SANDBOX_LOAD_PROJECT,
+      PROD_LOAD_PROJECT,
     ]);
   });
 
-  it('continues to daily-prod after a transport failure', async () => {
+  it('continues to Sandbox after a Daily transport failure', async () => {
+    const observedAt = 1_800_000_000_000;
+    vi.spyOn(Date, 'now').mockReturnValue(observedAt);
     const transport = vi
       .fn()
       .mockRejectedValueOnce(new Error('network unavailable'))
@@ -106,11 +108,53 @@ describe('GoogleAPIService project-context fallback policy', () => {
     const { GoogleAPIService } = await import('@/modules/cloud-account/services/GoogleAPIService');
 
     const context = GoogleAPIService.fetchProjectContext('access-token', 'http://127.0.0.1:8080');
-    await expect(context).resolves.toEqual({ projectId: 'daily-project' });
+    await expect(context).resolves.toEqual({
+      projectId: 'daily-project',
+      subscriptionTier: 'free',
+      subscription: {
+        refresh_status: 'succeeded',
+        checked_at: observedAt,
+        observation: { status: 'missing', tier: 'free', source: 'none', observed_at: observedAt },
+      },
+    });
     expect(transport.mock.calls.map(([url]) => url)).toEqual([
-      PROD_LOAD_PROJECT,
       DAILY_LOAD_PROJECT,
+      SANDBOX_LOAD_PROJECT,
     ]);
+  });
+
+  it('shares one deadline across project endpoint attempts', async () => {
+    let now = 1_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const transport = vi.fn(async () => {
+      now += 30_001;
+      throw new Error('first endpoint timed out');
+    });
+    mockAxiosRequests(transport);
+    const { GoogleAPIService } = await import('@/modules/cloud-account/services/GoogleAPIService');
+
+    const request = GoogleAPIService.fetchProjectContext('access-token', 'http://127.0.0.1:8080');
+    await expect(request).rejects.toThrow(
+      'Google API request deadline exceeded during project-context lookup',
+    );
+
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
+  it('shares the quota request deadline with its project-context lookup', async () => {
+    let now = 1_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const transport = vi.fn(async () => {
+      now += 30_001;
+      return projectContext('project-1');
+    });
+    mockAxiosRequests(transport as unknown as MockHttpTransport);
+    const { GoogleAPIService } = await import('@/modules/cloud-account/services/GoogleAPIService');
+
+    await expect(GoogleAPIService.fetchQuota('access-token')).rejects.toThrow(
+      'Google API request deadline exceeded during quota lookup',
+    );
+    expect(transport).toHaveBeenCalledOnce();
   });
 
   it.each([400, 401, 403])('does not retry a permanent status %i', async (status) => {

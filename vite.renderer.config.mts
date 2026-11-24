@@ -1,6 +1,6 @@
 import { defineConfig, loadEnv, normalizePath, transformWithEsbuild, type Plugin } from 'vite';
 import { createRequire } from 'node:module';
-import fs from 'fs';
+import fs from 'node:fs';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
@@ -244,6 +244,30 @@ const clarityBuildEnvKeys = ['CLARITY_PROJECT_ID', 'NODE_ENV'] as const;
 const REACT_SCAN_ENABLED_ENV = 'ANTIGRAVITY_ENABLE_REACT_SCAN';
 const REACT_SCAN_ENTRY = '/src/modules/app-shell/diagnostics/react-scan.ts';
 
+function getDevelopmentWatchIgnores(root: string): string[] {
+  const directories = new Set([
+    'out',
+    'dist',
+    'build',
+    'artifacts',
+    'coverage',
+    'playwright-report',
+    'test-results',
+  ]);
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    if (
+      entry.isDirectory() &&
+      (entry.name.startsWith('.') || fs.existsSync(path.join(root, entry.name, '.git')))
+    ) {
+      directories.add(entry.name);
+    }
+  }
+  return [...directories].flatMap((directory) => {
+    const absolute = normalizePath(path.join(root, directory));
+    return [absolute, `${absolute}/**`];
+  });
+}
+
 /**
  * React Scan has to be an independently injected development entry. Importing
  * it from the renderer would make the diagnostic available to every build
@@ -285,7 +309,12 @@ export default defineConfig(({ mode }) => {
 
   return {
     // Keep the development listener reachable when IPv6 loopback is unavailable.
-    server: { host: '127.0.0.1' },
+    server: {
+      host: '127.0.0.1',
+      ...(mode === 'development'
+        ? { watch: { ignored: getDevelopmentWatchIgnores(process.cwd()) } }
+        : {}),
+    },
     plugins: [
       resolvePathPlugin(),
       ...(shouldEnableSentry

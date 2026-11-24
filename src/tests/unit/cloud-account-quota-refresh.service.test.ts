@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CloudAccountRepo } from '@/modules/cloud-account/persistence/cloudHandler';
 import type { CloudAccount } from '@/modules/cloud-account/types';
 import {
@@ -12,8 +12,8 @@ import {
 } from '@/modules/cloud-account/services/CloudAccountRefreshService';
 import { refreshAccountQuotaCore } from '@/modules/cloud-account/services/cloud-account-quota-refresh.service';
 import { clearValidationHealthAfterSuccessfulProbe } from '@/modules/cloud-account/services/CloudAccountHealthService';
-import { proxyModelAvailabilityStore } from '@/modules/proxy-gateway/server/shared/services/model-availability.service';
-import { AccountLeaseService } from '@/modules/proxy-gateway/server/modules/account-lease/account-lease.service';
+import { proxyModelAvailabilityStore } from '@/server/gateway/shared/services/model-availability.service';
+import { AccountLeaseService } from '@/server/gateway/modules/account-lease/account-lease.service';
 import { CloudAccountHealthSchema } from '@/modules/cloud-account/types';
 import { CloudAccountHealthService } from '@/modules/cloud-account/services/CloudAccountHealthService';
 
@@ -26,13 +26,14 @@ vi.mock('@/modules/cloud-account/services/CloudAccountHealthService', () => ({
   quarantineAccountInActiveLeaseCache: vi.fn(async (id) => leaseBridge.quarantine(id)),
 }));
 vi.mock(
-  '@/modules/proxy-gateway/server/shared/services/model-availability.service',
-  async (importOriginal) => ({
-    ...(await importOriginal<
-      typeof import('@/modules/proxy-gateway/server/shared/services/model-availability.service')
-    >()),
-    proxyModelAvailabilityStore: { clearCapabilityFailures: vi.fn() },
-  }),
+  '@/server/gateway/shared/services/model-availability.service',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@/server/gateway/shared/services/model-availability.service')
+      >();
+    return { ...actual, proxyModelAvailabilityStore: new actual.ModelAvailabilityService() };
+  },
 );
 vi.mock('@/shared/logging/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -49,6 +50,7 @@ function account(expiryTimestamp = Math.floor(Date.now() / 1000) + 3600): CloudA
       expires_in: 3600,
       expiry_timestamp: expiryTimestamp,
       token_type: 'Bearer',
+      project_id: 'quota-project',
     },
     quota: {
       models: { gemini: { percentage: 20, resetTime: 'later' } },
@@ -62,6 +64,9 @@ function account(expiryTimestamp = Math.floor(Date.now() / 1000) + 3600): CloudA
 }
 
 describe('Node-safe cloud account quota refresh', () => {
+  afterEach(() => {
+    proxyModelAvailabilityStore.clearAccount('quota-account');
+  });
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -82,6 +87,7 @@ describe('Node-safe cloud account quota refresh', () => {
     const onPrimarySuccess = vi.fn();
     const onRetrySuccess = vi.fn();
 
+    proxyModelAvailabilityStore.mark(stored.id, 'gemini-3-pro-image', 'model_forbidden');
     const result = await refreshAccountQuotaCore(stored.id, { onPrimarySuccess, onRetrySuccess });
 
     expect(result).toBe(stored);
@@ -89,11 +95,25 @@ describe('Node-safe cloud account quota refresh', () => {
       models: { gemini: { percentage: 90, resetTime: 'soon' } },
       ai_credits: { credits: 4, expiryDate: 'later' },
     });
-    expect(CloudAccountRepo.updateQuota).toHaveBeenCalledWith(stored.id, result.quota);
-    expect(CloudAccountRepo.updateLastUsed).toHaveBeenCalledWith(stored.id);
-    expect(CloudAccountRepo.setAccountStatus).toHaveBeenCalledWith(stored.id, 'active', null);
-    expect(clearValidationHealthAfterSuccessfulProbe).toHaveBeenCalledWith(stored);
-    expect(proxyModelAvailabilityStore.clearCapabilityFailures).toHaveBeenCalledWith(stored.id);
+    expect(CloudAccountRepo.updateQuota).toHaveBeenCalledWith(
+      stored.id,
+      result.quota,
+      expect.any(Function),
+    );
+    expect(CloudAccountRepo.updateLastUsed).toHaveBeenCalledWith(stored.id, expect.any(Function));
+    expect(CloudAccountRepo.setAccountStatus).toHaveBeenCalledWith(
+      stored.id,
+      'active',
+      null,
+      expect.any(Function),
+    );
+    expect(clearValidationHealthAfterSuccessfulProbe).toHaveBeenCalledWith(
+      stored,
+      expect.any(Function),
+    );
+    expect(proxyModelAvailabilityStore.isCapabilityBlocked(stored.id, 'gemini-3-pro-image')).toBe(
+      true,
+    );
     expect(onPrimarySuccess).toHaveBeenCalledOnce();
     expect(onRetrySuccess).not.toHaveBeenCalled();
   });
@@ -120,6 +140,8 @@ describe('Node-safe cloud account quota refresh', () => {
       stored.id,
       expect.objectContaining({ refresh_token: 'old-refresh' }),
       result.token,
+      expect.any(Function),
+      true,
     );
     expect(result.token.refresh_token).toBe('new-refresh');
     expect(result.quota?.ai_credits).toEqual({ credits: 4, expiryDate: 'later' });
@@ -139,7 +161,7 @@ describe('Node-safe cloud account quota refresh', () => {
     vi.mocked(CloudAccountRepo.compareAndUpdateToken).mockResolvedValue(false);
     const fetchQuota = vi.spyOn(GoogleAPIService, 'fetchQuota');
     await expect(refreshAccountQuotaCore(stored.id)).rejects.toThrow(
-      'Account token changed during quota refresh',
+      'Account quota-account changed during OAuth refresh',
     );
     expect(stored.token.refresh_token).toBe('old-refresh');
     expect(fetchQuota).not.toHaveBeenCalled();
@@ -158,10 +180,36 @@ describe('Node-safe cloud account quota refresh', () => {
     });
     vi.mocked(CloudAccountRepo.compareAndUpdateToken).mockResolvedValue(false);
     await expect(refreshAccountQuotaCore(stored.id)).rejects.toThrow(
-      'Account token changed during quota refresh',
+      'Account quota-account changed during OAuth refresh',
     );
     expect(CloudAccountRepo.setAccountStatus).not.toHaveBeenCalled();
     expect(GoogleAPIService.fetchQuota).toHaveBeenCalledOnce();
+  });
+
+  it('shares one in-flight quota refresh for concurrent callers of the same account', async () => {
+    const stored = account();
+    vi.spyOn(CloudAccountRepo, 'getAccount').mockResolvedValue(stored);
+    let releaseQuota!: () => void;
+    const quotaReady = new Promise<void>((resolve) => {
+      releaseQuota = resolve;
+    });
+    const fetchQuota = vi.spyOn(GoogleAPIService, 'fetchQuota').mockImplementation(async () => {
+      await quotaReady;
+      return { models: { gemini: { percentage: 80, resetTime: 'soon' } } };
+    });
+    const firstHook = vi.fn();
+    const secondHook = vi.fn();
+
+    const first = refreshAccountQuotaCore(stored.id, { onPrimarySuccess: firstHook });
+    const second = refreshAccountQuotaCore(stored.id, { onPrimarySuccess: secondHook });
+
+    await Promise.resolve();
+    expect(fetchQuota).toHaveBeenCalledOnce();
+    releaseQuota();
+
+    await expect(Promise.all([first, second])).resolves.toEqual([stored, stored]);
+    expect(firstHook).toHaveBeenCalledOnce();
+    expect(secondHook).not.toHaveBeenCalled();
   });
 
   it('preserves cached quota and marks a rate limit without success hooks', async () => {
@@ -180,6 +228,7 @@ describe('Node-safe cloud account quota refresh', () => {
       stored.id,
       'rate_limited',
       'RESOURCE_EXHAUSTED',
+      expect.any(Function),
     );
     expect(CloudAccountRepo.updateQuota).not.toHaveBeenCalled();
     expect(onPrimarySuccess).not.toHaveBeenCalled();
@@ -337,6 +386,7 @@ describe('Node-safe cloud account quota refresh', () => {
       stored.id,
       'expired',
       CLOUD_ACCOUNT_REAUTH_REQUIRED_REASON,
+      expect.any(Function),
     );
   });
 });

@@ -1,18 +1,28 @@
-import { EventEmitter } from 'node:events';
-import { Readable } from 'node:stream';
+import { once } from 'node:events';
+import { PassThrough, Readable } from 'node:stream';
+import { tap } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AccountLeaseService } from '@/modules/proxy-gateway/server/modules/account-lease/account-lease.service';
-import type { GeminiClient } from '@/modules/proxy-gateway/server/modules/gemini/gemini-client.service';
-import { GeminiService } from '@/modules/proxy-gateway/server/modules/gemini/gemini.service';
-import { OpenAIService } from '@/modules/proxy-gateway/server/modules/openai/openai.service';
-import { UpstreamRequestError } from '@/modules/proxy-gateway/server/common/exceptions/upstream-request.exception';
-import { GenerationConstraintsService } from '@/modules/proxy-gateway/server/shared/services/generation-constraints.service';
-import { ModelAvailabilityService } from '@/modules/proxy-gateway/server/shared/services/model-availability.service';
-import { ModelRoutingService } from '@/modules/proxy-gateway/server/shared/services/model-routing.service';
-import { ProxyRetryService } from '@/modules/proxy-gateway/server/shared/services/proxy-retry.service';
+import type { AccountLeaseService } from '@/server/gateway/modules/account-lease/account-lease.service';
+import type { GeminiClient } from '@/server/gateway/modules/gemini/gemini-client.service';
+import { GeminiService } from '@/server/gateway/modules/gemini/gemini.service';
+import { OpenAIService } from '@/server/gateway/modules/openai/openai.service';
+import { UpstreamRequestError } from '@/server/gateway/common/exceptions/upstream-request.exception';
+import { GenerationConstraintsService } from '@/server/gateway/shared/services/generation-constraints.service';
+import { ModelAvailabilityService } from '@/server/gateway/shared/services/model-availability.service';
+import { ModelRoutingService } from '@/server/gateway/shared/services/model-routing.service';
+import { ProxyRetryService } from '@/server/gateway/shared/services/proxy-retry.service';
+import { collect } from './proxy-real-path.harness';
 
 const accountLease = {
+  isLeaseCurrent: vi.fn(() => true),
+  isLeaseEligible: vi.fn(() => true),
+  acceptLeaseCompletion: vi.fn(() => true),
+  commitSession: vi.fn(),
+  rejectSession: vi.fn(),
   getNextToken: vi.fn(),
+  getEligibleRetryAccountCount: vi.fn().mockReturnValue(0),
+  getRetryAccountPoolSize: vi.fn().mockResolvedValue(1),
+  getOrdinaryRetryWaitMs: vi.fn().mockReturnValue(0),
   getNextImageToken: vi.fn(),
   markAsRateLimited: vi.fn(),
   markModelSuccess: vi.fn(),
@@ -69,6 +79,17 @@ const imageRequest = {
   contents: [{ role: 'user', parts: [{ text: 'draw' }] }],
 };
 
+function imageResponse(terminal: boolean) {
+  return {
+    candidates: [
+      {
+        content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'AQ==' } }] },
+        ...(terminal ? { finishReason: 'STOP' } : {}),
+      },
+    ],
+  };
+}
+
 describe('Gemini image rate-limit lifecycle', () => {
   const releaseImagePermit = vi.fn();
 
@@ -96,6 +117,26 @@ describe('Gemini image rate-limit lifecycle', () => {
         },
       };
     });
+  });
+
+  it('releases the image permit if resolving the leased account model fails', async () => {
+    accountLease.getNextToken.mockResolvedValue(createToken('acc-model-lookup'));
+    const failure = new Error('Account model lookup failed');
+    accountLease.resolveDynamicModelForAccount.mockImplementationOnce(() => {
+      throw failure;
+    });
+
+    await expect(
+      createService().handleGeminiGenerateContent(
+        'models/gemini-3-pro-image',
+        imageRequest,
+        'image_gen',
+      ),
+    ).rejects.toBe(failure);
+    expect(releaseImagePermit).toHaveBeenCalledOnce();
+    expect(geminiClient.generateInternal).not.toHaveBeenCalled();
+    expect(geminiClient.streamGenerateInternal).not.toHaveBeenCalled();
+    expect(accountLease.markFromUpstreamError).not.toHaveBeenCalled();
   });
 
   it('uses OpenAI fast-penalty semantics when the OpenAI image fallback returns 503', async () => {
@@ -170,12 +211,14 @@ describe('Gemini image rate-limit lifecycle', () => {
       {} as ModelRoutingService,
     );
     const signal = new AbortController().signal;
+    const observeResponse = vi.fn();
 
     await service.handleGeminiGenerateContent(
       'models/gemini-3-pro-image',
       imageRequest,
       'image_gen',
       signal,
+      observeResponse,
     );
 
     expect(fallback.handleGeminiGenerateContent).toHaveBeenCalledWith(
@@ -184,6 +227,8 @@ describe('Gemini image rate-limit lifecycle', () => {
       'image_gen',
       signal,
       'openai',
+      undefined,
+      observeResponse,
     );
   });
 
@@ -264,84 +309,71 @@ describe('Gemini image rate-limit lifecycle', () => {
     expect(releaseImagePermit).toHaveBeenCalledTimes(1);
   });
 
-  it('clears a streaming image lock only after image data and a clean end', async () => {
+  it.each([
+    {
+      ending: 'terminal image and EOF',
+      terminal: true,
+      finish: (stream: PassThrough) => stream.end(),
+    },
+    {
+      ending: 'EOF without a finish reason',
+      terminal: false,
+      finish: (stream: PassThrough) => stream.end(),
+    },
+    {
+      ending: 'an application error',
+      terminal: false,
+      finish: (stream: PassThrough) =>
+        stream.end('data: {"error":{"message":"generation failed"}}\n\n'),
+    },
+    {
+      ending: 'a transport error',
+      terminal: false,
+      finish: (stream: PassThrough) => stream.destroy(new Error('socket reset')),
+    },
+  ])('settles a streaming image permit after $ending', async ({ terminal, finish }) => {
     const service = createService();
-    const stream = new EventEmitter();
-    accountLease.getNextToken.mockResolvedValue(createToken('acc-stream-image'));
+    const stream = new PassThrough();
+    const token = createToken('acc-stream-image');
+    accountLease.getNextToken.mockResolvedValue(token);
     geminiClient.streamGenerateInternal.mockResolvedValue(stream);
 
     const result = await service.handleGeminiStreamGenerateContent(
       'models/gemini-3-pro-image',
       imageRequest,
     );
-    result.subscribe({ next: () => {} });
-    stream.emit(
-      'data',
-      Buffer.from(
-        'data: {"response":{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"AQ=="}}]}}]}}\n\n',
-      ),
-    );
+    const delivered = vi.fn();
+    const completed = collect(result.pipe(tap(delivered)));
+    const content = imageResponse(terminal);
+    try {
+      expect(releaseImagePermit).not.toHaveBeenCalled();
+      stream.write('data: ' + JSON.stringify({ response: content }) + '\n\n');
+      await vi.waitFor(() =>
+        expect(delivered).toHaveBeenCalledWith('data: ' + JSON.stringify(content) + '\n\n'),
+      );
+      expect(accountLease.markModelSuccess).not.toHaveBeenCalled();
+      expect(releaseImagePermit).not.toHaveBeenCalled();
 
-    expect(accountLease.markModelSuccess).not.toHaveBeenCalled();
-    expect(releaseImagePermit).not.toHaveBeenCalled();
-    stream.emit('end');
-    expect(accountLease.markModelSuccess).toHaveBeenCalledWith(
-      'acc-stream-image',
-      'gemini-3-pro-image',
-    );
-    expect(releaseImagePermit).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not clear a streaming image lock after an application error frame', async () => {
-    const service = createService();
-    const stream = new EventEmitter();
-    accountLease.getNextToken.mockResolvedValue(createToken('acc-stream-app-error'));
-    geminiClient.streamGenerateInternal.mockResolvedValue(stream);
-
-    const result = await service.handleGeminiStreamGenerateContent(
-      'models/gemini-3-pro-image',
-      imageRequest,
-    );
-    result.subscribe({ next: () => {} });
-    stream.emit(
-      'data',
-      Buffer.from(
-        'data: {"response":{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"AQ=="}}]}}]}}\n\n',
-      ),
-    );
-    stream.emit('data', Buffer.from('data: {"error":{"message":"generation failed"}}\n\n'));
-    stream.emit('end');
-
-    expect(accountLease.markModelSuccess).not.toHaveBeenCalled();
-    expect(releaseImagePermit).toHaveBeenCalledTimes(1);
-  });
-  it('does not clear a streaming image lock after a transport error', async () => {
-    const service = createService();
-    const stream = new EventEmitter();
-    accountLease.getNextToken.mockResolvedValue(createToken('acc-stream-transport-error'));
-    geminiClient.streamGenerateInternal.mockResolvedValue(stream);
-
-    const result = await service.handleGeminiStreamGenerateContent(
-      'models/gemini-3-pro-image',
-      imageRequest,
-    );
-    result.subscribe({ next: () => {}, error: () => {} });
-    stream.emit(
-      'data',
-      Buffer.from(
-        'data: {"response":{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"AQ=="}}]}}]}}\n\n',
-      ),
-    );
-    stream.emit('error', new Error('socket reset'));
-
-    expect(accountLease.markModelSuccess).not.toHaveBeenCalled();
-    expect(releaseImagePermit).toHaveBeenCalledTimes(1);
+      finish(stream);
+      await completed;
+      if (terminal) {
+        expect(accountLease.markModelSuccess).toHaveBeenCalledExactlyOnceWith(
+          token.id,
+          'gemini-3-pro-image',
+        );
+      } else {
+        expect(accountLease.markModelSuccess).not.toHaveBeenCalled();
+      }
+      expect(releaseImagePermit).toHaveBeenCalledOnce();
+    } finally {
+      stream.destroy();
+    }
   });
 
   it('does not lose the first image chunk from a real readable stream', async () => {
     const service = createService();
-    const firstChunk =
-      'data: {"response":{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"AQ=="}}]}}]}}\n\n';
+    const response = imageResponse(true);
+    const firstChunk = 'data: ' + JSON.stringify({ response }) + '\n\n';
     const stream = Readable.from([Buffer.from(firstChunk)]);
     accountLease.getNextToken.mockResolvedValue(createToken('acc-stream-readable'));
     geminiClient.streamGenerateInternal.mockResolvedValue(stream);
@@ -355,7 +387,7 @@ describe('Gemini image rate-limit lifecycle', () => {
       result.subscribe({ next: (chunk) => chunks.push(chunk), error: reject, complete: resolve });
     });
 
-    expect(chunks.join('')).toContain(firstChunk.trim());
+    expect(chunks[0]).toBe('data: ' + JSON.stringify(response) + '\n\n');
     expect(accountLease.markModelSuccess).toHaveBeenCalledWith(
       'acc-stream-readable',
       'gemini-3-pro-image',
@@ -365,7 +397,7 @@ describe('Gemini image rate-limit lifecycle', () => {
 
   it('releases the image permit when the downstream subscriber disconnects', async () => {
     const service = createService();
-    const stream = Object.assign(new EventEmitter(), { destroy: vi.fn() });
+    const stream = new PassThrough();
     accountLease.getNextToken.mockResolvedValue(createToken('acc-stream-disconnect'));
     geminiClient.streamGenerateInternal.mockResolvedValue(stream);
 
@@ -374,10 +406,12 @@ describe('Gemini image rate-limit lifecycle', () => {
       imageRequest,
     );
     const subscription = result.subscribe({ next: () => {} });
+    const closed = once(stream, 'close');
     expect(releaseImagePermit).not.toHaveBeenCalled();
     subscription.unsubscribe();
 
-    expect(releaseImagePermit).toHaveBeenCalledTimes(1);
-    expect(stream.destroy).toHaveBeenCalledTimes(1);
+    await closed;
+    expect(releaseImagePermit).toHaveBeenCalledOnce();
+    expect(stream.destroyed).toBe(true);
   });
 });

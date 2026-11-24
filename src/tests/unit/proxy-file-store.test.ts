@@ -1,20 +1,22 @@
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { FileContentStore } from '@/modules/proxy-gateway/server/modules/files/file-content-store.service';
+import { FileContentStore } from '@/server/gateway/modules/files/file-content-store.service';
+import { FilesService } from '@/server/gateway/modules/files/files.service';
 import {
   FileStoreError,
   parseFileHandle,
   type FileStoreOptions,
-} from '@/modules/proxy-gateway/server/modules/files/file-store.types';
+} from '@/server/gateway/modules/files/file-store.types';
 import {
   resolveEffectiveMimeType,
   sniffMimeType,
-} from '@/modules/proxy-gateway/server/modules/files/file-mime-sniff';
+} from '@/server/gateway/modules/files/file-mime-sniff';
+import { logger } from '@/shared/logging/logger';
 
 const png = Buffer.concat([
   Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
@@ -33,6 +35,7 @@ function createStore(options: FileStoreOptions = {}): FileContentStore {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   while (createdRoots.length > 0) {
     await rm(createdRoots.pop() as string, {
       recursive: true,
@@ -44,6 +47,20 @@ afterEach(async () => {
 });
 
 describe('local proxy file store', () => {
+  it('waits for the same cold index load for concurrent reads', async () => {
+    const rootDirectory = mkdtempSync(join(tmpdir(), 'agm-store-'));
+    createdRoots.push(rootDirectory);
+    const writer = createStore({ rootDirectory });
+    const original = await writer.put({ bytes: png, displayName: 'cold.png' });
+    writer.onModuleDestroy();
+    const reader = createStore({ rootDirectory });
+    const results = await Promise.all([reader.get(original.id), reader.get(original.id)]);
+    expect(results).toEqual([
+      { record: original, bytes: png },
+      { record: original, bytes: png },
+    ]);
+  });
+
   it('round-trips put, stat, get, list and delete', async () => {
     const store = createStore();
     const record = await store.put({
@@ -235,6 +252,40 @@ describe('local proxy file store', () => {
     const restarted = createStore({ rootDirectory });
 
     await expect(restarted.list()).resolves.toMatchObject({ files: [] });
+  });
+
+  it('keeps private content readable after creating a new store instance', async () => {
+    const rootDirectory = mkdtempSync(join(tmpdir(), 'agm-private-store-'));
+    createdRoots.push(rootDirectory);
+    const files = new FilesService(createStore());
+    const privateStore = files.createPrivateContentStore({ rootDirectory });
+    const id = await privateStore.put(png, 'image/png');
+    privateStore.dispose();
+
+    const restarted = new FilesService(createStore()).createPrivateContentStore({ rootDirectory });
+    await expect(restarted.get(id)).resolves.toEqual(png);
+    restarted.dispose();
+  });
+
+  it('propagates private index failures while preserving public file-store fail-open behavior', async () => {
+    const privateRoot = mkdtempSync(join(tmpdir(), 'agm-private-store-'));
+    createdRoots.push(privateRoot);
+    mkdirSync(join(privateRoot, 'index.json'));
+    const privateStore = new FilesService(createStore()).createPrivateContentStore({
+      rootDirectory: privateRoot,
+    });
+    await expect(privateStore.put(png, 'image/png')).rejects.toThrow();
+    privateStore.dispose();
+
+    const publicRoot = mkdtempSync(join(tmpdir(), 'agm-public-store-'));
+    createdRoots.push(publicRoot);
+    mkdirSync(join(publicRoot, 'index.json'));
+    const warning = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const publicStore = createStore({ rootDirectory: publicRoot });
+    await expect(publicStore.put({ bytes: png })).resolves.toMatchObject({
+      sizeBytes: png.length,
+    });
+    expect(warning).toHaveBeenCalled();
   });
 
   it('drops a handle whose content vanished underneath it', async () => {

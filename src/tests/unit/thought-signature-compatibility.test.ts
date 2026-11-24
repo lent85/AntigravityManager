@@ -1,12 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { vi } from 'vitest';
-
-import {
-  transformClaudeRequestIn,
-  getPlaceholderSignatureUsageCount,
-  resetPlaceholderSignatureUsageCount,
-} from '@/modules/proxy-gateway/antigravity/ClaudeRequestMapper';
+import { transformClaudeRequestIn } from '@/modules/proxy-gateway/antigravity/ClaudeRequestMapper';
 import { transformResponse } from '@/modules/proxy-gateway/antigravity/ClaudeResponseMapper';
 import {
   PartProcessor,
@@ -16,16 +10,14 @@ import { SignatureStore } from '@/modules/proxy-gateway/antigravity/SignatureSto
 import type { ClaudeRequest } from '@/modules/proxy-gateway/antigravity/types';
 
 const THOUGHT_SIGNATURE = 'thought-signature-for-tool-call';
-const SKIP_THOUGHT_SIGNATURE = 'skip_thought_signature_validator';
 const SIGNATURE_MODEL = 'gemini-3-flash';
 
 describe('thought signature compatibility', () => {
   afterEach(() => {
     SignatureStore.clear();
-    resetPlaceholderSignatureUsageCount();
   });
 
-  it('sends both signature field names for thinking, function calls, and tool results', () => {
+  it('sends both signature aliases for thinking and calls while leaving tool results unsigned', () => {
     const request: ClaudeRequest = {
       model: 'gemini-3-flash',
       max_tokens: 1024,
@@ -60,10 +52,17 @@ describe('thought signature compatibility', () => {
     const [thinkingPart, functionCallPart] = body.request.contents[0].parts;
     const [functionResponsePart] = body.request.contents[1].parts;
 
-    for (const part of [thinkingPart, functionCallPart, functionResponsePart]) {
+    for (const part of [thinkingPart, functionCallPart]) {
       expect(part.thoughtSignature).toBe(THOUGHT_SIGNATURE);
       expect(part.thought_signature).toBe(THOUGHT_SIGNATURE);
     }
+    expect(functionResponsePart).toEqual({
+      functionResponse: {
+        id: 'call_weather',
+        name: 'get_weather',
+        response: { result: 'Cloudy' },
+      },
+    });
   });
 
   it('concatenates only text blocks from an array tool result', () => {
@@ -71,6 +70,12 @@ describe('thought signature compatibility', () => {
       model: 'gemini-3-flash',
       max_tokens: 1024,
       messages: [
+        {
+          role: 'assistant',
+          content: [
+            { type: 'tool_use', id: 'call_structured_result', name: 'structured_tool', input: {} },
+          ],
+        },
         {
           role: 'user',
           content: [
@@ -90,10 +95,10 @@ describe('thought signature compatibility', () => {
 
     const body = transformClaudeRequestIn(request);
 
-    expect(body.request.contents[0]?.parts).toEqual([
+    expect(body.request.contents[1]?.parts).toEqual([
       {
         functionResponse: {
-          name: 'call_structured_result',
+          name: 'structured_tool',
           response: { result: 'first line\nsecond line' },
           id: 'call_structured_result',
         },
@@ -101,9 +106,9 @@ describe('thought signature compatibility', () => {
     ]);
   });
 
-  it('keeps gemini-pro-agent thinking enabled and injects both sentinel signature fields', () => {
+  it('keeps gemini-3-flash-agent thinking enabled without inventing a tool signature', () => {
     const request: ClaudeRequest = {
-      model: 'gemini-3.1-pro-high',
+      model: 'gemini-3-flash-agent',
       max_tokens: 1024,
       thinking: { type: 'enabled', budget_tokens: 256 },
       messages: [
@@ -123,31 +128,24 @@ describe('thought signature compatibility', () => {
 
     const body = transformClaudeRequestIn(request);
 
-    expect(body.model).toBe('gemini-pro-agent');
+    expect(body.model).toBe('gemini-3-flash-agent');
     expect(body.request.generationConfig?.thinkingConfig).toEqual({
       includeThoughts: true,
       thinkingBudget: 256,
     });
     expect(body.request.contents[0].parts).toEqual([
       {
-        text: 'Thinking...',
-        thought: true,
-      },
-      {
         functionCall: {
           name: 'get_weather',
           args: { location: 'London' },
           id: 'call_without_signature',
         },
-        thoughtSignature: SKIP_THOUGHT_SIGNATURE,
-        thought_signature: SKIP_THOUGHT_SIGNATURE,
       },
     ]);
-    expect(getPlaceholderSignatureUsageCount()).toBe(1);
   });
 
   it.each(['gemini-3.5-flash-high', 'gemini-3.6-flash', 'gemini-3.7-flash'])(
-    'injects both sentinel signature fields for unsigned %s tool history without thinking',
+    'keeps unsigned %s tool history unsigned without thinking',
     (model) => {
       const request: ClaudeRequest = {
         model,
@@ -171,8 +169,36 @@ describe('thought signature compatibility', () => {
       const functionCallPart = body.request.contents[0].parts.find((part) => part.functionCall);
 
       expect(body.request.generationConfig?.thinkingConfig).toBeUndefined();
-      expect(functionCallPart?.thoughtSignature).toBe(SKIP_THOUGHT_SIGNATURE);
-      expect(functionCallPart?.thought_signature).toBe(SKIP_THOUGHT_SIGNATURE);
+      expect(functionCallPart).toEqual({
+        functionCall: {
+          name: 'get_weather',
+          args: { location: 'London' },
+          id: `call_${model}`,
+        },
+      });
+    },
+  );
+
+  it.each(['skip_thought_signature_validator', 'c2tpcF90aG91Z2h0X3NpZ25hdHVyZV92YWxpZGF0b3I='])(
+    'does not cache %s as a real tool signature',
+    (signature) => {
+      const sessionKey = 'sentinel-is-not-real';
+      SignatureStore.store({
+        model: SIGNATURE_MODEL,
+        sessionKey,
+        toolCallId: 'placeholder-call',
+        toolName: 'read',
+        signature,
+      });
+      expect(SignatureStore.get({ model: SIGNATURE_MODEL, sessionKey })).toBeNull();
+      expect(
+        SignatureStore.getForToolCall({
+          model: SIGNATURE_MODEL,
+          sessionKey,
+          toolCallId: 'placeholder-call',
+          toolName: 'read',
+        }),
+      ).toBeNull();
     },
   );
 
@@ -259,6 +285,88 @@ describe('thought signature compatibility', () => {
     expect(chunks.join('')).toContain(THOUGHT_SIGNATURE);
   });
 
+  it('returns recognized Google-wrapped Claude signatures in raw client form and caches the original', () => {
+    const rawSignature = Buffer.from([0x08, 0x04, 0x12, ...Array<number>(80).fill(0x7f)]).toString(
+      'base64',
+    );
+    const wrappedSignature = Buffer.from(rawSignature, 'utf8').toString('base64');
+    const sessionKey = 'anthropic:wrapped-non-stream-session';
+    const response = transformResponse(
+      {
+        candidates: [
+          {
+            content: {
+              role: 'model',
+              parts: [
+                {
+                  functionCall: {
+                    name: 'read',
+                    args: {},
+                    id: 'call_wrapped_non_stream',
+                  },
+                  thoughtSignature: wrappedSignature,
+                },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        model: SIGNATURE_MODEL,
+        signatureSessionKey: sessionKey,
+        signatureMessageCount: 2,
+      },
+    );
+
+    expect(response.content).toContainEqual({
+      type: 'tool_use',
+      id: 'call_wrapped_non_stream',
+      name: 'read',
+      input: {},
+      signature: rawSignature,
+    });
+    expect(SignatureStore.getAt({ model: SIGNATURE_MODEL, sessionKey, messageCount: 2 })).toBe(
+      wrappedSignature,
+    );
+    expect(
+      SignatureStore.getForToolCall({
+        model: SIGNATURE_MODEL,
+        sessionKey,
+        toolCallId: 'call_wrapped_non_stream',
+        toolName: 'read',
+      }),
+    ).toBe(wrappedSignature);
+  });
+
+  it('returns recognized Google-wrapped Claude signatures in streamed blocks and caches the original', () => {
+    const rawSignature = Buffer.from([0x08, 0x04, 0x12, ...Array<number>(80).fill(0x7f)]).toString(
+      'base64',
+    );
+    const wrappedSignature = Buffer.from(rawSignature, 'utf8').toString('base64');
+    const sessionKey = 'anthropic:wrapped-stream-session';
+    const state = new StreamingState({ model: SIGNATURE_MODEL, sessionKey, messageCount: 3 });
+    const processor = new PartProcessor(state);
+
+    const chunks = processor.process({
+      functionCall: { id: 'call_wrapped_stream', name: 'read', args: {} },
+      thoughtSignature: wrappedSignature,
+    });
+
+    expect(chunks.join('')).toContain(rawSignature);
+    expect(chunks.join('')).not.toContain(wrappedSignature);
+    expect(SignatureStore.getAt({ model: SIGNATURE_MODEL, sessionKey, messageCount: 3 })).toBe(
+      wrappedSignature,
+    );
+    expect(
+      SignatureStore.getForToolCall({
+        model: SIGNATURE_MODEL,
+        sessionKey,
+        toolCallId: 'call_wrapped_stream',
+        toolName: 'read',
+      }),
+    ).toBe(wrappedSignature);
+  });
+
   it('reuses only the signature belonging to the request session', () => {
     const alphaSignature = 'thought-signature-for-session-alpha';
     SignatureStore.store({
@@ -304,7 +412,6 @@ describe('thought signature compatibility', () => {
   it('stores signatures by message count and removes future entries after rewind', () => {
     const sessionKey = 'anthropic:rewind-session';
     const firstSignature = 'a'.repeat(60);
-    const shorterFirstSignature = 'b'.repeat(55);
     const futureSignature = 'c'.repeat(70);
     const rewindSignature = 'd'.repeat(65);
 
@@ -315,7 +422,7 @@ describe('thought signature compatibility', () => {
       messageCount: 1,
     });
     SignatureStore.store({
-      signature: shorterFirstSignature,
+      signature: firstSignature,
       model: SIGNATURE_MODEL,
       sessionKey,
       messageCount: 1,
@@ -616,7 +723,6 @@ describe('thought signature compatibility', () => {
       undefined,
       undefined,
       'gpt-oss-120b-medium',
-      'anthropic',
       {
         signatureTargetFamily: 'gpt-oss-120b-medium',
         signatureTargetFamilyModel: 'gpt-oss-120b-medium',
@@ -698,43 +804,5 @@ describe('thought signature compatibility', () => {
     expect(SignatureStore.get({ model: SIGNATURE_MODEL, sessionKey: 'named-session' })).toBe(
       'named-signature',
     );
-  });
-
-  it('recovery mapping never reads cache but preserves explicit tool signatures and sentinel logic', () => {
-    const getSpy = vi.spyOn(SignatureStore, 'get');
-    const getAtSpy = vi.spyOn(SignatureStore, 'getAt');
-    const getToolSpy = vi.spyOn(SignatureStore, 'getForToolCall');
-    const body = transformClaudeRequestIn(
-      {
-        model: 'gemini-3-flash',
-        messages: [
-          {
-            role: 'assistant',
-            content: [
-              {
-                type: 'tool_use',
-                id: 'explicit',
-                name: 'one',
-                input: {},
-                signature: 'client-signature',
-              },
-              { type: 'tool_use', id: 'unsigned', name: 'two', input: {} },
-            ],
-          },
-        ],
-      },
-      undefined,
-      undefined,
-      undefined,
-      'anthropic',
-      { mode: 'invalid-thought-signature-recovery' },
-    );
-
-    expect(getSpy).not.toHaveBeenCalled();
-    expect(getAtSpy).not.toHaveBeenCalled();
-    expect(getToolSpy).not.toHaveBeenCalled();
-    const functionCallParts = body.request.contents[0]?.parts.filter((part) => part.functionCall);
-    expect(functionCallParts?.[0]?.thoughtSignature).toBe('client-signature');
-    expect(functionCallParts?.[1]?.thoughtSignature).toBe(SKIP_THOUGHT_SIGNATURE);
   });
 });

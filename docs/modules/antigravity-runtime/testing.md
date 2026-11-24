@@ -4,6 +4,21 @@ This reference selects process, credential and switch evidence. Use the [account
 
 Run commands from the repository root unless a step specifies another directory.
 
+The focused `claude-cowork-runtime.test.ts` checks source classification, bounded
+fingerprint admission, stale and same-length changed targets, and canonical bundle escape
+through an isolated directory link. The Windows directory-link fixture needs junction
+permission. Fixture roots are verified before cleanup; no installed Claude binary,
+process or signing command is used. These read-only checks do not establish safe patch
+application or real client compatibility.
+
+`claude-cowork-source-plan.test.ts` uses the frozen reverse-accumulation algorithm
+and independently changed bindings to check structural source admission. It covers
+string/comment decoys, duplicate functions, shadowed intrinsics, legacy recovery
+refusal, unsupported scopes, parse budgets, Unicode byte offsets and exact preservation
+outside the function. A controlled VM executes the generated preview at the 8k cutoff.
+These fixtures establish a pure source preview, not native payload extraction, executable
+signing, installed patch application or rollback.
+
 The focused `antigravity-process-identity.test.ts` and `runtime-observer.test.ts` suites reject
 third-party tool names, product text in unrelated folders/arguments and unreadable tool metadata.
 They retain supported binary names, configured/captured executable identity and genuine competing
@@ -51,6 +66,10 @@ on Windows. It runs production stop logic against temporary WinForms windows and
 normal close flushes an in-memory buffer for visible and hidden windows, while ordinary stop
 leaves a cancelled close alive. It then invokes the switch-only policy against that refusing
 window and confirms forced exit without claiming the unsaved buffer was flushed.
+The fixture also starts a real child and hides only its executable path in process observations.
+The verified main process must still receive normal close, flush its buffer and exit with that
+child. `windows-switch-close.test.ts` additionally covers unreadable orphans, resolved identities,
+PID reuse, update installers and classified query deadlines.
 Native Windows uses PID-scoped `WM_CLOSE` requests for unowned
 top-level windows; owned save/confirmation dialogs remain under the client's control.
 The focused `runtime-stop.test.ts` cases also cover slow initial native Windows observations
@@ -143,7 +162,7 @@ key, while encrypted recovery verifies and reuses its existing pair. Linux runs 
 directories and `0600` files. A scoped isolated-source mutation that omits preservation must fail
 the pre-replacement backup assertion; an unchanged passing run does not establish that control.
 
-`node scripts/test-client-account-write.integration.mjs` exercises real SQLite under Electron on Windows and Node on Linux/macOS with isolated synthetic credentials. Windows and Linux verify WAL-aware backups, repeated writes to one captured destination, A-to-B-to-A restoration, unchanged client recovery files and full transaction rollback on an injected primary-write failure. The Mac branch verifies sequential writes, root-level ID-token input, unchanged unrelated cache/auth rows, project removal and retained earlier statements after a later failure; it does not invoke Keychain. Windows additionally exercises the production Win32 credential adapter with exact-target A-to-B-to-A writes, independent keytar enumeration and repeated nondestructive reads. The credential target is redirected to a unique synthetic target and deleted during cleanup. Mocked CLI and Google destinations verify that an Agy switch does not change that host credential on Windows and Linux. For Linux validation from Windows, install Linux native dependencies in an isolated directory and set `AGM_CLIENT_NATIVE_DEPS` to that directory; Windows native modules cannot validate the Linux path.
+`node scripts/test-client-account-write.integration.mjs` exercises real SQLite under Electron on Windows and Node on Linux/macOS with isolated synthetic credentials. Windows and Linux verify WAL-aware backups, repeated writes to one captured destination, A-to-B-to-A restoration, unchanged client recovery files and full transaction rollback on an injected primary-write failure. The Mac branch verifies sequential writes, root-level ID-token input, unchanged unrelated cache/auth rows, project removal and retained earlier statements after a later failure; it does not invoke Keychain. Windows additionally exercises the production Win32 credential adapter with exact-target A-to-B-to-A writes, the IDE Agent identity envelope, independent keytar enumeration and repeated nondestructive reads. The credential target is redirected to a unique synthetic target and deleted during cleanup. Mocked CLI and Google destinations verify that an Agy switch does not change that host credential on Windows and Linux. For Linux validation from Windows, install Linux native dependencies in an isolated directory and set `AGM_CLIENT_NATIVE_DEPS` to that directory; Windows native modules cannot validate the Linux path.
 
 `macos-client-account-chain.test.ts` compares complete command arguments, three cache files
 and SQLite protobuf bytes against synthetic contract fixtures. It covers deletion/create

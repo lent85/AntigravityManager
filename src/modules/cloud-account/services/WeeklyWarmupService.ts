@@ -8,9 +8,15 @@ import {
   selectWeeklyQuotaItems,
 } from '@/modules/cloud-account/utils/quota-groups';
 import { getQuotaModelFamilyId } from '@/modules/cloud-account/utils/quota-model-families';
+import { modelQuotaWindows } from '../utils/quota-windows';
+import { normalizeQuotaModelId } from '../utils/quota-group-model-membership';
 import { logger } from '@/shared/logging/logger';
 import { GoogleAPIService } from './GoogleAPIService';
 import { CloudAccountRepo } from '../persistence/cloudHandler';
+import {
+  CloudAccountRefreshWriteback,
+  captureTokenWriteGuard,
+} from './cloud-account-refresh-writeback';
 import {
   DEFAULT_WEEKLY_WARMUP_CONFIG,
   WeeklyWarmupConfigSchema,
@@ -41,6 +47,7 @@ export interface WeeklyWarmupCandidate {
   group: WeeklyWarmupGroup;
   historyKey: string;
   model: WeeklyWarmupRequest['model'];
+  availableModels: readonly string[];
   resetTimestamp: number;
 }
 
@@ -123,6 +130,30 @@ export function selectWeeklyWarmupCandidates(
         return [];
       }
 
+      const quotaGroup = warmableGroups?.find(
+        (entry) =>
+          entry.display_name.replace(/\s+models?$/i, '').trim() === item.groupName &&
+          entry.buckets.some((bucket) => bucket.bucket_id === item.bucket.bucket_id),
+      );
+      const availableModels = [
+        ...new Set(Object.keys(account.quota?.models ?? {}).map(normalizeQuotaModelId)),
+      ]
+        .filter(
+          (model) =>
+            getQuotaModelFamilyId(model) === getQuotaModelFamilyId(REPRESENTATIVE_MODELS[group]) &&
+            modelQuotaWindows(
+              { models: account.quota?.models ?? {}, quota_groups: quotaGroup ? [quotaGroup] : [] },
+              model,
+            ).some((bucket) => bucket.bucket_id === item.bucket.bucket_id),
+        )
+        .sort();
+      if (availableModels.length === 0) {
+        logger.info(
+          `Weekly warmup skipped: account=${account.id} bucket=${item.bucket.bucket_id} has no advertised model in the selected quota family`,
+        );
+        return [];
+      }
+
       const historyKey = createHistoryKey(account.id, item.bucket.bucket_id, resetTimestamp);
       if (history.entries[historyKey] !== undefined || seen.has(historyKey)) {
         return [];
@@ -136,6 +167,7 @@ export function selectWeeklyWarmupCandidates(
           group,
           historyKey,
           model: REPRESENTATIVE_MODELS[group],
+          availableModels,
           resetTimestamp,
         },
       ];
@@ -188,20 +220,21 @@ export class WeeklyWarmupService {
     executor: WeeklyWarmupExecutor,
     options: WeeklyWarmupRunOptions = {},
   ): Promise<string[]> {
+    const snapshot = structuredClone(accounts);
     const epoch = this.cancellationEpoch;
     if (this.activeRun) {
       await this.activeRun;
       if (epoch !== this.cancellationEpoch) {
         return [];
       }
-      return this.run(accounts, executor, options);
+      return this.run(snapshot, executor, options);
     }
     if (!this.isEnabled()) {
       return [];
     }
     const controller = new AbortController();
     this.controller = controller;
-    const task = this.performRun(accounts, executor, options, controller.signal);
+    const task = this.performRun(snapshot, executor, options, controller.signal);
     this.activeRun = task;
     try {
       return await task;
@@ -228,10 +261,11 @@ export class WeeklyWarmupService {
         this.saveHistory(history);
       }
       candidates = selectWeeklyWarmupCandidates(accounts, this.getConfig(), history, now);
-    } catch {
+    } catch (error) {
       this.persistenceFailed = true;
       logger.warn(
         'Weekly warmup paused until restart: configuration or history could not be read safely',
+        error,
       );
       return [];
     }
@@ -241,8 +275,15 @@ export class WeeklyWarmupService {
       if (signal.aborted || !this.isEnabled()) {
         break;
       }
+      let accepted = false;
       try {
+        const writeback = new CloudAccountRefreshWriteback(candidate.account);
+        await writeback.assertCurrent();
+        if (signal.aborted || !this.isEnabled()) {
+          break;
+        }
         if (!candidate.account.token.project_id?.trim()) {
+          const tokenGuard = captureTokenWriteGuard(candidate.account);
           const projectId = await GoogleAPIService.fetchProjectId(
             candidate.account.token.access_token,
             candidate.account.proxy_url,
@@ -253,39 +294,55 @@ export class WeeklyWarmupService {
           if (!projectId?.trim()) {
             throw new Error('Weekly warmup project context is unavailable');
           }
-          candidate.account.token = { ...candidate.account.token, project_id: projectId.trim() };
-          await CloudAccountRepo.updateToken(candidate.account.id, candidate.account.token);
+          const token = { ...candidate.account.token, project_id: projectId.trim() };
+          await CloudAccountRepo.updateToken(candidate.account.id, token, tokenGuard);
+          candidate.account.token = token;
         }
         if (signal.aborted) {
+          break;
+        }
+        await writeback.assertCurrent();
+        if (signal.aborted || !this.isEnabled()) {
           break;
         }
         await executor.warmup({
           accessToken: candidate.account.token.access_token,
           model: candidate.model,
+          availableModels: candidate.availableModels,
           projectId: candidate.account.token.project_id,
           upstreamProxyUrl: candidate.account.proxy_url,
           signal,
         });
+        accepted = true;
         if (signal.aborted) {
           break;
         }
+        // Acceptance can already consume quota. Retain its cycle history even if context changed,
+        // but never use that old completion to refresh replacement-account quota.
         history.entries[candidate.historyKey] = options.now ?? Date.now();
-        warmedAccountIds.add(candidate.account.id);
+        let saved = true;
         try {
           this.saveHistory(history);
-        } catch {
+        } catch (error) {
+          saved = false;
           this.persistenceFailed = true;
           logger.warn(
             'Weekly warmup paused until restart: successful request history could not be persisted',
+            error,
           );
+        }
+        await writeback.assertCurrent();
+        warmedAccountIds.add(candidate.account.id);
+        if (!saved) {
           break;
         }
         logger.info(
           `Weekly warmup succeeded for account=${candidate.account.id} bucket=${candidate.bucketId} model=${candidate.model}`,
         );
-      } catch {
+      } catch (error) {
         logger.warn(
-          `Weekly warmup failed for account=${candidate.account.id} bucket=${candidate.bucketId} model=${candidate.model}`,
+          `${accepted ? 'Weekly warmup accepted but account follow-up failed' : 'Weekly warmup failed'} for account=${candidate.account.id} bucket=${candidate.bucketId} model=${candidate.model}`,
+          error,
         );
       }
 

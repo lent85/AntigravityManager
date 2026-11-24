@@ -29,16 +29,67 @@ export interface CloudQuotaModelInfo {
   supports_images?: boolean;
   supports_thinking?: boolean;
   thinking_budget?: number;
+  thinking_level?: 'low' | 'medium' | 'high';
   recommended?: boolean;
   max_tokens?: number;
   max_output_tokens?: number;
   supported_mime_types?: Record<string, boolean>;
 }
 
+const SubscriptionInstantSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+const SubscriptionIdentitySourceSchema = z.enum([
+  'paid-tier-id',
+  'paid-tier-name',
+  'current-tier-id',
+  'current-tier-name',
+  'allowed-free-tier',
+]);
+
+export const CloudSubscriptionObservationSchema = z.discriminatedUnion('status', [
+  z.strictObject({
+    status: z.literal('known'),
+    tier: z.enum(['free', 'pro', 'ultra']),
+    source: SubscriptionIdentitySourceSchema,
+    raw_value: z.string().min(1).max(256),
+    observed_at: SubscriptionInstantSchema,
+  }),
+  z.strictObject({
+    status: z.literal('unrecognized'),
+    tier: z.literal('free'),
+    source: SubscriptionIdentitySourceSchema,
+    raw_value: z.string().min(1).max(256),
+    observed_at: SubscriptionInstantSchema,
+  }),
+  z.strictObject({
+    status: z.literal('missing'),
+    tier: z.literal('free'),
+    source: z.literal('none'),
+    observed_at: SubscriptionInstantSchema,
+  }),
+]);
+
+/** Optional evidence in the existing quota JSON; historical records remain unobserved. */
+export const CloudSubscriptionStateSchema = z.discriminatedUnion('refresh_status', [
+  z.strictObject({
+    refresh_status: z.literal('succeeded'),
+    checked_at: SubscriptionInstantSchema,
+    observation: CloudSubscriptionObservationSchema,
+  }),
+  z.strictObject({
+    refresh_status: z.literal('failed'),
+    checked_at: SubscriptionInstantSchema,
+    observation: CloudSubscriptionObservationSchema.optional(),
+  }),
+]);
+
+export type CloudSubscriptionObservation = z.infer<typeof CloudSubscriptionObservationSchema>;
+export type CloudSubscriptionState = z.infer<typeof CloudSubscriptionStateSchema>;
+
 export interface CloudQuotaData {
   models: Record<string, CloudQuotaModelInfo>;
   model_forwarding_rules?: Record<string, string>;
   subscription_tier?: string;
+  subscription?: CloudSubscriptionState;
   is_forbidden?: boolean;
   isForbidden?: boolean;
   ai_credits?: { credits: number; expiryDate: string };
@@ -50,6 +101,8 @@ export interface CloudQuotaBucket {
   window: string;
   remaining_fraction: number;
   reset_time: string;
+  /** Successful local observation in Unix milliseconds; absent in historical snapshots. */
+  observed_at?: number;
   display_name?: string;
   description?: string;
 }
@@ -57,6 +110,8 @@ export interface CloudQuotaBucket {
 export interface CloudQuotaGroup {
   display_name: string;
   description?: string;
+  /** Optional provider-declared physical model membership. */
+  model_ids?: string[];
   buckets: CloudQuotaBucket[];
 }
 
@@ -86,7 +141,21 @@ export interface CloudAccountHealth {
   };
 }
 
+/** Private same-process precondition for OAuth effects on a live lease cache. Never log it. */
+export interface CloudAccountOAuthLeaseContext {
+  lifecycleGeneration?: string;
+  email: string;
+  refreshToken: string;
+  oauthClientKey?: string;
+  proxyUrl?: string;
+}
+
 export interface CloudAccount {
+  /** Private verified usage identity; never included in account views or exports. */
+  google_usage_subject_hash?: string;
+  google_usage_grant_hash?: string;
+  /** Storage-owned incarnation; omitted from account exports and renderer projections. */
+  lifecycle_generation?: string;
   id: string; // UUID
   provider: 'google' | 'anthropic';
   email: string;
@@ -108,6 +177,10 @@ export interface CloudAccount {
   proxy_url?: string;
   is_emulated?: boolean;
   emulation_strategy?: import('./emulation/types').AccountEmulationStrategyConfig;
+  /** Lower values are preferred for new proxy leases. Historical accounts default to 50. */
+  proxy_priority?: number;
+  /** Manual proxy participation switch. It is independent from client identity and OAuth health. */
+  proxy_enabled?: boolean;
 }
 
 export const AutoSwitchModelConfigSchema = z.object({
@@ -142,6 +215,7 @@ export const CloudQuotaModelInfoSchema = z.object({
   supports_images: z.boolean().optional(),
   supports_thinking: z.boolean().optional(),
   thinking_budget: z.number().optional(),
+  thinking_level: z.enum(['low', 'medium', 'high']).optional(),
   recommended: z.boolean().optional(),
   max_tokens: z.number().optional(),
   max_output_tokens: z.number().optional(),
@@ -153,6 +227,7 @@ export const CloudQuotaBucketSchema = z.object({
   window: z.string(),
   remaining_fraction: z.number(),
   reset_time: z.string(),
+  observed_at: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   display_name: z.string().optional(),
   description: z.string().optional(),
 });
@@ -160,6 +235,7 @@ export const CloudQuotaBucketSchema = z.object({
 export const CloudQuotaGroupSchema = z.object({
   display_name: z.string(),
   description: z.string().optional(),
+  model_ids: z.array(z.string().min(1).max(256)).max(256).optional(),
   buckets: z.array(CloudQuotaBucketSchema),
 });
 
@@ -167,6 +243,7 @@ export const CloudQuotaDataSchema = z.object({
   models: z.record(z.string(), CloudQuotaModelInfoSchema),
   model_forwarding_rules: z.record(z.string(), z.string()).optional(),
   subscription_tier: z.string().optional(),
+  subscription: CloudSubscriptionStateSchema.optional(),
   is_forbidden: z.boolean().optional(),
   isForbidden: z.boolean().optional(),
   ai_credits: z.object({ credits: z.number(), expiryDate: z.string() }).optional(),
@@ -211,7 +288,12 @@ export const CloudAccountHealthSchema = z
   })
   .strict();
 
+export const CloudAccountLifecycleGenerationSchema = z.string().regex(/^[a-f0-9]{32}$/);
+
 export const CloudAccountSchema = z.object({
+  google_usage_subject_hash: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
+  google_usage_grant_hash: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
+  lifecycle_generation: CloudAccountLifecycleGenerationSchema.optional(),
   id: z.string(),
   provider: z.enum(['google', 'anthropic']),
   email: z.string(), // Relaxed: was z.string().email() but caused validation issues with some formats
@@ -233,6 +315,8 @@ export const CloudAccountSchema = z.object({
   proxy_url: z.string().optional(),
   is_emulated: z.boolean().optional(),
   emulation_strategy: z.any().optional(),
+  proxy_priority: z.number().int().min(1).max(100).optional(),
+  proxy_enabled: z.boolean().optional(),
 });
 
 const ImportedProxyUrlSchema = z.string().refine(isValidProxyUrl, {

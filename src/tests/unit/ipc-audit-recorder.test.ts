@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createIpcAuditRecorder } from '@/modules/proxy-gateway/audit/ipc-audit-recorder';
-import { getTrafficAuditRequestContext } from '@/modules/proxy-gateway/audit/traffic-audit-context';
+import {
+  createThoughtSessionKey,
+  getTrafficAuditRequestContext,
+} from '@/modules/proxy-gateway/audit/traffic-audit-context';
 import type { TrafficAuditService } from '@/modules/proxy-gateway/audit/traffic-audit.service';
 
 function fixture() {
@@ -25,6 +28,33 @@ function gate() {
 }
 
 describe('IPC audit recording and drain', () => {
+  it.each([false, true])(
+    'never captures manual OAuth input while preserving handler failure=%s',
+    async (fails) => {
+      const { source, recorder } = fixture();
+      const input = { code: '4/private-manual-code' };
+      const output = { output: { accepted: true } };
+      const failure = new Error('safe manual input rejection');
+      const next = vi.fn(() => {
+        if (fails) {
+          throw failure;
+        }
+        return output;
+      });
+      const operation = recorder.run(['cloud', 'submitAuthCode'], input, next);
+      if (fails) {
+        await expect(operation).rejects.toBe(failure);
+      } else {
+        await expect(operation).resolves.toBe(output);
+      }
+      expect(next).toHaveBeenCalledOnce();
+      expect(source.startParent).not.toHaveBeenCalled();
+      expect(JSON.stringify(source.completeParent.mock.calls)).not.toContain(input.code);
+      recorder.closeAdmission();
+      await recorder.drain();
+    },
+  );
+
   it('accepts the synchronous result allowed by the oRPC middleware contract', async () => {
     const { source, recorder } = fixture();
     const result = { output: 'pong' };
@@ -47,8 +77,13 @@ describe('IPC audit recording and drain', () => {
           expect(getTrafficAuditRequestContext()).toEqual({
             attemptSequence: 0,
             parent: { id: 'parent-1', startedAt: 5, trafficClass: 'ipc' },
-            thoughtSessionKey: expect.stringMatching(/^[a-f0-9]{64}:session-one$/u),
+            thoughtSessionKey: createThoughtSessionKey({}, 'session-one'),
             thoughtSessionStable: true,
+            thoughtCaptureLease: expect.objectContaining({
+              valid: true,
+              sessionKey: createThoughtSessionKey({}, 'session-one'),
+              release: expect.any(Function),
+            }),
           });
           return result;
         }),

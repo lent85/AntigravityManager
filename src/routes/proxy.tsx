@@ -3,8 +3,9 @@
  * Modern AI Gateway management with multi-account routing, setup guides, token pricing, and public web portal.
  */
 import { createFileRoute } from '@tanstack/react-router';
+import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ipc } from '@/ipc/manager';
 import { useEffect, useMemo, useState } from 'react';
 import { useAppConfig } from '@/modules/config/hooks/useAppConfig';
@@ -24,21 +25,26 @@ import { ProxyGatewayPricingTab } from '@/modules/proxy-gateway/components/Proxy
 import { ProxyWebPortalTab } from '@/modules/proxy-gateway/components/ProxyWebPortalTab';
 import { GlobalSystemPromptCard } from '@/modules/proxy-gateway/components/GlobalSystemPromptCard';
 import { AuditAndThoughtStoreCard } from '@/modules/proxy-gateway/components/AuditAndThoughtStoreCard';
-import { OpenCodeSyncCard } from '@/modules/proxy-gateway/components/OpenCodeSyncCard';
-import { AgentToolSyncCard } from '@/modules/proxy-gateway/components/AgentToolSyncCard';
+import { UpstreamProxySettings } from '@/modules/config/components/UpstreamProxySettings';
+import { ImageSendWindowSettings } from '@/modules/proxy-gateway/ui';
+import { GatewayTools } from '@/modules/proxy-gateway/components/GatewayTools';
+import { quickClientModels } from '@/modules/proxy-gateway/components/quick-client-models';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { FeedbackState } from '@/components/ui/feedback-state';
 
 export const Route = createFileRoute('/proxy')({
+  validateSearch: z.object({ view: z.literal('settings').optional().catch(undefined) }),
   component: ProxyPage,
 });
 
 function ProxyPage() {
+  const queryClient = useQueryClient();
   const { t } = useTranslation();
+  const settings = useAppConfig();
   const { config, isLoading, saveConfig, serviceAvailable, serviceLoading, retryService } =
-    useAppConfig();
+    settings;
   const { data: cloudAccounts = [] } = useCloudAccounts();
 
   // Query all available local IPs
@@ -209,7 +215,7 @@ function ProxyPage() {
           />
         </TabsContent>
 
-        {/* Tab 2: Service, API Keys & Accounts */}
+        {/* Tab 3: Service, API Keys & Accounts */}
         <TabsContent value="service" className="mt-0 space-y-3">
           <ProxyServiceCard
             proxyConfig={proxyConfig}
@@ -226,17 +232,68 @@ function ProxyPage() {
           />
           <AuditAndThoughtStoreCard
             config={proxyConfig}
-            onChange={(patch) => updateProxyConfig({ ...proxyConfig, ...patch })}
+            revisionAvailable={Boolean(config?.auditRevision)}
+            onReload={async () => {
+              const [service] = await retryService();
+              if (service.isError) {
+                throw service.error;
+              }
+            }}
+            onChange={async (patch) => {
+              const result = await ipc.client.config.service.update({
+                ...(patch.traffic_audit ? { expectedAuditRevision: config?.auditRevision } : {}),
+                proxy: patch,
+              });
+              settings.recordServiceApplication(result);
+              queryClient.setQueryData(['serviceConfig'], result.snapshot);
+              setProxyConfig(result.snapshot.proxy);
+              return result.state;
+            }}
           />
-          <div data-slot="agent-tool-grid" className="grid items-stretch gap-3 xl:grid-cols-3">
-            <AgentToolSyncCard tool="claude" baseUrl={baseUrl} models={exampleModels} />
-            <AgentToolSyncCard tool="codex" baseUrl={baseUrl} models={exampleModels} />
-            <OpenCodeSyncCard baseUrl={baseUrl} models={exampleModels} />
-          </div>
+          <UpstreamProxySettings
+            onApplicationResult={settings.recordServiceApplication}
+            proxy={proxyConfig}
+            available={serviceAvailable}
+            onSaved={async () => {
+              await retryService();
+            }}
+          />
+          <ImageSendWindowSettings
+            config={proxyConfig.image_scheduler}
+            available={serviceAvailable}
+          />
+          <GatewayTools
+            baseUrl={baseUrl}
+            quickModels={quickClientModels(cloudAccounts)}
+            hasGatewayKey={proxyConfig.api_key_configured}
+          />
 
           {/* Experimental Features Card */}
           <div className="rounded-lg border bg-card p-4 space-y-3">
             <h3 className="text-sm font-semibold">{t('proxy.config.experimental_features', 'Experimental Features')}</h3>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="proxy-enable-context-cache">
+                  {t('proxy.config.context-cache-enabled')}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t('proxy.config.context-cache-enabled-desc')}
+                </p>
+              </div>
+              <Switch
+                id="proxy-enable-context-cache"
+                checked={proxyConfig.experimental?.context_cache_enabled ?? false}
+                onCheckedChange={(checked) =>
+                  updateProxyConfig({
+                    ...proxyConfig,
+                    experimental: {
+                      ...proxyConfig.experimental,
+                      context_cache_enabled: checked,
+                    },
+                  })
+                }
+              />
+            </div>
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label>{t('proxy.config.cloud_code_meta')}</Label>
@@ -292,7 +349,7 @@ function ProxyPage() {
           />
         </TabsContent>
 
-        {/* Tab 3: Guides & Prompts */}
+        {/* Tab 4: Guides & Prompts */}
         <TabsContent value="guides" className="space-y-6 mt-0">
           <ProxyDocsPromptsTab
             baseUrl={baseUrl}
@@ -302,7 +359,7 @@ function ProxyPage() {
           />
         </TabsContent>
 
-        {/* Tab 4: AI Gateway & Pricing */}
+        {/* Tab 5: AI Gateway & Pricing */}
         <TabsContent value="gateway" className="space-y-6 mt-0">
           <ProxyGatewayPricingTab
             proxyConfig={proxyConfig}
@@ -312,7 +369,7 @@ function ProxyPage() {
           />
         </TabsContent>
 
-        {/* Tab 5: Web Portal & Ngrok */}
+        {/* Tab 6: Web Portal & Ngrok */}
         <TabsContent value="portal" className="space-y-6 mt-0">
           <ProxyWebPortalTab
             proxyConfig={proxyConfig}
@@ -324,4 +381,5 @@ function ProxyPage() {
     </div>
   );
 }
+
 export default ProxyPage;

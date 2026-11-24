@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ipc } from '@/ipc/manager';
@@ -23,7 +23,7 @@ import type {
   ProxyUsageRecord,
   ProxyUsageStatsResult,
   UsageTimeRange,
-} from '../server/shared/services/proxy-usage.types';
+} from '@/server/gateway/shared/services/proxy-usage.types';
 import {
   Activity,
   Layers,
@@ -33,19 +33,11 @@ import {
   Trash2,
   Search,
   Filter,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
   AppWindow,
   Cpu,
-  ArrowUpDown,
-  ChevronDown,
   ChevronRight,
-  Info,
   Server,
-  Zap,
   UserCheck,
-  Users,
   ArrowRight,
 } from 'lucide-react';
 
@@ -80,6 +72,7 @@ export function ProxyDashboardTab({
   // Sync external client filter if provided
   useEffect(() => {
     if (selectedClientKeyId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setClientFilter(selectedClientKeyId);
     }
   }, [selectedClientKeyId]);

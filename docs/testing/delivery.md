@@ -18,9 +18,15 @@ verification build, set `AGM_PACKAGE_OUTPUT` to an isolated output directory and
 Preparation requires the target platform and architecture to match the native build host.
 
 `node --test scripts/build/trace-standalone-runtime.test.mjs` checks exclusion of host assets and retention
-of required native entries through the actual dependency tracer.
+of required native entries through the actual dependency tracer. SQLite uses the published Node-API
+binary for the bundled Node target.
 
 ### Native installed runtime
+
+To exercise worker teardown with the packaged Node binary, launch
+`scripts/acceptance/runtime/diagnostics-terminal-native.mjs --smoke --runtime-root <packaged-resources>/standalone`
+with that binary. The smoke check runs Thought Store first in a fresh process, with SQLite loaded by
+the worker. It waits for worker termination following the shutdown response.
 
 Run `pnpm run test:acceptance runtime installed <packaged-resources>/standalone` against the actual resources.
 The check copies them outside the repository and removes Node search-path overrides. It verifies
@@ -29,6 +35,14 @@ both workers, core owner bootstrap, representative remote adapters, gateway star
 unauthenticated rejection, external attachment, shutdown, persisted reopen, owned-process crash
 recovery and stale-epoch rejection. The whole-run timeout accommodates four cold starts and three
 terminal drains; individual production startup and shutdown deadlines remain unchanged.
+The installed CLI exercises top-level and subcommand help, invalid-argument exit status, a
+structured missing-backup error from Core, and a successful edit to an isolated JSONC settings
+file that preserves comments and unrelated settings.
+The gateway WebSocket check rejects an unauthenticated upgrade, receives the authenticated local
+prewarm event sequence and completes a normal close. A separate loopback socket pair verifies
+the bundled WebSocket implementation's compressed UTF-8 round trip and normal close.
+An authenticated audit request verifies query validation with both a valid limit and an invalid
+limit that returns a field error.
 Credentials use a random test-only service name; a test preload maps core
 keytar and OpenCode native keyring calls to that name while using the actual native OS store. No production credentials are
 read or changed. The presentation composition executes under Node with fail-fast native sentinels,
@@ -64,6 +78,9 @@ an isolated directory, removes one owned worker, verifies exact Windows Installe
 the native and real-window checks against the installed resources. It uninstalls only verified test
 product identities, checks their registration is gone, and restores previous application shortcuts
 and login settings. The existing Squirrel installation registration must remain unchanged.
+Installer operations and the nested desktop check have a 15-minute deadline. On a timeout,
+inspect the retained MSI logs and wait for any Windows Installer service transaction to finish
+before starting another install or uninstall.
 
 For a cross-version fixture, `pnpm run make:msi-upgrade-fixture <packaged-app> <new-out-subdirectory>`
 uses the configured WiX maker with the previous patch version. Supply that MSI as the second argument
@@ -104,11 +121,67 @@ restores its shortcuts and login settings. Run it only from a disposable Windows
 installer's automatic relaunch uses that account's default app profile, even when the previous
 process had a temporary profile argument. The check refuses an existing default NSIS installation
 or app profile.
+Uninstall completion requires the owned installation directory to disappear after the uninstaller
+launcher exits. The runner waits up to 90 seconds and treats incomplete cleanup as failure.
+After successful cleanup, the NSIS runner writes a JSON report in a fresh
+`out/nsis-acceptance-*` directory. It records separate silent fresh-install samples for the
+candidate and the previous version,
+the time from selecting restart to the old process exiting and to observing its replacement window, and
+the candidate's stage durations. The runner derives stage durations from whole-second diagnostic
+timestamps. A zero can mean the step finished within the same recorded second. The new process
+sample requires a responsive Windows main window and does not exercise a control in the renderer.
+
+Run `pnpm run test:acceptance installers nsis-feedback <makensis.exe>` on Windows to exercise
+the production logging functions without a full application payload. Supply an installed NSIS
+compiler with its standard includes and plugins. The check compiles a small executable and
+runs it with isolated `USERPROFILE` values under a fresh `out/nsis-feedback-*` directory. It
+checks native log naming, UTC timestamps, silent/update/failure records, preservation of the
+NSIS error flag, five-file retention, the size bound, and continuation when the log directory
+is unavailable. It also checks that an absent app is reported as not ready during restart.
+It preserves application and unrelated installer logs. The directory retains
+the generated fixture, logs and result; it does not change installation registrations, shortcuts
+or the current user's application profile. This check does not establish full installer or UI behavior.
+
+Run `pnpm run test:acceptance installers nsis-inventory <packaged-app> <installer.exe> <report.json>`
+to record the installer's size and SHA-256, the unpacked Forge file count and size by group, the
+ASAR entry count, and byte-identical on-disk files. Supply the Forge directory and NSIS installer
+from the same build. All three paths belong under `out/`. Use an unused report path outside the
+inspected app tree. The inventory does not extract the installer or prove that an identical file
+can be removed.
+
+For an installation performance comparison, use unmodified candidate installers and record the
+build revision, artifact hashes, machine and cache conditions. Compare changes to the installer
+with the same Forge payload. Measure fresh install, manual upgrade and in-app update separately.
+Start interactive timing after the last confirmation and stop at the finish page. Stop silent
+timing when the process exits. For user-visible restart time, stop when the new window is
+interactive. Alternate baseline and candidate runs at least five times per side and compare the
+median and range of successful runs. Save the samples and any CPU or disk traces under `out/`.
+These tools, reports and failure fixtures are for repository acceptance.
+
 The packaged Squirrel in-app updater check (`pnpm run test:acceptance installers squirrel-updater`) also
 requires a disposable Windows account with no existing app profile because its installer
 relaunch may drop the temporary user-data argument.
 Check a missing feed, an interrupted download and a tampered installer separately. Packaging
 and feed tests alone do not establish installed updater behavior or cross-architecture acceptance.
+
+For the NSIS staging regression, supply an incomplete installer as a fourth argument to
+`test:acceptance installers nsis-updater`. Build it with the same NSIS configuration from a
+disposable copy of the candidate payload under `out` that omits `resources/app.asar`. Use
+`pnpm exec electron-builder --win nsis --x64 --prepackaged <incomplete-payload> --config electron-builder.config.cjs --publish never`
+with `AGM_NSIS_ARCH=x64` and a separate `AGM_NSIS_OUTPUT` under `out`. This intentionally bypasses
+`make:nsis`'s input check. The runner requires an unsuccessful exit and byte-identical previous
+application files, then exercises the normal updater with the complete installer. For interactive
+coverage, open the complete installer directly and cancel at the confirmation. Verify the
+previous installation remains usable. The updater check also places a directory junction in the
+previous installation and verifies that replacing it preserves the linked external file.
+
+For feedback acceptance, expand the progress details while a full payload is extracting. Observe
+that Windows continues to respond and that the stage shown matches the work. Check success and
+shortcut warnings on an interactive run and an incomplete-payload failure on a registered
+installation. Verify that a silent run creates its own local diagnostic file without showing a
+wizard. In the disposable profile, put an ordinary file at the expected log directory and verify
+that the same installer still runs. Keep each run's observable result separate from any failure
+fixture or timed sample.
 
 ### Linux AppImage updates
 

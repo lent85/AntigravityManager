@@ -28,6 +28,7 @@ import {
   PACKAGE_PRUNE_NODE_MODULES,
   shouldIgnorePackagePath,
 } from './src/shared/packaging/forgeIgnore';
+import { pruneLinuxSqlitePrebuilds } from './src/shared/packaging/linuxSqlitePrebuilds';
 import { normalizeSquirrelArtifacts } from './src/shared/packaging/squirrelArtifacts';
 import { shouldIncludeInElectronUpdaterMetadata } from './src/shared/packaging/updateMetadata';
 
@@ -158,8 +159,8 @@ const config: ForgeConfig = {
     ignore: (packagePath: string) => shouldIgnorePackagePath(packagePath),
     prune: true,
   },
-  // Standalone Node builds can replace a binary while Electron rebuild metadata stays cached.
-  rebuildConfig: { force: true },
+  // SQLite ships Node-API prebuilds shared by Electron and standalone Node.
+  rebuildConfig: { force: true, ignoreModules: ['better-sqlite3'] },
   hooks: {
     prePackage: async (_config, platform, arch) => {
       const pnpmCli = process.env.npm_execpath;
@@ -198,7 +199,10 @@ const config: ForgeConfig = {
         const destPath = path.join(nodeModulesPath, moduleName);
 
         if (fs.existsSync(srcPath)) {
-          fs.cpSync(srcPath, destPath, { recursive: true });
+          fs.cpSync(srcPath, destPath, {
+            recursive: true,
+            dereference: platform === 'linux' && moduleName === 'better-sqlite3',
+          });
           console.log(`Copied native module: ${moduleName}`);
           return;
         }
@@ -214,6 +218,10 @@ const config: ForgeConfig = {
 
       for (const moduleName of nativeModules) {
         copyModuleRecursive(moduleName);
+      }
+
+      if (platform === 'linux') {
+        pruneLinuxSqlitePrebuilds(path.join(nodeModulesPath, 'better-sqlite3'), arch);
       }
 
       if (platform === 'win32') {
@@ -528,6 +536,11 @@ const config: ForgeConfig = {
         },
         {
           entry: 'src/modules/proxy-gateway/thought-store/thought-store.worker.ts',
+          config: 'vite.worker.config.mts',
+          target: 'main',
+        },
+        {
+          entry: 'src/modules/error-diagnostics/error-window.worker.ts',
           config: 'vite.worker.config.mts',
           target: 'main',
         },

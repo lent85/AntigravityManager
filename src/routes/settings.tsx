@@ -1,5 +1,5 @@
-import { UpstreamProxySettings } from '@/modules/config/components/UpstreamProxySettings';
-import { createFileRoute } from '@tanstack/react-router';
+import { SettingsSaveFeedback } from '@/modules/config/components/SettingsSaveFeedback';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { useTheme } from '@/components/shared/theme-provider';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,17 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { CommitOnBlurNumberInput, Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { useQuery } from '@tanstack/react-query';
 import { checkForUpdates, getAppVersion, getPlatform } from '@/modules/app-shell/actions/app';
 import { useTranslation } from 'react-i18next';
-import { setAppLanguage } from '@/modules/app-shell/actions/language';
+import { DesktopAppearanceSettings } from '@/modules/app-shell/components/DesktopAppearanceSettings';
 import { useAppConfig } from '@/modules/config/hooks/useAppConfig';
 import { useToast } from '@/components/ui/use-toast';
 import { Loader2, FolderOpen, RefreshCw, X, Sun, Moon, Laptop, Settings, Palette, Users } from 'lucide-react';
@@ -31,7 +24,6 @@ import {
   useSetMetricsSyncDelayConfig,
 } from '@/modules/cloud-account/hooks/useCloudAccounts';
 import { useState } from 'react';
-import type { ServiceConfigSnapshot } from '@/modules/config/service-config.schema';
 import {
   detectAgyCliExecutable,
   getAntigravityArgs,
@@ -42,6 +34,8 @@ import {
 } from '@/modules/antigravity-runtime/actions/system';
 import { isClarityAvailable } from '@/shared/analytics/clarity';
 import { AntigravityClientCacheSettings } from '@/modules/antigravity-runtime/components/AntigravityClientCacheSettings';
+import { ClaudeCoworkRuntimeSettings } from '@/modules/antigravity-runtime/components/ClaudeCoworkRuntimeSettings';
+import { ErrorDiagnosticsCard } from '@/modules/error-diagnostics/ui';
 
 function parseArgsInput(value: string): string[] {
   const args: string[] = [];
@@ -79,7 +73,8 @@ function parseArgsInput(value: string): string[] {
 
 function SettingsPage() {
   const { theme, setTheme } = useTheme();
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const settings = useAppConfig();
   const {
     config,
     isLoading,
@@ -87,7 +82,7 @@ function SettingsPage() {
     serviceAvailable,
     accountAlertPolicyAvailable,
     retryService,
-  } = useAppConfig();
+  } = settings;
   const { toast } = useToast();
 
   // Local draft overrides for executable paths and arguments
@@ -132,30 +127,6 @@ function SettingsPage() {
   const isMac = platform === 'darwin';
   const supportsManualUpdateCheck =
     platform === 'win32' || platform === 'darwin' || platform === 'linux';
-
-  const handleLanguageChange = (value: string) => {
-    setAppLanguage(value, i18n);
-    if (config) {
-      saveConfig({ ...config, language: value });
-    }
-  };
-
-  // Helper to update proxyConfig and auto-save
-  const updateProxyConfig = async (newProxyConfig: ServiceConfigSnapshot['proxy']) => {
-    if (config) {
-      await saveConfig({ ...config, proxy: newProxyConfig });
-    }
-  };
-
-  const updateGatewayPort = (value: string) => {
-    if (!proxyConfig) {
-      return;
-    }
-
-    const port = Number.parseInt(value, 10);
-    const nextPort = Number.isInteger(port) && port >= 1024 && port <= 65535 ? port : 8045;
-    updateProxyConfig({ ...proxyConfig, port: nextPort });
-  };
 
   const saveAntigravityExecutable = async (value: string) => {
     const executablePath = value.trim();
@@ -349,6 +320,7 @@ function SettingsPage() {
 
   return (
     <div className="container space-y-5">
+      <SettingsSaveFeedback {...settings} />
       <div className="flex items-start gap-3">
         <div className="bg-warning-soft text-warning border-warning-border flex size-11 shrink-0 items-center justify-center rounded-xl border">
           <Settings className="size-5" aria-hidden="true" />
@@ -438,33 +410,7 @@ function SettingsPage() {
                 </ToggleGroup>
               </div>
 
-              <div className="flex items-center justify-between space-x-2">
-                <div className="space-y-1">
-                  <Label htmlFor="language">{t('settings.language.title')}</Label>
-                  <p className="text-muted-foreground text-sm">
-                    {t('settings.language.description')}
-                  </p>
-                </div>
-                <Select
-                  value={i18n.language}
-                  onValueChange={handleLanguageChange}
-                  key={i18n.language}
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder={t('settings.language.title')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="en">{t('settings.language.english')}</SelectItem>
-                    <SelectItem value="zh-CN">{t('settings.language.chinese')}</SelectItem>
-                    <SelectItem value="ru">{t('settings.language.russian')}</SelectItem>
-                    <SelectItem value="vi">{t('settings.language.vietnamese')}</SelectItem>
-                    <SelectItem value="tr">{t('settings.language.turkish')}</SelectItem>
-                    <SelectItem value="fr">{t('settings.language.french')}</SelectItem>
-                    <SelectItem value="pt-BR">{t('settings.language.portuguese')}</SelectItem>
-                    <SelectItem value="ja">{t('settings.language.japanese')}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <DesktopAppearanceSettings />
 
               <div className="flex items-center justify-between space-x-2">
                 <div className="space-y-1">
@@ -930,7 +876,9 @@ function SettingsPage() {
             </Card>
           )}
 
+          <ClaudeCoworkRuntimeSettings />
           <AntigravityClientCacheSettings />
+          <ErrorDiagnosticsCard config={config} available={serviceAvailable} />
 
           <Card className="shadow-none">
             <CardHeader className="p-4">
@@ -1193,100 +1141,12 @@ function SettingsPage() {
           <WeeklyWarmupSettings />
         </TabsContent>
 
-        {/* --- PROXY TAB --- */}
-        <TabsContent value="proxy" className="space-y-5">
-          <fieldset disabled={!serviceAvailable} className="space-y-5">
-            <Card className="shadow-none">
-              <CardHeader className="p-4">
-                <CardTitle>{t('settings.gateway.title')}</CardTitle>
-                <CardDescription>{t('settings.gateway.description')}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 p-4 pt-0">
-                <div className="grid gap-2 sm:grid-cols-[1fr_180px] sm:items-center">
-                  <div className="space-y-1">
-                    <Label htmlFor="settings-gateway-port">{t('settings.gateway.port')}</Label>
-                    <p className="text-muted-foreground text-xs">
-                      {t('settings.gateway.port_hint')}
-                    </p>
-                  </div>
-                  <CommitOnBlurNumberInput
-                    id="settings-gateway-port"
-                    min={1024}
-                    max={65535}
-                    value={proxyConfig.port}
-                    onCommit={updateGatewayPort}
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-4 py-3">
-                  <div className="space-y-1">
-                    <Label>{t('settings.gateway.auto_start')}</Label>
-                    <p className="text-muted-foreground text-xs">
-                      {t('settings.gateway.auto_start_desc')}
-                    </p>
-                  </div>
-                  <Switch
-                    checked={proxyConfig.auto_start}
-                    onCheckedChange={(checked) =>
-                      updateProxyConfig({ ...proxyConfig, auto_start: checked })
-                    }
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
-                  <div className="space-y-1">
-                    <Label htmlFor="settings-allow-local-video-paths">
-                      {t('proxy.config.allow-local-video-paths')}
-                    </Label>
-                    <p className="text-muted-foreground text-xs">
-                      {t('proxy.config.allow-local-video-paths-desc')}
-                    </p>
-                  </div>
-                  <Switch
-                    id="settings-allow-local-video-paths"
-                    checked={proxyConfig.experimental.allow_local_video_paths}
-                    onCheckedChange={(checked) =>
-                      updateProxyConfig({
-                        ...proxyConfig,
-                        experimental: {
-                          ...proxyConfig.experimental,
-                          allow_local_video_paths: checked,
-                        },
-                      })
-                    }
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
-                  <div className="space-y-1">
-                    <Label htmlFor="settings-context-cache-enabled">
-                      {t('proxy.config.context-cache-enabled')}
-                    </Label>
-                    <p className="text-muted-foreground text-xs">
-                      {t('proxy.config.context-cache-enabled-desc')}
-                    </p>
-                  </div>
-                  <Switch
-                    id="settings-context-cache-enabled"
-                    checked={proxyConfig.experimental.context_cache_enabled}
-                    onCheckedChange={(checked) =>
-                      updateProxyConfig({
-                        ...proxyConfig,
-                        experimental: {
-                          ...proxyConfig.experimental,
-                          context_cache_enabled: checked,
-                        },
-                      })
-                    }
-                  />
-                </div>
-              </CardContent>
-            </Card>
-            <UpstreamProxySettings
-              proxy={proxyConfig}
-              available={serviceAvailable}
-              onSaved={async () => {
-                await retryService();
-              }}
-            />
-          </fieldset>
+        <TabsContent value="proxy">
+          <Button asChild variant="outline">
+            <Link to="/proxy" search={{ view: 'settings' }}>
+              {t('proxy.workspace.settings')}
+            </Link>
+          </Button>
         </TabsContent>
       </Tabs>
     </div>

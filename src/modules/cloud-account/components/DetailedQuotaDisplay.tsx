@@ -6,14 +6,13 @@ import {
   clampQuotaPercentage,
   formatResetTimeLabel,
   formatResetTimeTitle,
-  getQuotaStatus,
 } from '@/modules/cloud-account/utils/quota-display';
 import {
   getModelQuotaBarColorClass,
   getModelQuotaTextColorClass,
-  getQuotaBarColorClassByPercentage,
-  getQuotaTextColorClassByPercentage,
 } from './quota-colors';
+import { QuotaBucketEvidence } from './QuotaBucketEvidence';
+import { useQuotaResetClock } from '../hooks/use-quota-reset-clock';
 
 /** Retains detailed quota buckets based on the active quota window. */
 export function DetailedQuotaDisplay({
@@ -35,7 +34,9 @@ export function DetailedQuotaDisplay({
             : group.buckets.filter((bucket) => !isWeeklyQuotaBucket(bucket)),
     }))
     .filter((group) => group.buckets.length > 0);
-
+  const now = useQuotaResetClock(
+    visibleGroups.flatMap((group) => group.buckets.map((bucket) => bucket.reset_time)),
+  );
   if (visibleGroups.length === 0) {
     return null;
   }
@@ -106,6 +107,7 @@ export function DetailedQuotaDisplay({
                           unknown: t('cloud.card.resetUnknown'),
                         })}
                       </div>
+                      <QuotaBucketEvidence bucket={bucket} now={now} />
                     </div>
                   );
                 })}

@@ -11,6 +11,18 @@ request lineage, retention controls or cross-protocol continuation.
 
 ## Decision
 
+D15 keeps versioned attempt-stage measurements in a nullable `timing_json` column,
+independently of captured HTTP headers. Schema 7 preserves schema-4, schema-5 and
+schema-6 rows after a verified snapshot. Old rows remain unknown. Measurement
+snapshots reach the once-only attempt completion, not the later debug report.
+
+HAR export uses the existing selected-owner atomic file writer and paginated safe
+body readers. Only actual parent/attempt records become entries. Missing capture,
+unknown transport metadata and reconstructed SSE remain explicit. Public operation
+duration and measured stages stay in `_agm` extensions when the transport breakdown
+required by HAR is unavailable. Owner compatibility 11 refuses mixed Core versions.
+See the [current reference](../../../../docs/modules/proxy-gateway/traffic-diagnostics.md).
+
 Traffic audit and Thought Store use separate SQLite databases, worker threads and bounded queues.
 Each worker is a dedicated Electron Forge build entry rather than an evaluated source string. The
 feature owns its Drizzle schema and repository; Drizzle handles typed metadata CRUD while the
@@ -67,11 +79,12 @@ body batch commits in one transaction before yielding, avoiding a commit per sma
 
 Thought sessions are keyed by SHA-256 of the presented credential plus a sanitized stable client
 session ID. Missing stable IDs are request-local. Thought text and signatures use `RAW1` or `AGZ1`
-framing and remain plaintext. Each session is transactionally capped at 200 turns and 64 MiB of
-uncompressed thought, with oversized single records reduced to hash and metadata. The store retains
-up to 2,000 sessions for 15 days.
-Historical turns are matched against a snapshot of the full session in both the in-memory cache and
-the SQLite worker transaction. This avoids duplicate appends when clients resend complete history;
+framing and remain plaintext. L1 defaults to 600 turns (10–10,000 configurable), at most 64 MiB
+per session and 256 MiB globally; complete retained fields count toward those budgets. L1 eviction
+does not delete durable turns. L2 retains up to 2,000 sessions for 15 idle days under its own
+1,024 MiB DB/WAL/SHM write-admission budget. Oversized single records retain summary/digest form.
+Historical turns are matched against bounded recent candidates in memory and in the
+SQLite worker transaction. Targeted older-record restoration remains D16 follow-up. This avoids duplicate appends for identified recent history;
 a stronger thought can update its matching record. Restoration searches newer records first and
 reserves category fallback for the final model turn, preventing a recent thought from filling an
 unrelated older turn. Complete thought/signature pairs are not rewritten.
@@ -114,6 +127,14 @@ filters change or the page is left. Parent requests can use the current proxy ke
 redacted. Historical credentials are neither restored nor stored for this feature.
 
 ## Alternatives considered
+
+- Internal timing values in captured response headers were rejected because they
+  would fabricate protocol metadata and contaminate HAR. Separate scalar columns
+  were viable, but one strict versioned object keeps this detail-only observation
+  cohesive without duplicating its shape across multiple columns.
+- Browser Blob export was rejected because large bodies already belong to a bounded
+  selected-owner file stream. Guessed upstream entries, methods, origins and default
+  wait times were rejected because they misrepresent what was observed.
 
 - Extending the existing 4xx capture files was rejected because it has no relational parent/attempt
   model, is opt-in, and deliberately omits most successful traffic.

@@ -8,6 +8,7 @@ import path from 'node:path';
 import { build, loadConfigFromFile } from 'vite';
 import { c as archiveTar, x as extractTar } from 'tar';
 import { pipeline } from 'node:stream/promises';
+import { seedNativeBootstrapDiagnostic } from './seed-native-bootstrap-diagnostic.mjs';
 
 const project = process.cwd();
 assert(
@@ -31,6 +32,7 @@ const environment = {
   HOME: home,
   APPDATA: path.join(home, 'AppData', 'Roaming'),
   LOCALAPPDATA: path.join(home, 'AppData', 'Local'),
+  CLAUDE_CONFIG_DIR: path.join(home, '.claude'),
   AGM_DIAGNOSTIC_TEST_HOME: home,
   AGM_DIAGNOSTIC_TEST_CRASH: '1',
 };
@@ -129,6 +131,7 @@ try {
     [path.join(root, 'cli', 'main.cjs'), manifest.cliSha256],
     [path.join(root, 'core', 'traffic-audit.worker.js'), manifest.auditWorkerSha256],
     [path.join(root, 'core', 'thought-store.worker.js'), manifest.thoughtWorkerSha256],
+    [path.join(root, 'core', 'error-window.worker.js'), manifest.errorWindowWorkerSha256],
   ]) {
     await verifyFile(file, expected);
   }
@@ -150,6 +153,7 @@ try {
   console.log('Installed SQLite WAL/reopen and real OS credential CRUD/restart passed.');
 
   const core = path.join(root, 'core');
+  await seedNativeBootstrapDiagnostic(home, path.join(core, 'error-window.worker.js'));
   const loaded = await loadConfigFromFile(
     { command: 'build', mode: 'production' },
     path.join(project, 'vite.core.config.mts'),
@@ -162,7 +166,7 @@ try {
     logLevel: 'error',
     // Presentation-only JS belongs to this harness, not the standalone production graph.
     ssr: {
-      noExternal: [/^@orpc\//],
+      noExternal: loaded.config.ssr.noExternal,
       external: [...loaded.config.build.rollupOptions.external, 'electron', 'electron/main'],
     },
     build: {
@@ -268,7 +272,15 @@ require('@napi-rs/keyring').Entry = class { constructor() { forbidden(); } };
   );
   // Four bounded cold starts and three terminal drains need a whole-run budget above 60 seconds.
   console.log(
-    run(['--require', presentationPreload, path.join(core, 'bootstrap.cjs')], 180_000).trim(),
+    run(
+      [
+        '--require',
+        presentationPreload,
+        path.join(core, 'bootstrap.cjs'),
+        path.join(root, 'cli', 'main.cjs'),
+      ],
+      180_000,
+    ).trim(),
   );
   run(['-e', credentialCheck, service, 'empty-core']);
   process.stdout.write(

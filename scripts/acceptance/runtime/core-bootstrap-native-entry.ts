@@ -1,12 +1,18 @@
 import assert from 'node:assert/strict';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
+import { parse } from 'jsonc-parser';
 import { DEFAULT_APP_CONFIG } from '../../../src/modules/config/types';
-import { getAgentDir } from '../../../src/shared/platform/paths';
+import {
+  getAgentDir,
+  getProxyStateDir,
+  getAntigravityDbPaths,
+} from '../../../src/shared/platform/paths';
+import { z } from 'zod';
 import { bootstrapDesktopOwner } from '../../../src/modules/app-shell/services/desktop-owner-bootstrap';
 import { standaloneCoreConnection } from '../../../src/modules/app-shell/services/standalone-core-connection';
 import { selectDesktopOwners } from '../../../src/modules/app-shell/services/desktop-owner-selection';
@@ -18,22 +24,91 @@ import { CoreRpcClient } from '../../../src/core/rpc/client';
 import { ManagementClient } from '../../../src/core/management/client';
 import { getManagementEndpoint } from '../../../src/core/management/endpoint';
 import type { CoreHandshake } from '../../../src/core/management/handshake';
+import { verifyInstalledWebSocket } from './installed-websocket';
 import {
+  expectedLargeThoughtTransfer,
   LARGE_THOUGHT_BYTES,
   LARGE_THOUGHT_SESSION,
-  LARGE_THOUGHT_SIGNATURE,
 } from './fixtures/thought-capacity';
+
+async function verifyPackagedCli(entry: string, home: string): Promise<void> {
+  const run = (...args: string[]) => {
+    const result = spawnSync(process.execPath, [entry, ...args], {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 15_000,
+      maxBuffer: 8_000,
+    });
+    assert.ifError(result.error);
+    assert.equal(result.signal, null);
+    return result;
+  };
+  const help = run('--help');
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /Usage: antigravity-manager \[/);
+  const serviceHelp = run('service', '--help');
+  assert.equal(serviceHelp.status, 0);
+  assert.match(serviceHelp.stdout, /Usage: antigravity-manager service \[/);
+  const invalid = run('--invalid-acceptance-option');
+  assert.equal(invalid.status, 2);
+  assert.match(invalid.stderr, /unknown option '--invalid-acceptance-option'/);
+
+  const configDirectory = path.join(home, '.claude');
+  assert.equal(process.env.CLAUDE_CONFIG_DIR, configDirectory);
+  const settings = path.join(configDirectory, 'settings.json');
+  const original = '{\n  // Preserve this setting.\n  "unrelated": true,\n}\n';
+  await fs.mkdir(configDirectory);
+  await fs.writeFile(settings, original);
+
+  const noBackup = run('tools', 'restore', 'claude', '--yes');
+  assert.equal(noBackup.status, 1);
+  assert.equal(noBackup.stdout, '');
+  assert.equal(
+    noBackup.stderr,
+    'Tool settings could not be updated (backup-missing). No credentials were printed.\n',
+  );
+  assert.equal(await fs.readFile(settings, 'utf8'), original);
+
+  const baseUrl = 'http://127.0.0.1:8045';
+  const model = 'acceptance-model';
+  const configured = run('tools', 'configure', 'claude', '--base-url', baseUrl, '--model', model);
+  assert.equal(configured.status, 0, configured.stderr);
+  assert.equal(configured.stderr, '');
+  assert.equal(
+    configured.stdout,
+    'Configuration saved. Reopen the tool to use the new settings.\n',
+  );
+  const saved = await fs.readFile(settings, 'utf8');
+  assert.match(saved, /\/\/ Preserve this setting\./);
+  const config: unknown = parse(saved);
+  assert.partialDeepStrictEqual(config, {
+    unrelated: true,
+    model,
+    env: { ANTHROPIC_BASE_URL: baseUrl },
+  });
+  process.stdout.write('Packaged CLI parsing, Core RPC errors, and JSONC edits passed.\n');
+}
 
 /** Real core process and SQLite; presentation and keyring isolation belong to the launcher. */
 async function check(): Promise<void> {
   const home = process.env.AGM_DIAGNOSTIC_TEST_HOME;
   assert(home);
+  for (const target of ['classic', 'ide'] as const) {
+    for (const candidate of getAntigravityDbPaths(target)) {
+      const relative = path.relative(home, candidate);
+      assert(
+        !relative.startsWith('..') && !path.isAbsolute(relative),
+        'Client database discovery escaped the isolated home',
+      );
+    }
+  }
   assert.equal(
     getManagementEndpoint(),
     getManagementEndpoint(process.platform, home),
     'Presentation endpoint must use the isolated home',
   );
   const directory = path.dirname(process.argv[1]);
+  const apiKey = randomUUID();
   await fs.mkdir(getAgentDir(), { recursive: true });
   await fs.writeFile(
     path.join(getAgentDir(), 'gui_config.json'),
@@ -42,12 +117,55 @@ async function check(): Promise<void> {
       proxy: {
         ...DEFAULT_APP_CONFIG.proxy,
         auto_start: false,
-        api_key: randomUUID(),
+        api_key: apiKey,
         traffic_audit: { ...DEFAULT_APP_CONFIG.proxy.traffic_audit, enabled: true },
         thought_store: { ...DEFAULT_APP_CONFIG.proxy.thought_store, enabled: true },
       },
     }),
   );
+  const responsesPath = path.join(getProxyStateDir(), 'openai-responses-sessions.json');
+  await fs.mkdir(path.dirname(responsesPath), { recursive: true });
+  await fs.writeFile(
+    responsesPath,
+    JSON.stringify({
+      version: 1,
+      entries: ['A', 'B'].map((key) => ({
+        key: `native-owner-${key}`,
+        updatedAt: Date.now(),
+        value: {
+          node: {
+            identity: { version: 1, origin: 'content', initialTaskFingerprint: 'f'.repeat(64) },
+            thoughtSessionKey: `native-owner-scope-${key}`,
+            historyOwner: 'unknown',
+            parent: null,
+            inputDelta: [{ role: 'user', content: key }],
+            responseOutput: [],
+            toolCallItems: [],
+            model: 'fixture',
+          },
+        },
+      })),
+    }),
+  );
+  const retainedResponseKeys = async () =>
+    z
+      .object({ entries: z.array(z.object({ key: z.string() })) })
+      .parse(JSON.parse(await fs.readFile(responsesPath, 'utf8')))
+      .entries.map((entry) => entry.key);
+  const assertRecoveryDeletion = (
+    receipt: Awaited<ReturnType<CoreRpcClient['thought']['delete']>>,
+    removed: number,
+  ) => {
+    assert.deepEqual(receipt, {
+      sessions: 0,
+      records: 0,
+      recoveryComplete: true,
+      recovery: [
+        { owner: 'signature-cache', state: 'complete', removed: 0, unknown: 0 },
+        { owner: 'responses', state: 'complete', removed, unknown: 0 },
+      ],
+    });
+  };
   const children: ChildProcess[] = [];
   const connection = {
     ...standaloneCoreConnection(),
@@ -105,33 +223,118 @@ async function check(): Promise<void> {
     const handshake = await connection.management.handshake();
     assert.equal(handshake.pid, children[0].pid);
     assert.equal((await connection.probeProfileOwner())?.pid, handshake.pid);
+    const cli = process.argv[2];
+    if (cli) {
+      await verifyPackagedCli(cli, home);
+    }
     assert.deepEqual(await getCloudAccountAdapter().listViews(), []);
     process.stdout.write('Standalone-core account view passed.\n');
     assert.equal((await getConfigAdapter().read()).proxy.auto_start, false);
     const client = new CoreRpcClient(getManagementEndpoint(), undefined, handshake.epoch);
+    const errorStatus = await client.errorDiagnostics.status();
+    assert.equal(errorStatus.role, 'core');
+    assert.equal(errorStatus.storage.state, 'ready');
+    const selectedBudget = (await client.readServiceConfig()).errorDiagnosticsBudget;
+    if (errorStatus.storage.state === 'ready') {
+      assert.equal(errorStatus.storage.allocationBytes, selectedBudget.coreBytes);
+      assert.equal(errorStatus.storage.records, 1);
+    }
+    const errorPage = await client.errorDiagnostics.query({ source: 'native-bootstrap' });
+    assert.equal(errorPage.records.length, 1);
+    const diagnostic = await client.errorDiagnostics.open({ id: errorPage.records[0].id });
+    assert(diagnostic);
+    const {
+      kind: errorKind,
+      epoch: errorEpoch,
+      capabilityId: errorCapability,
+      resourceId: errorResource,
+    } = diagnostic.transfer;
+    const errorIdentity = {
+      kind: errorKind,
+      epoch: errorEpoch,
+      capabilityId: errorCapability,
+      resourceId: errorResource,
+    };
+    const diagnosticChunks: Buffer[] = [];
+    let errorCursor = 0;
+    while (errorCursor < diagnostic.transfer.totalBytes) {
+      const chunk = await client.errorDiagnostics.readContent({
+        ...errorIdentity,
+        cursor: errorCursor,
+      });
+      assert.equal(chunk.cursor, errorCursor);
+      assert(chunk.nextCursor > errorCursor);
+      diagnosticChunks.push(Buffer.from(chunk.data, 'base64'));
+      errorCursor = chunk.nextCursor;
+    }
+    const parsedDiagnostic = z
+      .object({ stack: z.string(), stackComplete: z.literal(true) })
+      .parse(JSON.parse(Buffer.concat(diagnosticChunks).toString('utf8')));
+    assert.equal(
+      parsedDiagnostic.stack,
+      'Error: isolated diagnostic\n' + '    at 诊断😀 (fixture.ts:1:2)\n'.repeat(5000),
+    );
+    assert.equal((await client.errorDiagnostics.clear()).records, 1);
+    assert.equal((await client.errorDiagnostics.query({})).records.length, 0);
+    const changedWindow = await client.updateServiceConfig({
+      error_diagnostics: { max_storage_mib: 128 },
+    });
+    assert.equal(changedWindow.state, 'restart-required');
+    const changedStatus = await client.errorDiagnostics.status();
+    assert.equal(changedStatus.storage.state, 'ready');
+    if (changedStatus.storage.state === 'ready') {
+      assert.equal(
+        changedStatus.storage.allocationBytes,
+        changedWindow.snapshot.errorDiagnosticsBudget.coreBytes,
+      );
+    }
+    process.stdout.write(
+      'Selected core error window, resolved budget update/pending app acknowledgement, complete diagnostic transfer and independent clear passed.\n',
+    );
+    const previousImages = (await client.readServiceConfig()).proxy.image_scheduler;
+    const imageWindow = await client.updateServiceConfig({
+      proxy: {
+        image_scheduler: {
+          send_window_strategy: 'memory',
+          send_window_memory_mib: 16,
+        },
+      },
+    });
+    assert.deepEqual(imageWindow.snapshot.proxy.image_scheduler, {
+      ...previousImages,
+      send_window_strategy: 'memory',
+      send_window_memory_mib: 16,
+    });
+    assert.deepEqual(
+      (await getConfigAdapter().read()).proxy.image_scheduler,
+      imageWindow.snapshot.proxy.image_scheduler,
+    );
+    process.stdout.write(
+      'Selected core image-window strategy and preserved scheduler settings passed.\n',
+    );
     assert.deepEqual(await client.localAccounts.listAccounts(), []);
     await client.openCode.status('http://127.0.0.1:8045');
     assert.equal((await client.gatewayStatus()).running, false);
+    assert.equal((await client.errorDiagnostics.status()).storage.state, 'ready');
     await client.thought.stats();
+    assertRecoveryDeletion(await client.thought.delete({ sessionKey: 'native-owner-scope-A' }), 1);
+    assert.deepEqual(await retainedResponseKeys(), ['native-owner-B']);
+    process.stdout.write('Selected-owner deletion before first gateway start passed.\n');
     if (process.env.AGM_DIAGNOSTIC_TEST_LARGE_THOUGHT === '1') {
-      const records = await client.thought.records({ sessionKey: LARGE_THOUGHT_SESSION });
-      assert.equal(records.length, 1);
-      const expected = createHash('sha256');
-      let remaining = LARGE_THOUGHT_BYTES;
-      const block = Buffer.alloc(64 * 1024, 'T');
-      while (remaining > 0) {
-        const count = Math.min(remaining, block.length);
-        expected.update(block.subarray(0, count));
-        remaining -= count;
-      }
-      const digest = expected.update(LARGE_THOUGHT_SIGNATURE).digest('hex');
+      const page = await client.thought.records({ sessionKey: LARGE_THOUGHT_SESSION });
+      assert.equal(page.records.length, 1);
+      assert.equal(page.complete, true);
+      const { signatureBytes, totalBytes, digest } = expectedLargeThoughtTransfer();
       for (let repeat = 0; repeat < 3; repeat += 1) {
         const opened = await client.thought.openRecord({
           sessionKey: LARGE_THOUGHT_SESSION,
-          id: records[0].id,
+          id: page.records[0].id,
         });
         assert(opened);
         assert.equal(opened.thoughtBytes, LARGE_THOUGHT_BYTES);
+        assert.equal(opened.visibleBytes, 0);
+        assert.equal(opened.signatureBytes, signatureBytes);
+        assert.equal(opened.transfer.totalBytes, totalBytes);
         const { kind, epoch, capabilityId, resourceId } = opened.transfer;
         const identity = { kind, epoch, capabilityId, resourceId };
         const actual = createHash('sha256');
@@ -177,8 +380,33 @@ async function check(): Promise<void> {
     });
     assert.equal(rejected.status, 401);
     await rejected.text();
+    for (const [limit, status] of [
+      ['1', 200],
+      ['invalid', 400],
+    ] as const) {
+      const response = await fetch(
+        `http://127.0.0.1:${address.port}/internal/audit/requests?limit=${limit}`,
+        {
+          headers: { Authorization: `Bearer ${apiKey}` },
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+      assert.equal(response.status, status);
+      if (status === 400) {
+        assert.match(await response.text(), /"fieldErrors":\{"limit":/);
+      } else {
+        assert.match(await response.text(), /"items":\[/);
+      }
+    }
+    process.stdout.write(
+      'Installed gateway accepts valid query parameters and rejects invalid ones.\n',
+    );
+    await verifyInstalledWebSocket(address.port, apiKey);
     await client.stopGateway();
     assert.equal((await client.gatewayStatus()).running, false);
+    assertRecoveryDeletion(await client.thought.delete({ sessionKey: 'native-owner-scope-B' }), 1);
+    assert.deepEqual(await retainedResponseKeys(), []);
+    process.stdout.write('Stopped-gateway selected-owner deletion and JSON readback passed.\n');
     process.stdout.write('Remote gateway start, authenticated boundary and stop passed.\n');
     await ipcAuditRecorder.run(['native', 'bootstrap'], { message: 'isolated input' }, () =>
       client.contextCacheStatus(),
@@ -197,6 +425,21 @@ async function check(): Promise<void> {
     await exiting;
     assert.equal(await connection.probeProfileOwner(), null);
     const reopened = await bootstrapDesktopOwner(dependencies);
+    const reopenedHandshake = await connection.management.handshake();
+    const reopenedClient = new CoreRpcClient(
+      getManagementEndpoint(),
+      undefined,
+      reopenedHandshake.epoch,
+    );
+    assert.equal(
+      (await reopenedClient.errorDiagnostics.query({ source: 'native-bootstrap' })).records.length,
+      0,
+    );
+    assertRecoveryDeletion(
+      await reopenedClient.thought.delete({ sessionKey: 'native-owner-scope-A' }),
+      0,
+    );
+    assert.deepEqual(await retainedResponseKeys(), []);
     const rows = await getAuditAdapter().list({ limit: 50, offset: 0, trafficClass: 'ipc' });
     assert(rows.items.some((item) => item.url === '/ipc/native/bootstrap'));
     const reopenedExit = once(children[1], 'exit');

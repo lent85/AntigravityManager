@@ -1,4 +1,8 @@
+import { errorDiagnosticsEnglish } from '@/modules/error-diagnostics/localization';
+import { imageSendWindowEnglish } from '@/modules/proxy-gateway/settings/localization';
 const en = {
+  'image-send-window': imageSendWindowEnglish,
+  'error-diagnostics': errorDiagnosticsEnglish,
   'workspace-profile': {
     'path-copied': 'Path Copied',
     'project-folder-path-copied-to-clipboard': 'Project folder path copied to clipboard.',
@@ -91,6 +95,34 @@ const en = {
     'delete-confirm': 'Delete workspace “{{name}}”?',
     'no-results': 'No workspaces match “{{query}}”.',
   },
+  'account-evidence': {
+    'subscription-unavailable':
+      'Subscription refresh failed; no previously confirmed tier is available.',
+    'observed-at': 'Last observed: {{time}}',
+    'checked-at': 'Last checked: {{time}}',
+    'unknown-time': 'Not recorded',
+    'invalid-data': 'Quota data is invalid; refresh to verify.',
+    'reset-unknown': 'Reset time is unknown.',
+    'exhausted-unknown-reset': 'Window depleted; reset time is unknown.',
+    'recheck-required': 'Depleted window has ended; refresh is required to confirm recovery.',
+    'window-ended': 'Window ended; the balance has not been reconfirmed.',
+    'weekly-exhausted': 'Weekly window depleted; another window cannot release this restriction.',
+    'window-exhausted': 'Quota window depleted.',
+    'group-restrictions': 'Quota group restrictions',
+    'group-limited':
+      'Depleted window. Latest known reset: {{time}}; recovery still needs confirmation.',
+    'subscription-failed':
+      'Subscription refresh failed or was incomplete; showing the previous record.',
+    'subscription-unrecognized': 'Subscription tier was not recognized; using the Free baseline.',
+    'subscription-missing': 'No subscription identity was returned; using the Free baseline.',
+    'subscription-observed': 'Subscription identity was observed.',
+    'subscription-unknown': 'Subscription source was not recorded.',
+    'source-paid': 'Source: paid subscription',
+    'source-current': 'Source: current subscription',
+    'source-free': 'Source: explicit free tier',
+    'source-unknown': 'Source: unknown',
+    'small-positive': 'Small positive balance; this window is not depleted.',
+  },
   'operation-diagnostics': {
     'switch-written-unconfirmed':
       'The new account was written to Antigravity, but the switch could not be confirmed. Check the account shown in Antigravity before trying again.',
@@ -171,7 +203,6 @@ const en = {
       'review-route-disabled':
         'The Codex review route is disabled. Enable it in model routing before configuration.',
     },
-
     'address-help': 'Use the current Manager address unless the service runs on another computer.',
     'invalid-address':
       'Use a Manager address starting with http:// or https://, without sign-in details or extra parameters.',
@@ -222,7 +253,6 @@ const en = {
     unknown: 'Unknown',
     notAvailable: 'N/A',
     openMenu: 'Open menu',
-
     'dismiss-notification': 'Dismiss notification',
     'reading-settings': 'Reading your settings…',
   },
@@ -535,6 +565,68 @@ const en = {
     'dual-ttft-diff': '{{winner}} responded {{diff}}s earlier (TTFT)',
   },
   traffic: {
+    'export-har': 'Export HAR',
+    'har-exporting': 'Exporting HAR…',
+    'har-export-saved': 'HAR export saved.',
+    'har-export-failed':
+      'Export completion could not be confirmed. Check the destination, refresh the request and retry.',
+    'har-export-wait': 'Wait for this request to finish before exporting.',
+    'attempt-timing': {
+      'upload-finished': 'Upload finished',
+      'response-headers': 'Response headers',
+      'first-byte': 'First response byte',
+      'first-output': 'First valid output',
+      'previous-attempts': 'Earlier attempts, total',
+      description:
+        "Stages are measured from this attempt's start. Heartbeats are not valid output. Earlier attempts show only their recorded durations.",
+    },
+    trends: {
+      'activity-inspect': 'Inspect daily activity',
+      'activity-title': '30-day activity',
+      'activity-help':
+        'Each cell shows one local calendar day. Darker cells have more retained requests.',
+      'activity-empty': 'No retained records',
+      'activity-count': '{{formatted}} retained requests',
+      'activity-peak': 'Busiest day: {{formatted}}',
+      'activity-unavailable': 'Daily activity is unavailable.',
+      title: 'Usage trends',
+      range: 'Time range',
+      hour: 'Last hour',
+      day: 'Last 24 hours',
+      view: 'Model view',
+      requested: 'Requested model',
+      actual: 'Actual model',
+      model: 'Exact model',
+      apply: 'Apply',
+      'filter-help': 'Model filtering uses the selected model view.',
+      retention: 'Only locally retained traffic is included; older records may have been removed.',
+      'save-failed': 'Filters could not be saved; they will reset when you leave.',
+      loading: 'Loading usage trends…',
+      error: 'Could not load usage trends.',
+      retry: 'Retry',
+      empty: 'No retained model requests in this range.',
+      unknown: 'Unknown',
+      requests: 'Requests',
+      attempts: 'Attempts',
+      input: 'Input tokens',
+      output: 'Output tokens',
+      tokens: 'Total tokens',
+      'inspect-minute': 'Inspect {{metric}} by minute',
+      incomplete:
+        '{{count}} requests have incomplete usage; unknown token values are shown as gaps.',
+      'attempt-help': 'Requests count logical requests; attempts count upstream attempts.',
+      overlap: 'A request can appear in more than one actual-model row.',
+      truncated: 'Only the leading model rows are shown.',
+    },
+    'archive-storage-note':
+      'Backups are kept separately and are not automatically removed by the audit capacity window.',
+    'capture-interrupted-description':
+      'The previous application process stopped before capture finished. The model result is unknown; the recorded end time is when capture was reconciled.',
+    'live-storage': 'Live audit: {{size}}',
+    'archive-storage': 'Backups: {{size}} ({{count}} files)',
+    'archive-storage-unknown': 'Backup size unknown',
+    'storage-unavailable': 'Could not measure audit storage.',
+    'storage-loading': 'Measuring audit storage…',
     'detail-load-failed': 'Could not load this request. Please try again.',
     'detail-not-found': 'This record is no longer available. It may have been cleared.',
     fields: {
@@ -552,6 +644,7 @@ const en = {
       query: 'Additional request options',
     },
     outcomes: {
+      capture_interrupted: 'Capture interrupted',
       in_progress: 'In progress',
       completed: 'Completed',
       client_cancelled: 'Cancelled',
@@ -635,6 +728,57 @@ const en = {
     request: 'request',
     response: 'response',
     'select-body': 'Select a request or response body.',
+    capture: {
+      refresh: 'Refresh capture',
+      missing: 'No saved body',
+      'missing-description':
+        'No capture metadata is available for this selection. The reason is unknown.',
+      writing: 'Capture in progress',
+      'writing-description':
+        'Saved content may still change. Export is available after capture finishes.',
+      complete: 'Capture complete',
+      empty: 'Empty body captured',
+      summary: 'Binary summary saved',
+      'summary-description':
+        'Only a summary was captured; the original binary content is not stored.',
+      partial: 'Partially saved',
+      'not-saved': 'Body not saved',
+      expired: 'Previously expired body',
+      oversized: 'The capture exceeded its size limit. Only the saved portion is available.',
+      'incomplete-description':
+        'The capture is incomplete. Missing content cannot be reconstructed from this record.',
+      sizes: 'Saved {{stored}} · Observed {{logical}}',
+      'hash-full': 'Hash covers the captured safe representation.',
+      'hash-prefix': 'Hash covers only the saved prefix.',
+      'hash-unavailable': 'No verification hash is available.',
+      loaded: 'Loaded content: {{size}}',
+      'read-failed': 'Could not load saved content. Any loaded pages are kept; try again.',
+      retry: 'Retry loading',
+      loading: 'Loading saved content…',
+      cancel: 'Pause loading',
+      paused: 'Loading paused.',
+      resume: 'Resume loading',
+      'copy-failed': 'Could not copy the visible content. Try again.',
+      'save-failed': 'Could not export the saved content. Try again.',
+      copied: 'Visible content copied',
+      saved: 'Saved content exported',
+      reasons: {
+        'disk-budget': 'The audit disk budget was reached.',
+        'disk-unknown': 'Available audit storage could not be measured.',
+        'checkpoint-busy': 'A SQLite reader prevented disk reclamation.',
+        'reclaim-failed': 'Audit storage could not be reclaimed.',
+        'read-only': 'Audit storage is read-only.',
+        'disk-full': 'The storage volume is full.',
+        'capture-disabled': 'Capture was disabled before this body finished.',
+        'worker-restart': 'Capture was interrupted by an audit worker restart.',
+        retention: 'An earlier age-retention policy removed this content. It cannot be restored.',
+        'disk-pressure': 'An earlier disk-pressure policy removed this content.',
+        'write-failure': 'Some body chunks could not be queued or saved.',
+        'transfer-incomplete': 'The body transfer did not finish.',
+        'serialization-failure': 'The body could not be serialized for capture.',
+        unknown: 'Capture stopped without a recognized reason.',
+      },
+    },
     concise: 'Concise',
     full: 'Full',
     'view-mode-help': 'About view modes',
@@ -643,11 +787,11 @@ const en = {
     'full-help':
       'Show all loaded details. If the content cannot be organized or is incomplete, both views may look the same.',
     'search-body': 'Search this body',
-    'copy-loaded': 'Copy loaded',
+    'copy-loaded': 'Copy visible view',
     'view-all-body': 'View all',
     'load-more': 'Load more',
     'load-next-window': 'Next section',
-    'save-full': 'Save full',
+    'save-full': 'Export saved content',
     matches: '{{count}} matches',
     'first-100': 'first 100',
     'parse-error': 'This content could not be read at position {{offset}}.',
@@ -656,6 +800,7 @@ const en = {
     'select-session': 'Select a session to view saved reasoning.',
     'no-sessions': 'No saved reasoning yet.',
     'delete-session': 'Delete session history',
+    'confirm-delete-session': 'Click again to delete this session',
     turns: '{{count}} turns',
     offset: 'Content position {{offset}}',
     'unknown-model': 'Unknown model',
@@ -671,7 +816,6 @@ const en = {
     protocol: 'API format',
     'repair-databases': 'Repair saved records',
     'open-monitor': 'Open Traffic Monitor',
-
     'loading-description': 'Your request records will appear here when they are ready.',
     'empty-description':
       'Requests sent through the proxy appear here. You can also adjust the filters.',
@@ -681,6 +825,52 @@ const en = {
     'load-failed-description':
       'Please try again. This does not mean your records have been deleted.',
     'refresh-failed': 'Could not refresh records. Previously loaded records are still shown.',
+    searching: 'Searching…',
+    jumping: 'Opening matching section…',
+    'search-failed': 'Could not search this body. Try again.',
+    clearing: 'Clearing…',
+    'clear-failed':
+      'Clear completion was not confirmed. Refresh before retrying; in-flight capture may have stopped.',
+    'resize-column': 'Resize {{column}} column',
+    'reset-columns': 'Reset table columns',
+    'columns-unsaved': 'Column widths changed for this view, but could not be saved.',
+    'clear-scope':
+      'Clear all {{category}} records, including those outside the current filters? Thought Store and diagnostic files are unaffected.',
+    'clear-complete': 'Cleared {{count}} records from {{category}}.',
+    'exact-session': 'Exact saved session ID',
+    'apply-session': 'Apply session',
+    'reset-session': 'Reset session',
+    'recorded-usage': 'Recorded response usage',
+    'usage-source-unretained':
+      'These saved counters do not retain provider provenance. They are not a separate provider-verified record; local estimates are not mixed into this display.',
+    'cache-rate': 'Cached input / total input',
+    'cache-rate-missing': 'Unknown — input or cache count missing',
+    'cache-rate-zero-input': 'Not applicable — zero input',
+    'cache-rate-inconsistent': 'Inconsistent recorded counts',
+    'local-estimate': 'Local estimate',
+    'estimate-not-retained': 'Not retained in this audit record',
+    'measured-stages': 'Recorded gateway timing stages',
+    'stage-overlap-note':
+      'Stages can overlap and are not added to form total duration. Missing stages and legacy zero values remain unknown.',
+    'stage-clean': 'Request preparation',
+    'stage-normalization': 'Normalization',
+    'stage-thinking': 'Thought restoration',
+    'stage-ttft': 'Latest upstream attempt to first byte',
+    'wrap-lines': 'Wrap lines',
+    'view-mode-unsaved': 'Display mode changed, but the preference could not be saved.',
+    'match-position': 'Match {{current}} of {{count}}',
+    'previous-match': 'Previous match',
+    'next-match': 'Next match',
+    'cancel-search': 'Cancel search',
+    'export-session': 'Export saved session',
+    'session-exporting': 'Exporting session…',
+    'session-export-scope':
+      'All saved model requests, attempts and bodies in this session. Up to 2,000 settled requests and 100 MiB; partial captures stay partial.',
+    'session-export-needs-scope':
+      'Select a scoped saved-session key. Older unscoped records can still be exported per body.',
+    'session-export-saved': 'Saved session export.',
+    'session-export-failed':
+      'Export completion could not be confirmed. Check the destination, wait for requests to settle, refresh and retry. Active, changed, missing or oversized data cannot be exported as a complete session.',
   },
   editionSelection: {
     title: 'Choose Your Antigravity Edition',
@@ -722,6 +912,193 @@ const en = {
     },
   },
   settings: {
+    'defaults-writeback-failed':
+      'Using independent defaults in memory. The initial settings file could not be saved. Check file access, then retry.',
+    'partial-save-failed':
+      'Some settings could not be saved. Successful saves were kept; failed changes remain as drafts.',
+    'service-apply-failed': 'Settings saved, but some running services could not apply them.',
+    'save-owner-service': 'Service settings',
+    'save-owner-desktop': 'Desktop preferences',
+    'save-owner-accountAlertPolicy': 'Account alert policy',
+    'save-state-saved': 'Saved',
+    'save-state-failed': 'Not saved',
+    'retry-unsaved': 'Retry unsaved changes',
+    'apply-step-gateway-config': 'Gateway settings',
+    'apply-step-audit': 'Audit storage',
+    'apply-step-thought-store': 'Thought history',
+    'apply-step-error-diagnostics': 'Error diagnostics',
+    'apply-step-runtime-status': 'Runtime status',
+    'affected-fields': 'Affected settings: {{fields}}',
+    'restart-fields': 'Restart the service to apply: {{fields}}',
+    'cowork-runtime': {
+      'operation-description':
+        'Inspect local Claude Cowork runtimes and manage changes on supported packages.',
+      'capability-note':
+        'Changes and process controls require a verified package. Other runtimes are available for inspection only.',
+      path: 'Path',
+      package: 'Package',
+      eligible: 'Package verified for changes and process control.',
+      mutating: 'Operation in progress…',
+      'interrupted-help':
+        'An earlier operation was interrupted. Preview a restore to recover this runtime before applying changes.',
+      'preview-restore': 'Preview restore',
+      'process-status': 'Process status',
+      'refresh-process': 'Refresh process status',
+      'write-blocked': 'Verify the selected instance’s process status before continuing.',
+      'review-apply': 'Review and apply',
+      'review-restore': 'Review and restore',
+      'read-error': 'Could not read this runtime. Scan again or check the custom path.',
+      'backup-state': 'Backup and recovery',
+      'preview-ready': 'Preview ready. Review the operation before confirming.',
+      action: 'Action',
+      'backup-id': 'Backup ID',
+      'backup-create': 'Created when you apply the change',
+      'backup-unavailable': 'Unavailable',
+      signature: 'Signing',
+      lifecycle: 'Process control',
+      'confirm-process': 'This action affects only the selected instance.',
+      'confirm-write':
+        'The selected instance will be stopped if it is running. The change will be written and verified.',
+      'confirm-restore':
+        'Restoration may only update the recovery journal. If files need to be restored, the selected instance will be stopped if it is running.',
+      'restart-option': 'Start the selected instance after a successful write',
+      'restart-plan': 'The selected instance will be started after the write is verified.',
+      'leave-stopped-plan': 'If the instance is stopped for the write, it will remain stopped.',
+      'operation-result': 'Operation result',
+      'unknown-outcome':
+        'Could not confirm the result of this action ({{action}}). Scan again and inspect the runtime and process status before retrying.',
+      'write-effect': 'Effect on runtime files',
+      'rollback-result': 'Recovery result',
+      'restart-result': 'Restart result',
+      'operation-id': 'Operation ID',
+      'recovery-location': 'Recovery location',
+      'rollback-error': 'Recovery failed ({{reason}}).',
+      'recovery-required':
+        'Recovery is required. Inspect the runtime and review the recovery details before retrying.',
+      'restart-failed-help':
+        'Refresh the process status before attempting to start the selected instance again.',
+      'fresh-preview':
+        'Scan again before another action. Create a new preview before applying or restoring.',
+      backups: {
+        'not-inspected': 'Not checked',
+        none: 'No backup',
+        available: 'Backup available',
+        interrupted: 'Recovery required',
+      },
+      actions: {
+        apply: 'Apply change',
+        restore: 'Restore',
+        stop: 'Stop instance',
+        start: 'Start instance',
+      },
+      signatures: {
+        'not-required': 'Not required',
+        unsupported: 'Unsupported',
+      },
+      lifecycles: {
+        'selected-instance': 'Selected instance only',
+        unsupported: 'Unsupported',
+      },
+      'process-states': {
+        running: 'Running',
+        stopped: 'Stopped',
+        unknown: 'Unknown',
+        unsupported: 'Unsupported',
+      },
+      outcomes: {
+        applied: 'Change applied',
+        restored: 'Runtime restored',
+        'already-current': 'Already in the requested state',
+        failed: 'Operation failed',
+      },
+      effects: {
+        none: 'No change',
+        committed: 'Change saved',
+        'rolled-back': 'Change rolled back',
+        uncertain: 'File state could not be confirmed',
+      },
+      recoveries: {
+        'not-needed': 'Not needed',
+        verified: 'Recovery verified',
+        failed: 'Recovery failed',
+      },
+      restarts: {
+        'not-requested': 'Not requested',
+        'not-attempted': 'Not attempted',
+        verified: 'Start verified',
+        failed: 'Start failed',
+      },
+      failures: {
+        'selection-expired': 'The runtime selection expired. Scan again.',
+        'stale-target': 'The runtime changed after inspection. Scan again.',
+        'unsupported-target': 'This runtime does not support the requested action.',
+        'unavailable-preview': 'The preview is unavailable. Prepare a new preview.',
+        busy: 'Another operation is in progress.',
+        'process-state-unknown': 'Could not verify the selected instance’s process status.',
+        'stop-failed': 'Could not stop the selected instance.',
+        'write-failed': 'Could not write the change.',
+        'verification-failed': 'Could not verify the change.',
+        'backup-invalid': 'The backup could not be validated.',
+        'recovery-required': 'Recover this runtime before making further changes.',
+        'lifecycle-failed': 'Could not complete the process action.',
+      },
+      'before-hash': 'Current SHA-256',
+      'after-hash': 'Preview SHA-256',
+      'byte-range': 'Source byte range',
+      'native-payload': 'Bun payload (Mach-O arm64)',
+      'native-module-count': 'Bundled modules',
+      'native-entry-point': 'Bundled entry point',
+      'native-payload-range': 'Bytes {{start}}–{{end}} (end excluded)',
+      'native-payload-scope':
+        'Inspection only. The container was detected. The package and JavaScript function remain unverified.',
+      title: 'Claude Cowork runtime',
+      description:
+        'Inspect local runtime candidates and preview changes without modifying files or processes.',
+      'history-note':
+        'The 8k policy concerns the minimum recent history retained during compaction. It does not set the total prompt or model context limit.',
+      'custom-path': 'Custom runtime path (optional)',
+      'path-help':
+        'Leave blank to scan standard macOS locations. On other platforms, enter a file or directory. Scans return up to 32 candidates.',
+      scan: 'Scan runtimes',
+      targets: 'Select a runtime',
+      working: 'Reading runtime…',
+      empty: 'No runtime found. Try a custom file or directory path.',
+      state: 'Detected state',
+      version: 'Version',
+      matches: 'Matched functions',
+      'read-only': 'This entry is read-only. Apply, restore and process controls are unavailable.',
+      inspect: 'Refresh inspection',
+      preview: 'Preview change',
+      error:
+        'Could not inspect this runtime. Scan again to refresh the selection, or check the custom path.',
+      states: {
+        original: 'Original policy',
+        'legacy-return0': 'Legacy return-zero policy',
+        'legacy-35k': 'Legacy 35k policy',
+        'current-8k': '8k policy detected',
+        unsupported: 'Unrecognized runtime',
+        ambiguous: 'Multiple matching locations',
+        unreadable: 'Unreadable runtime',
+      },
+      reasons: {
+        'windows-recipe-unverified':
+          'Windows package recipe is unverified. Inspection only; changes and process actions are unavailable.',
+        'native-payload-unverified':
+          'Native payload support is unverified. Changes and process actions are unavailable.',
+        'bundle-recovery-unverified':
+          'App bundle recovery and signing are unverified. Changes and process actions are unavailable.',
+        'package-ownership-unverified':
+          'Package identity and lifecycle ownership are unverified. Changes and process actions are unavailable.',
+      },
+      previews: {
+        ready: 'Preview prepared. This entry remains read-only; no change was applied.',
+        'inspection-only':
+          'A source change can be previewed, but this package is unsupported for modification. No change was applied.',
+        'already-current':
+          'The 8k source policy is already present. This does not establish package support or a successful operation.',
+        unavailable: 'No safe change preview is available. No change was applied.',
+      },
+    },
     'service-unavailable':
       "Settings can't be loaded or saved right now. Try again. If the problem continues, close and reopen Antigravity Manager.",
     'service-retry': 'Retry',
@@ -740,6 +1117,32 @@ const en = {
       enabled: 'Enable weekly quota warmup',
       groups: 'Quota groups to warm up',
       group: { claude: 'Claude quota groups', gemini: 'Gemini quota groups' },
+    },
+    thinkingBudget: {
+      title: 'Thinking budget',
+      description: 'Choose who decides how much a model thinks, and the budget each level uses.',
+      controlSource: 'Control source',
+      controlSourceHint:
+        'Gateway applies the budgets below. Client passes the budget or effort level from the request through.',
+      gatewayHint:
+        'Use -1 or a positive budget. Flash Low and Medium use their registered defaults for -1; other fields keep adaptive thinking. Save applies the selected source and edited budgets together.',
+      clientHint:
+        'Requests decide their own thinking budget or effort level. The gateway budgets below are not applied.',
+      adaptiveHint: '-1 lets the model choose',
+      'flash-low-default-hint': '-1 uses the Flash Low default of 1000 tokens',
+      'flash-medium-default-hint': '-1 uses the Flash Medium default of 4000 tokens',
+      invalid: 'Enter -1 or a whole number from 1 to 131072. Replace saved 0 values before saving.',
+      'configuration-invalid':
+        'These thinking budget values were rejected. Use -1 or a whole number from 1 to 131072.',
+      source: { gateway: 'Gateway', client: 'Client' },
+      family: { flash: 'Gemini Flash', pro: 'Gemini Pro', claude: 'Claude' },
+      level: {
+        low: 'Low',
+        medium: 'Medium',
+        high: 'High',
+        tiered: 'Tiered',
+        default: 'Default',
+      },
     },
     title: 'Settings',
     description: 'Manage application preferences.',
@@ -765,6 +1168,10 @@ const en = {
       light: 'Light',
       dark: 'Dark',
     },
+    'interface-zoom': 'Interface zoom',
+    'appearance-saving': 'Saving preference…',
+    'appearance-save-failed': 'Could not save the preference.',
+    'appearance-retry': 'Retry',
     language: {
       title: 'Language',
       description: 'Select your preferred language.',
@@ -777,10 +1184,7 @@ const en = {
       portuguese: 'Portuguese (Brazil)',
       japanese: 'Japanese',
     },
-    about: {
-      title: 'About',
-      description: 'Application information.',
-    },
+    about: { title: 'About', description: 'Application information.' },
     cache: {
       title: 'Antigravity Cache',
       description:
@@ -798,7 +1202,6 @@ const en = {
       clearedDescription: '{{size}} MB was removed from Antigravity cache directories.',
       failedTitle: 'Failed to clear cache',
       notFoundTitle: 'No Antigravity cache found',
-
       'paths-failed': 'Could not find the cache locations',
       'paths-retry-description': 'Please retry before clearing the cache.',
       'partial-title': 'Some cache could not be cleared',
@@ -813,13 +1216,8 @@ const en = {
     auto_update_disabled_desc: 'Disabled (recommended for custom build)',
     openLogDir: 'Open',
     toast: {
-      saved: {
-        title: 'Settings saved',
-        description: 'Your configuration has been updated.',
-      },
-      saveFailed: {
-        title: 'Error saving settings',
-      },
+      saved: { title: 'Settings saved', description: 'Your configuration has been updated.' },
+      saveFailed: { title: 'Error saving settings' },
     },
     account: {
       'client-setup': 'Client locations and launch options',
@@ -960,18 +1358,18 @@ const en = {
       saving: 'Saving...',
     },
     autoSwitchModels: {
-      title: 'Auto-Switch Models Config',
+      title: 'Auto-switch rules',
       description:
-        'Configure which models trigger auto-switch when depleted, and prioritize specific models when selecting the next active account.',
+        'Choose which model quotas can trigger an account switch and which to prioritize when choosing the next account.',
       searchPlaceholder: 'Search models...',
-      noModels: 'No models found.',
-      noModelsFound: 'No models found.',
+      noModels: 'No models available.',
+      noModelsFound: 'No matching models.',
       includeLabel: 'Include',
       priorityLabel: 'Priority',
-      save: 'Save Config',
+      save: 'Save rules',
       saving: 'Saving...',
-      saved: 'Auto-switch model configuration saved successfully.',
-      saveFailed: 'Failed to save auto-switch model configuration.',
+      saved: 'Auto-switch rules saved.',
+      saveFailed: 'Could not save auto-switch rules.',
       noRestartTitle: 'Seamless Live Sync (No Restart for IDE/App)',
       noRestartDesc:
         'Synchronize tokens directly into OS Credential Store without killing or restarting IDE windows.',
@@ -1039,32 +1437,189 @@ const en = {
     save: 'Save Settings',
   },
   toast: {
-    backupSuccess: {
-      title: 'Success',
-      description: 'Account backup created successfully.',
-    },
-    backupError: {
-      title: 'Error',
-      description: 'Failed to create backup: {{error}}',
-    },
-    switchSuccess: {
-      title: 'Success',
-      description: 'Switched account successfully.',
-    },
-    switchError: {
-      title: 'Error',
-      description: 'Failed to switch account: {{error}}',
-    },
-    deleteSuccess: {
-      title: 'Success',
-      description: 'Account backup deleted successfully.',
-    },
-    deleteError: {
-      title: 'Error',
-      description: 'Failed to delete backup: {{error}}',
-    },
+    backupSuccess: { title: 'Success', description: 'Account backup created successfully.' },
+    backupError: { title: 'Error', description: 'Failed to create backup: {{error}}' },
+    switchSuccess: { title: 'Success', description: 'Switched account successfully.' },
+    switchError: { title: 'Error', description: 'Failed to switch account: {{error}}' },
+    deleteSuccess: { title: 'Success', description: 'Account backup deleted successfully.' },
+    deleteError: { title: 'Error', description: 'Failed to delete backup: {{error}}' },
+  },
+  'client-config': {
+    'quick-no-models': 'Refresh account quota to find a text model for quick setup.',
+    'quick-dsh-missing': 'Open the DSH web profile once to make it available here.',
+    'connections-title': 'Connection profiles',
+    'connections-empty': 'No saved profiles yet.',
+    'add-connection': 'Add connection',
+    'connection-unverified': 'Client settings managed · verification pending',
+    'save-and-preview': 'Save and preview',
+    'connection-removed': 'Connection removed from the client.',
+    'connection-saved': 'Saved · not applied',
+    'connection-details': 'Details',
+    'connection-details-name': 'Details for {{name}}',
+    'connection-options': 'Advanced connection options',
+    'optional-default': 'Leave blank to keep the client’s default model.',
+    'verify-in-traffic': 'Send a request from this client, then look for its result in Traffic.',
+    'open-traffic': 'Open Traffic',
+    'tools-title': 'Coding tools',
+    'tool-connect': 'Connect',
+    'tool-disconnect': 'Disconnect',
+    'tool-disconnected': 'Not connected',
+    'tool-status-unavailable': 'Connection status unavailable',
+    'tool-more': 'More actions for {{name}}',
+    'tool-disconnect-description':
+      'Disconnect all Manager connections for {{name}}. Previous client settings and unrelated changes will be kept where supported.',
+    'tool-revoke-description':
+      'Stop accepting requests made with the current OpenCode connection key.',
+    'kimi-code': 'Kimi Code',
+    'qwen-code': 'Qwen Code',
+    'gemini-cli': 'Gemini CLI',
+    pi: 'Pi',
+    'profiles-title': 'Connection profiles',
+    'profiles-help':
+      'Save independent connections and key references. Saving a profile does not change client settings. Preview before applying.',
+    'profile-new': 'New profile',
+    'profile-name': 'Profile name',
+    'profile-client': 'Client',
+    'profile-credential': 'Credential source',
+    'profile-key-keep': 'Keep this profile’s stored key',
+    'profile-key-manager': 'Current Manager proxy key',
+    'profile-key-opencode': 'Existing OpenCode dedicated key',
+    'profile-key-client': 'Current client configuration key',
+    'profile-save': 'Save profile',
+    'profile-delete': 'Delete saved profile',
+    'profile-provider-mode': 'This client supports a separate provider for this profile.',
+    'profile-single-active':
+      'Applying this profile changes the client’s active connection. Other saved profiles remain available.',
+    'profile-delete-help':
+      'Delete saved profile “{{name}}”? Remove its applied client settings first.',
+    'profile-saved': 'Profile saved. Preview it to apply client settings.',
+    'profile-deleted': 'Saved profile deleted.',
+    'profile-required-default': 'Choose a default model from the model list for this client.',
+    'config-conflict':
+      'Settings changed or are not owned by Manager. Refresh and review a new preview.',
+    'config-invalid':
+      'The client configuration or storage format is unsupported. Preserve the file and check its format.',
+    'config-read-failed': 'Could not read client settings. Check file permissions and retry.',
+    'config-key-missing': 'Set the Manager proxy API key before syncing.',
+    'config-backup-failed':
+      'The required private backup could not be verified or created. Check the backup and permissions.',
+    'config-unavailable':
+      'The configuration owner is unavailable or shutting down. Retry after it is ready.',
+    'config-home-missing':
+      'Set DSH_HOME for the backend so it can locate the intended DSH profile.',
+    'config-write-failed':
+      'The write could not be confirmed. Inspect the client file and backup before previewing again.',
+    'dsh-store-key': 'Store a dedicated Manager key in DSH',
+    'dsh-store-key-help':
+      'Requires the native DSH version-1 credential store declared in this profile. Custom stores are refused. The key stays in the backend.',
+    'dsh-credential-retained':
+      'The credential will remain because another profile may use it or ownership cannot be confirmed.',
+    'dsh-credential-remove':
+      'Remove the unchanged dedicated credential after checking other profiles.',
+    'dsh-default-restore': 'Restore the previous default model',
+    'client-description':
+      'Configure {{name}} with a reviewed provider change. Client runtime use remains unverified.',
+    'version-unknown': 'Program found; version unknown',
+    'client-read-failed':
+      'Could not read client settings. Check the client configuration and retry.',
+    'discover-models': 'Enable model discovery',
+    'openclaw-version': 'OpenClaw configuration format',
+    'choose-version': 'Choose v1 or v2',
+    'version-help':
+      'Select the format supported by your installed OpenClaw version. Unknown versions are not guessed.',
+    activate: 'Make this provider the default',
+    'default-model': 'Default model',
+    'default-help': 'The default model must be in the selected model list.',
+    'backend-key':
+      'The selected backend supplies the Manager API key. Other client credentials are not shown.',
+    'saved-client': 'Configuration saved. Reopen {{name}} and verify a request.',
+    'invalid-client': 'Check the URL, model IDs, default model and required format choice.',
+    'merge-models': 'Set the global model mode to merge',
+    'merge-models-change': 'This preview changes the global model mode to merge.',
+    'dsh-description':
+      'Connect an existing DSH profile to Manager. Configuration changes do not verify a live request.',
+    profile: 'Profile',
+    protocol: 'Protocol',
+    'credential-reference': 'Credential environment variable',
+    'credential-reference-help':
+      'Enter the name of an existing DSH credential environment variable. Keep its secret value in DSH.',
+    'model-ids': 'Model IDs, separated by commas or new lines',
+    'profile-found': 'Profile found',
+    'profile-missing': 'Profile not found',
+    'read-failed': 'Could not read this profile. Check DSH_HOME and retry.',
+    'preview-save': 'Preview configuration',
+    'preview-remove': 'Preview removal',
+    'review-save': 'Review configuration change',
+    'review-remove': 'Review managed-provider removal',
+    'review-help':
+      'Only the managed provider is changed. Apply uses this exact preview and refuses a changed file.',
+    confirm: 'Apply reviewed change',
+    cancel: 'Cancel',
+    'no-change': 'No change is needed.',
+    saved: 'Configuration saved. Verify it with a new request in DSH.',
+    failed: 'Could not confirm the operation. Refresh status and preview again before retrying.',
+    invalid: 'Check the profile, URL, credential variable name and model IDs.',
+    'receipt-failed':
+      'The configuration changed, but its ownership record could not be saved. Review the profile before further changes.',
   },
   cloud: {
+    'recommendation-target': 'Recommendation target',
+    'use-recommended-account': 'Use recommended account',
+    'no-target-recommendation': 'No eligible account for this client',
+    'recommendation-target-classic': 'Classic',
+    'project-id': {
+      title: 'Project ID',
+      empty: 'Not set',
+      help: 'Fetching replaces the saved ID if Google returns one. Clearing lets the gateway discover it again when needed.',
+      clear: 'Clear',
+      fetch: 'Fetch from Google',
+      save: 'Save',
+      loading: 'Loading Project ID…',
+      'load-failed': 'Could not load the Project ID.',
+      retry: 'Retry',
+      updating: 'Updating Project ID…',
+      updated: 'Project ID updated.',
+      conflict: 'The account or its Project ID changed. The latest value has been reloaded.',
+      'fetch-failed': 'Could not fetch a Project ID from Google.',
+      'update-failed': 'Could not update the Project ID.',
+    },
+    'pool-summary': {
+      title: 'Account pool quota',
+      'enabled-normal': 'Enabled and normal',
+      'all-normal': 'All normal, including disabled',
+      disabled: 'Manually disabled',
+      exceptions: 'Verification / OAuth / access issues',
+      'unknown-health': 'Health unconfirmed',
+      'current-clients': 'Current in a client',
+      'rate-limited': 'Rate limited',
+      scope: 'Statistics scope',
+      'filtered-scope':
+        'Uses the accounts in the current tier filter ({{visible}} of {{total}} accounts).',
+      denominator: '{{known}} known / {{total}} accounts',
+      'model-family': 'Model family',
+      'five-hour': '5H',
+      weekly: 'Weekly',
+      effective: 'Effective minimum',
+      weighted: 'Tier weighted',
+      unknown: 'Unknown',
+      empty: 'No normal accounts in this scope. Choose another scope or review account status.',
+      'no-families': 'No visible model quota is known for this scope.',
+      ready: 'Quota ready',
+      exhausted: 'Exhausted',
+      cooling: 'Cooling / rate limited',
+      stale: 'Needs refresh',
+      'weighted-note':
+        'Remaining percentage only. Ultra ×2, Pro ×1.5, Free ×1. Unknown tiers are excluded from weighted results; model variants count once per account.',
+      'status-note':
+        'Snapshot quota readiness does not confirm gateway callability. Missing model data is unknown, not proof of unsupported access. Client identity is separate from proxy eligibility.',
+      'weighted-denominator': '{{known}} weighted accounts; {{unknown}} excluded for unknown tier',
+      zero: 'No known quota',
+      'unknown-value': '—',
+      snapshot: 'Snapshot states',
+      'enabled-normal-count': 'Enabled and normal',
+      'account-details': 'Account state details',
+      'missing-reset': 'Reset unknown',
+    },
     'total-accounts': 'Total accounts',
     title: 'Accounts',
     description: 'Manage your Google Gemini accounts.',
@@ -1254,15 +1809,10 @@ const en = {
     recommendation: {
       badge: 'Recommended Next',
       description: 'Automatically selected from the latest fetched {{context}} quota.',
-      context: {
-        overall: 'overall',
-        claude: 'Claude',
-        pro3: 'Gemini Pro',
-        flash: 'Gemini Flash',
-      },
+      context: { overall: 'overall', claude: 'Claude', pro3: 'Gemini Pro', flash: 'Gemini Flash' },
     },
     authDialog: {
-      'manual-sign-in': 'Enter a code manually',
+      'manual-sign-in': 'Paste a code or callback address',
       'waiting-for-browser':
         'Complete sign-in in your browser. This window will update when it finishes.',
       title: 'Add Google Account',
@@ -1271,9 +1821,10 @@ const en = {
       oauthClient: 'Sign-in method',
       oauthClientPlaceholder: 'Select a sign-in method',
       openLogin: 'Open Login Page',
-      authCode: 'Authorization Code',
-      placeholder: 'Paste the code starting with 4/...',
-      instruction: 'If automatic sign-in does not finish, paste the code from the browser here.',
+      authCode: 'Authorization code or callback address',
+      placeholder: 'Paste the code or the full browser callback address',
+      instruction:
+        'Start sign-in above, then paste its code or callback address. Callback addresses must include the state from this sign-in.',
       verify: 'Verify & Add',
     },
     localImport: {
@@ -1305,6 +1856,7 @@ const en = {
         'antigravity-keyring': 'System sign-in storage',
         'antigravity-classic-db': 'Antigravity saved accounts',
         'antigravity-ide-db': 'Antigravity IDE saved accounts',
+        'antigravity-agy-file': 'Antigravity CLI saved sign-in',
         'legacy-agent': 'Legacy Agent Data',
       },
       validationErrors: {
@@ -1401,6 +1953,25 @@ const en = {
       detailedQuota: 'Detailed quota',
       quotaGroupUnknown: 'Quota group',
       quotaStatus: 'Quota Remaining',
+      cycleUsage: 'Current cycle local usage',
+      cycleUsageLoading: 'Loading retained usage…',
+      cycleUsageQueryFailed: 'Usage query failed for {{group}}',
+      cycleUsageTokens: 'Known: {{count}} tokens',
+      'cycle-usage-cached-tokens': 'Cached: {{count}} tokens',
+      'cycle-usage-cached-incomplete': 'Cached usage unavailable for {{count}} requests',
+      cycleUsageLocal: 'retained local attempts',
+      cycleUsageRequests: '{{count}} requests with complete usage',
+      cycleUsageIncomplete:
+        '{{missing}} requests missing attempt usage · {{ambiguous}} ambiguous requests',
+      'cycle-usage-scope': 'By attempt start time · local records only · not a billing total',
+      'cycle-usage-verified-google-account':
+        'Verified Google account · includes linked earlier additions',
+      'cycle-usage-current-account-only':
+        'Current addition and credentials only · earlier additions are not linked',
+      'cycle-usage-known-subtotal':
+        'Known actual attempt subtotals only; incomplete requests can still contribute tokens.',
+      'cycle-usage-legacy-ambiguity':
+        'Unattributed older requests may use request start time for ambiguity counts only; their usage is excluded.',
       gemini3Ready: 'Gemini 3 Ready',
       groupGoogleGemini: 'Google Gemini',
       groupAnthropicClaude: 'Anthropic Claude',
@@ -1413,6 +1984,9 @@ const en = {
       'proxy-replace-placeholder': 'Enter a new proxy address',
       'proxy-remove': 'Remove proxy',
       'proxy-save-failed': 'Could not save proxy',
+      'proxy-routing-save-failed': 'Could not save proxy routing settings',
+      'proxy-priority': 'Proxy priority (1–100)',
+      'proxy-enabled': 'Use this account for proxy requests',
       noProxy: 'No proxy',
       aiCredits: 'AI Credits',
       aiCreditsValue: '{{amount}} credits',
@@ -1451,7 +2025,6 @@ const en = {
       deleteVersionSuccess: 'Historical identity deleted',
       openFolderSuccess: 'Identity storage opened',
       baseline: 'Original device information',
-
       description: 'Save device information for this account to use when switching accounts.',
       'load-failed': 'Could not read device information',
       'retry-description': 'Please retry. Your saved device information has not been changed.',
@@ -1516,15 +2089,14 @@ const en = {
           'login-failed': 'Could not add the account. Please retry.',
           'proxy-configuration-invalid':
             'Save a valid upstream proxy address or disable the upstream proxy in Settings, then try signing in again.',
+          'invalid-manual-input':
+            'The code or callback address is invalid or belongs to another sign-in. Copy it again from the current sign-in and retry.',
         },
       },
       quotaRefreshed: 'Quota refreshed',
       refreshFailed: 'Failed to refresh quota',
       pollFailed: 'Failed to poll quota for all accounts',
-      switched: {
-        title: 'Account switched!',
-        description: 'Restarting Antigravity...',
-      },
+      switched: { title: 'Account switched!', description: 'Restarting Antigravity...' },
       switchFailed: 'Failed to switch account',
       switchFailureCodes: {
         'account-not-found': 'This account is no longer available.',
@@ -1586,6 +2158,8 @@ const en = {
       quotaFlash: 'Flash Quota',
     },
     exportImport: {
+      'transfer-menu': 'Import / Export',
+      'import-from-file': 'Import from file',
       'file-errors': {
         'file-too-large': 'The selected file is too large. Choose a smaller account backup.',
         'invalid-export':
@@ -1619,7 +2193,6 @@ const en = {
       invalidJson: 'Invalid JSON file format',
       readFileFailed: 'Failed to read file',
     },
-
     feedback: {
       'loading-title': 'Reading your accounts',
       'loading-description': 'Your account details will appear here when they are ready.',
@@ -1628,10 +2201,24 @@ const en = {
     },
   },
   proxy: {
+    workspace: {
+      'port-invalid': 'Enter a whole port number between 1024 and 65535.',
+      'timeout-invalid': 'Enter a request timeout between 1 and 3600 seconds.',
+      title: 'Gateway',
+      settings: 'Gateway settings',
+      back: 'Back to connections',
+      manual: 'Manual setup',
+      listener: 'Listening and access',
+      lan: 'Local network',
+      local: 'This computer only',
+      models: 'Models and request policies',
+      upstream: 'Upstream network and experiments',
+      records: 'Request logging and retention',
+    },
     'advanced-options': 'More service settings',
     'advanced-description': 'Account selection, shared instructions and tool compatibility.',
     'account-strategy': {
-      'save-failed': 'Could not save your choice. Please select it again to retry.',
+      'save-failed': 'Could not save your choice. Please try again.',
       title: 'Accounts used for API requests',
       balanced: 'Rotate between available accounts',
       'account-first': 'Prefer the same account',
@@ -1641,6 +2228,9 @@ const en = {
         'For each model, keep using the same account. Switch when its quota is exhausted, it is temporarily limited, or it cannot serve the request. Existing conversations keep their available account.',
       'client-description':
         'This setting does not change the account signed in to Antigravity, IDE, or CLI. Client auto-switching is controlled on the Accounts page.',
+      'weekly-priority': 'Prioritize expiring weekly quota',
+      'weekly-priority-description':
+        'For new sessions, prefer eligible accounts with known weekly quota resetting within 24 hours. Existing sessions and explicitly preferred accounts keep priority.',
     },
     title: 'API Proxy & AI Gateway',
     description: 'Manage the local API proxy and AI gateway service.',
@@ -1672,6 +2262,15 @@ const en = {
       start: 'Start Service',
       stop: 'Stop Service',
       start_failed: 'Failed to start service',
+      'status-unavailable': 'Could not read the service state',
+      'persistence-diagnostic': 'Diagnostic reference: {{diagnosticId}}',
+      'retry-save-failed': 'The startup choice could not be saved. Retry saving.',
+      'stop-failed': 'Proxy could not be stopped.',
+      'operation-failed':
+        'The proxy operation could not be confirmed. Check its current status and try again.',
+      'persistence-failed-started': 'Proxy started, but the next-start setting could not be saved.',
+      'persistence-failed-stopped': 'Proxy stopped, but the next-start setting could not be saved.',
+      'retry-save': 'Retry saving',
       port_in_use_title: 'Port is already in use',
       port_in_use_description:
         'Port {{port}} is already in use by another process. Close that process, or change the API proxy listen port in Settings and try again.',
@@ -1699,9 +2298,50 @@ const en = {
       'global-system-prompt-character-count': '{{count}} characters',
       'global-system-prompt-long-warning':
         'More than 2,000 characters leaves less room for conversation history. Consider shortening these instructions.',
+      compaction: {
+        'trusted-sources': 'Trusted credential scopes',
+        'trust-desc':
+          'Select the current proxy API key for Cowork coordination. Every client sharing this key is included. Use a dedicated key if other clients must stay outside this scope. Only a key fingerprint is saved. A saved scope applies only while its key is the current proxy key.',
+        'trust-current-key': 'Trust current proxy key',
+        'key-required': 'Set a proxy API key above before selecting a trusted scope.',
+        'no-trusted-sources': 'No trusted scopes selected. Cowork coordination is inactive.',
+        'revoke-key': 'Revoke trust',
+        'revoke-key-label': 'Revoke trust for fingerprint {{digest}}',
+        'trust-limit': '32 scopes are saved. Revoke a scope before adding another.',
+        saving: 'Saving Cowork settings…',
+        'save-failed': 'Cowork settings could not be saved. Retry the action.',
+        retry: 'Retry',
+        title: 'Cowork context compaction',
+        description:
+          'Coordinate with the Cowork client to summarize and replace history. Ordinary sessions are never trimmed automatically.',
+        auto: 'Enable automatic compaction coordination',
+        'auto-desc':
+          'When enabled, only identified Cowork requests above the threshold receive the local control response.',
+        manual: 'Enable manual /compact coordination',
+        'manual-desc':
+          'Allow an explicit Cowork /compact command to start the same client-owned flow.',
+        threshold: 'Automatic threshold (estimated input tokens)',
+        'threshold-desc':
+          'Default 200,000. The effective threshold also includes fixed system and tool overhead.',
+      },
       local_access: 'Local network access:',
       select_ip: 'Select IP',
       no_token_warning: '⚠️ API key is not set. Access is open to everyone!',
+      lan_access: 'Allow local network access',
+      lan_access_desc: 'Bind the proxy to the local network. An API key is required.',
+      ip_access_title: 'IP access rules',
+      ip_access_desc:
+        'Restrict model, WebSocket, and public management requests by client address. Values are comma-separated IPs or CIDR ranges.',
+      ip_filter_mode: 'IP filter mode',
+      ip_filter_off: 'Off',
+      ip_filter_allowlist: 'Allowlist only',
+      ip_filter_blocklist: 'Blocklist',
+      ip_filter_both: 'Allowlist and blocklist',
+      ip_allowlist: 'Allowed IPs or CIDRs',
+      ip_blocklist: 'Blocked IPs or CIDRs',
+      trusted_proxy_cidrs: 'Trusted proxy CIDRs',
+      allowlist_precedence: 'Allowlist takes precedence',
+      allowlist_precedence_desc: 'An allowlisted address can bypass a matching blocklist entry.',
       show_key: 'Show',
       hide_key: 'Hide',
     },
@@ -1850,8 +2490,36 @@ const en = {
         'Expert in React 19, TypeScript 5+, NestJS, Fastify, and Electron desktop apps.',
     },
     mapping: {
+      'alias-rules': 'Model aliases',
+      'alias-rules-description':
+        'Choose a target for each requested name. Hidden aliases still accept requests. Automatic targets use only eligible models in your account pool.',
+      'no-rules': 'No custom aliases. Add a rule to route a model name.',
+      'requested-model': 'Requested model name',
+      'target-model': 'Target model',
+      'routing-strategy': 'Routing strategy',
+      'fixed-target': 'Fixed model',
+      'auto-flash': 'Available Flash, low thinking',
+      'auto-flash-description':
+        'Use an available Flash model with low thinking. An empty eligible pool returns an availability error.',
+      'auto-opus': 'Latest available Opus',
+      'auto-opus-description': 'Prefer Opus 5.5, then 4.6. Always stay in the Opus family.',
+      'auto-opus-compat': 'Opus 4.7 first',
+      'auto-opus-compat-description':
+        'Prefer Opus 4.7, then 4.6, then 5.5, using only eligible models.',
+      'route-enabled': 'Accept requests',
+      published: 'Show in model lists',
+      'remove-rule': 'Remove rule {{index}}',
+      'pattern-hidden': 'Wildcard and strategy names are never added to model lists.',
+      'add-rule': 'Add alias',
+      'save-rules': 'Save aliases',
+      'saving-rules': 'Saving…',
+      'discard-rules': 'Discard changes',
+      'invalid-rules': 'Enter a unique requested name and a target for each rule.',
+      'save-failed': 'Could not save aliases. Your edits are kept; try saving again.',
+      'rules-saved': 'Aliases saved.',
       title: 'Model Mapping',
-      description: 'Choose which Gemini model handles each Claude model request.',
+      description:
+        'Map requested model names to fixed models or available models in your account pool.',
       maps_to: 'Maps to',
       restore: 'Restore Defaults',
       'only-raw-quota-models': 'Only list models found in your accounts',
@@ -1915,7 +2583,6 @@ const en = {
       'success-title': 'OpenCode configuration updated',
       'error-title': 'OpenCode update failed',
       'unknown-error': 'Unknown OpenCode configuration error',
-
       'choose-model-hint': 'Choose at least one model to continue.',
       'config-retry-description': 'Please retry. Your saved configuration has not been changed.',
     },
@@ -1926,6 +2593,9 @@ const en = {
     persistence: {
       title: 'Request history and reasoning',
       description: 'Keep requests and conversation history on this device to help diagnose issues.',
+      'successful-probes': 'Capture successful probes',
+      'successful-probes-description':
+        'Save successful health checks and model-directory polling. Failures and other business requests are still recorded when request history is enabled.',
       'audit-title': 'Request history',
       'audit-description':
         'Save requests, replies and attempts to reach the model service on this computer, with sensitive details hidden.',
@@ -1934,9 +2604,35 @@ const en = {
       dropped:
         '{{count}} records could not be saved ({{reason}}). Model requests continued normally.',
       'disk-gib': 'Disk limit (GiB)',
-      'body-hours': 'Full content retention (hours)',
-      'summary-days': 'Summary retention (days)',
-      'max-rows': 'Maximum rows',
+      'capacity-window':
+        'Keep complete requests until the disk or request limit is reached. Reclaim the oldest completed requests first; active requests are protected.',
+      'max-rows': 'Maximum requests',
+      'queue-records': 'Pending command limit (32–4,096)',
+      'queue-mib': 'Pending command bytes (16–64 MiB)',
+      'version-unavailable':
+        'This owner does not provide an audit-settings revision. Refresh or upgrade the owner before editing.',
+      'save-saving': 'Saving and applying persistence settings…',
+      'save-applied': 'Persistence settings saved and applied.',
+      'save-partial-failure':
+        'Settings saved, but some changes could not be applied to the running service.',
+      'save-restart-required':
+        'Settings saved, but runtime application is incomplete. Check service status before restarting.',
+      'save-conflict':
+        'Audit settings changed elsewhere. Refreshed settings must be reviewed before retrying.',
+      'save-failed':
+        'Save completion could not be confirmed. Refresh and review settings before retrying.',
+      'invalid-number': 'Enter a finite number of at least {{min}}.',
+      'budget-current':
+        'Configured: {{disk}} MiB / {{rows}} request window. Queue: {{commands}} commands / {{queue}} MiB.',
+      maintenance: 'History maintenance: {{state}}',
+      'maintenance-running': 'running',
+      'maintenance-scheduled': 'scheduled',
+      'maintenance-idle': 'idle',
+      'maintenance-stopped': 'stopped',
+      'maintenance-unknown': 'unavailable',
+      'reload-failed': 'Settings could not be refreshed. Refresh this page before retrying.',
+      'pressure-note':
+        'Lower limits reclaim completed history gradually. Active captures or pinned readers can delay reclamation; the latest recorded drop is not a current write guarantee.',
       'no-audit': 'No traffic records yet.',
       'audit-metadata': 'Request details and model-service attempts',
       'audit-body-missing': 'The full request or reply content is no longer saved.',
@@ -1956,7 +2652,40 @@ const en = {
       'thought-title': 'Conversation reasoning history',
       'thought-description': 'Save reasoning so later turns can continue the conversation.',
       sessions: '{{count}} sessions',
-      'hard-limit': 'Each conversation can save up to 200 turns and 64 MiB of content.',
+      'hard-limit':
+        'Memory cache: {{turns}} turns / {{memory}} MiB per session. Durable history has its own {{disk}} MiB disk budget and retention.',
+      'thought-cache-turns': 'Cached turns per session (10–10,000)',
+      'thought-cache-mib': 'Session cache limit (1–64 MiB)',
+      'thought-disk-mib': 'Reasoning disk budget (128–16,384 MiB)',
+      'thought-stats-unavailable': 'Reasoning statistics are unavailable.',
+      'thought-count-unknown': 'Saved record count unavailable',
+      'thought-records': '{{count}} saved records',
+      'thought-memory': 'Memory: {{records}} records / {{bytes}}',
+      'thought-tool-links': 'Recoverable tool links: {{records}}',
+      'thought-recovery-partial':
+        'Thought records were processed, but some recovery-history cleanup is unconfirmed. Refresh and check before another operation.',
+      'no-thought-records': 'No saved reasoning records in this page.',
+      'thought-record-pages': 'Reasoning history pages',
+      'history-page-complete': 'Page {{page}} · end of this history window',
+      'history-page-more': 'Page {{page}} · more records available',
+      'record-unavailable': 'This record is no longer available. Refresh the session.',
+      'thought-delete-receipt': 'Deleted {{sessions}} sessions and {{records}} records.',
+      'thought-delete-scope':
+        'Delete all retained reasoning records in session {{session}}? Other sessions are unaffected.',
+      'thought-mutation-uncertain':
+        'The operation could not be confirmed. History was refreshed; check it before trying again.',
+      'cancel-action': 'Cancel',
+      'thought-failures':
+        'Failures: {{reads}} reads / {{admission}} cold admissions / {{writes}} writes',
+      'thought-write-failure':
+        'Last persistence failure: {{reason}}. Current memory does not guarantee recovery after restart.',
+      'thought-session-capacity': 'No durable session slot available',
+      'thought-maintenance-active-sessions': 'Maintenance deferred to protect active requests.',
+      'thought-maintenance-checkpoint-busy': 'Maintenance paused for a pinned SQLite reader.',
+      'thought-maintenance-no-progress':
+        'Disk reclamation made no progress; further pressure deletion paused.',
+      'thought-maintenance-oversized-record':
+        'An old record exceeds the bounded cleanup budget; manual diagnosis is required.',
       'retention-days': 'Retention (days)',
       'max-sessions': 'Maximum sessions',
       oversized: 'Content exceeded 64 MiB and was not saved in full.',
@@ -1965,6 +2694,9 @@ const en = {
       'copy-signature': 'Copy signature',
       'no-thought': 'No reasoning history yet.',
       'clear-thought': 'Clear reasoning history',
+      'clear-failed': 'Could not clear reasoning history.',
+      'delete-failed': 'Could not delete this session.',
+      'load-failed': 'Could not load reasoning sessions.',
       'repair-thought': 'Repair reasoning history',
       'confirm-clear': 'Confirm clear',
       'confirm-repair': 'Confirm repair',
