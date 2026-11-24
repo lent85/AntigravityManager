@@ -152,7 +152,7 @@ describe('CloudMonitorService', () => {
     CloudMonitorService.configureWeeklyWarmupExecutor({ warmup });
 
     const pollPromise = CloudMonitorService.poll();
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3500);
     await pollPromise;
 
     expect(warmup).toHaveBeenCalledExactlyOnceWith({
@@ -194,7 +194,7 @@ describe('CloudMonitorService', () => {
       const run = vi.spyOn(WeeklyWarmupService, 'run').mockResolvedValue([]);
       CloudMonitorService.configureWeeklyWarmupExecutor({ warmup: vi.fn() });
       const poll = CloudMonitorService.poll();
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(3500);
       await poll;
       if (scenario === 'refresh fails') {
         expect(run).toHaveBeenCalledExactlyOnceWith([], expect.anything());
@@ -219,17 +219,57 @@ describe('CloudMonitorService', () => {
     // Start poll but don't await immediately, as it pauses
     const pollPromise = CloudMonitorService.poll();
 
-    // Advance time to pass the 1s sleep
-    await vi.advanceTimersByTimeAsync(1000);
+    // Advance time to pass the maximum pre-fetch jitter (3.5 seconds)
+    await vi.advanceTimersByTimeAsync(3500);
 
     // Now await
     await pollPromise;
 
     expect(CloudAccountRepo.getAccounts).toHaveBeenCalled();
-    expect(GoogleAPIService.fetchQuota).toHaveBeenCalledWith('valid_token', undefined);
+    expect(GoogleAPIService.fetchQuota).toHaveBeenCalledWith(
+      'valid_token',
+      undefined,
+      expect.any(AbortSignal),
+    );
     expect(CloudAccountRepo.updateQuota).toHaveBeenCalledWith('acc1', expect.anything());
     expect(CloudAccountRepo.updateLastUsed).not.toHaveBeenCalled();
     expect(AutoSwitchService.checkAndSwitchIfNeeded).toHaveBeenCalled();
+  });
+
+  it('aborts in-flight quota work on suspend without persisting errors or quota', async () => {
+    vi.mocked(CloudAccountRepo.getAccounts).mockResolvedValue([
+      {
+        id: 'cancelled-quota',
+        email: 'fixture@example.com',
+        token: {
+          access_token: 'fixture-token',
+          expiry_timestamp: Math.floor(Date.now() / 1000) + 3600,
+        },
+      },
+    ] as never);
+    const started = Promise.withResolvers<AbortSignal>();
+    vi.mocked(GoogleAPIService.fetchQuota).mockImplementationOnce(
+      async (_token, _proxy, signal) => {
+        if (!signal) {
+          throw new Error('Expected monitor cancellation signal');
+        }
+        started.resolve(signal);
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        });
+      },
+    );
+    const poll = CloudMonitorService.poll();
+    await vi.advanceTimersByTimeAsync(3500);
+    const signal = await started.promise;
+    CloudMonitorService.handleAppSuspend();
+    await poll;
+    expect(signal.aborted).toBe(true);
+    expect(GoogleAPIService.fetchAICredits).not.toHaveBeenCalled();
+    expect(CloudAccountRepo.updateQuota).not.toHaveBeenCalled();
+    expect(CloudAccountRepo.setAccountStatus).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+    expect(CloudAccountRepo.getAccounts).toHaveBeenCalledOnce();
   });
 
   it('evicts an already loaded lease after monitoring detects a ToS violation', async () => {
@@ -385,7 +425,7 @@ describe('CloudMonitorService', () => {
     vi.mocked(GoogleAPIService.fetchQuota).mockResolvedValue({ models: {} } as never);
 
     const pollPromise = CloudMonitorService.poll();
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3500);
     await pollPromise;
 
     // Quota still refreshes; only the switch attempt is skipped.
@@ -406,7 +446,7 @@ describe('CloudMonitorService', () => {
     vi.mocked(GoogleAPIService.fetchQuota).mockResolvedValue({ models: {} } as never);
 
     const pollPromise = CloudMonitorService.poll();
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3500);
     await pollPromise;
 
     // Only agy resolves (no desktop storage.json), so it must be the target passed to the switch.
@@ -427,7 +467,7 @@ describe('CloudMonitorService', () => {
     );
 
     const pollPromise = CloudMonitorService.poll();
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3500);
 
     // A failing switch must not reject the poll, which the caller reports as a total failure.
     await expect(pollPromise).resolves.toBeUndefined();
@@ -459,7 +499,7 @@ describe('CloudMonitorService', () => {
 
     // Same async pattern
     const pollPromise = CloudMonitorService.poll();
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3500);
     await pollPromise;
 
     expect(GoogleAPIService.refreshAccessToken).toHaveBeenCalledWith(
@@ -476,7 +516,11 @@ describe('CloudMonitorService', () => {
         id_token: 'new_id_token',
       }),
     );
-    expect(GoogleAPIService.fetchQuota).toHaveBeenCalledWith('new_token', undefined);
+    expect(GoogleAPIService.fetchQuota).toHaveBeenCalledWith(
+      'new_token',
+      undefined,
+      expect.any(AbortSignal),
+    );
   });
 
   it('should recover from 401 Unauthorized during quota fetch by refreshing token and retrying', async () => {
@@ -508,7 +552,7 @@ describe('CloudMonitorService', () => {
     });
 
     const pollPromise = CloudMonitorService.poll();
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3500);
     await pollPromise;
 
     expect(GoogleAPIService.refreshAccessToken).toHaveBeenCalledWith(
@@ -523,11 +567,17 @@ describe('CloudMonitorService', () => {
         access_token: 'refreshed_access_token',
       }),
     );
-    expect(GoogleAPIService.fetchQuota).toHaveBeenNthCalledWith(1, 'stale_token', undefined);
+    expect(GoogleAPIService.fetchQuota).toHaveBeenNthCalledWith(
+      1,
+      'stale_token',
+      undefined,
+      expect.any(AbortSignal),
+    );
     expect(GoogleAPIService.fetchQuota).toHaveBeenNthCalledWith(
       2,
       'refreshed_access_token',
       undefined,
+      expect.any(AbortSignal),
     );
     expect(CloudAccountRepo.updateQuota).toHaveBeenCalledWith('acc-401', expect.anything());
     expect(CloudAccountRepo.setAccountStatus).toHaveBeenCalledWith('acc-401', 'active', null);
@@ -560,7 +610,7 @@ describe('CloudMonitorService', () => {
     });
 
     const pollPromise = CloudMonitorService.poll();
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3500);
     await pollPromise;
 
     expect(CloudAccountRepo.compareAndUpdateToken).toHaveBeenCalledWith(
@@ -568,11 +618,17 @@ describe('CloudMonitorService', () => {
       expect.objectContaining({ access_token: 'stale_token' }),
       expect.objectContaining({ access_token: 'refreshed_access_token' }),
     );
-    expect(GoogleAPIService.fetchAICredits).toHaveBeenNthCalledWith(1, 'stale_token', undefined);
+    expect(GoogleAPIService.fetchAICredits).toHaveBeenNthCalledWith(
+      1,
+      'stale_token',
+      undefined,
+      expect.any(AbortSignal),
+    );
     expect(GoogleAPIService.fetchAICredits).toHaveBeenNthCalledWith(
       2,
       'refreshed_access_token',
       undefined,
+      expect.any(AbortSignal),
     );
     expect(CloudAccountRepo.updateQuota).toHaveBeenCalledWith(
       'credits-401',
@@ -630,7 +686,9 @@ describe('CloudMonitorService', () => {
         token_type: 'Bearer',
       });
       vi.mocked(CloudAccountRepo.compareAndUpdateToken).mockResolvedValueOnce(false);
-      await CloudMonitorService.poll();
+      const poll = CloudMonitorService.poll();
+      await vi.advanceTimersByTimeAsync(3500);
+      await poll;
       expect(GoogleAPIService.fetchQuota).toHaveBeenCalledTimes(1);
       expect(CloudAccountRepo.updateQuota).not.toHaveBeenCalled();
       expect(CloudAccountRepo.setAccountStatus).not.toHaveBeenCalled();
@@ -657,7 +715,7 @@ describe('CloudMonitorService', () => {
       },
     ]);
 
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3500);
     await Promise.all([poll1, poll2]);
 
     expect(CloudAccountRepo.getAccounts).toHaveBeenCalledTimes(1);
@@ -721,8 +779,8 @@ describe('CloudMonitorService', () => {
         { id: '1', token: { access_token: 'tok', expiry_timestamp: 9999999999 } },
       ]);
 
-      // Advance timer for the 1s sleep inside poll
-      await vi.advanceTimersByTimeAsync(1000);
+      // Advance timer for the maximum pre-fetch jitter (3.5 seconds) inside poll
+      await vi.advanceTimersByTimeAsync(3500);
 
       await Promise.all([p1, p2]);
 
@@ -749,7 +807,7 @@ describe('CloudMonitorService', () => {
       vi.mocked(CloudAccountRepo.getAccounts).mockResolvedValue([]);
 
       const focusPromise = CloudMonitorService.handleAppFocus();
-      await vi.advanceTimersByTimeAsync(1000); // For poll sleep
+      await vi.advanceTimersByTimeAsync(3500); // For poll sleep
       await focusPromise;
 
       expect(clearTimeoutSpy).toHaveBeenCalled();
@@ -813,7 +871,7 @@ describe('CloudMonitorService AI credits alert', () => {
     setupPoll([makeAccount('acc1', 'user@example.com', 4000)], true, 5000);
 
     const pollPromise = CloudMonitorService.poll();
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3500);
     await pollPromise;
 
     expect(notificationShowSpy).toHaveBeenCalledTimes(1);
@@ -823,7 +881,7 @@ describe('CloudMonitorService AI credits alert', () => {
     setupPoll([makeAccount('acc1', 'user@example.com', 5000)], true, 5000);
 
     const pollPromise = CloudMonitorService.poll();
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3500);
     await pollPromise;
 
     expect(notificationShowSpy).toHaveBeenCalledTimes(1);
@@ -833,7 +891,7 @@ describe('CloudMonitorService AI credits alert', () => {
     setupPoll([makeAccount('acc1', 'user@example.com', 6000)], true, 5000);
 
     const pollPromise = CloudMonitorService.poll();
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3500);
     await pollPromise;
 
     expect(notificationShowSpy).not.toHaveBeenCalled();
@@ -843,7 +901,7 @@ describe('CloudMonitorService AI credits alert', () => {
     setupPoll([makeAccount('acc1', 'user@example.com', 1000)], false, 5000);
 
     const pollPromise = CloudMonitorService.poll();
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3500);
     await pollPromise;
 
     expect(notificationShowSpy).not.toHaveBeenCalled();
@@ -853,7 +911,7 @@ describe('CloudMonitorService AI credits alert', () => {
     setupPoll([makeAccount('acc1', 'user@example.com', undefined)], true, 5000);
 
     const pollPromise = CloudMonitorService.poll();
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3500);
     await pollPromise;
 
     expect(notificationShowSpy).not.toHaveBeenCalled();
@@ -871,7 +929,7 @@ describe('CloudMonitorService AI credits alert', () => {
     );
 
     const pollPromise = CloudMonitorService.poll();
-    // node:timers/promises uses real timers here; the three jittered waits total at most 10.5s.
+    await vi.advanceTimersByTimeAsync(3 * 3500);
     await pollPromise;
 
     // acc1 (3000 <= 5000) and acc3 (5000 <= 5000) should fire; acc2 (8000 > 5000) should not

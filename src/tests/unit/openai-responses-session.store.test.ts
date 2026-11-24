@@ -3,9 +3,54 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   mergeOpenAIResponsesInputItems,
   OpenAIResponsesSessionStore,
+  OpenAIResponsesSessionStoreImpl,
 } from '@/modules/proxy-gateway/server/modules/openai/responses/openai-responses-session.store';
 
 describe('OpenAIResponsesSessionStore', () => {
+  it('preserves long tool arguments exactly within the history budget', () => {
+    const argumentsText = JSON.stringify({ content: 'x'.repeat(150_000) });
+    const item = {
+      type: 'function_call',
+      call_id: 'call_long',
+      name: 'write_file',
+      arguments: argumentsText,
+    };
+    OpenAIResponsesSessionStore.save('long_tool', { model: 'fixture-model', inputItems: [item] });
+    expect(OpenAIResponsesSessionStore.get('long_tool')?.inputItems).toEqual([item]);
+  });
+
+  it.each(['save', 'delta'] as const)(
+    'bounds UTF-8 history bytes for root %s without publishing the record',
+    (mode) => {
+      const store = new OpenAIResponsesSessionStoreImpl();
+      const inputItems = Array.from({ length: 20 }, () => ({
+        type: 'message',
+        role: 'user',
+        content: '界'.repeat(80_000),
+      }));
+      const write = () =>
+        mode === 'save'
+          ? store.save('oversized', { model: 'fixture-model', inputItems })
+          : store.saveDelta('oversized', {
+              model: 'fixture-model',
+              inputDelta: inputItems,
+              responseOutput: [],
+            });
+      expect(write).toThrow('maximum byte limit');
+      expect(store.get('oversized')).toBeNull();
+    },
+  );
+
+  it('includes retained response and instructions in the byte ceiling', () => {
+    expect(() =>
+      OpenAIResponsesSessionStore.save('oversized_metadata', {
+        model: 'fixture-model',
+        inputItems: [],
+        instructions: 'x'.repeat(4 * 1024 * 1024),
+      }),
+    ).toThrow('maximum byte limit');
+    expect(OpenAIResponsesSessionStore.get('oversized_metadata')).toBeNull();
+  });
   afterEach(() => {
     OpenAIResponsesSessionStore.clear();
     vi.useRealTimers();

@@ -52,7 +52,7 @@ describe('CloudMonitorService last-used semantics', () => {
     vi.mocked(GoogleAPIService.fetchAICredits).mockResolvedValue(null as never);
 
     const pollPromise = CloudMonitorService.poll();
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3500);
     await pollPromise;
 
     expect(CloudAccountRepo.updateQuota).toHaveBeenCalledWith('acc-1', expect.anything());

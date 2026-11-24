@@ -1,6 +1,7 @@
+// @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { mockAxiosRequests } from '../helpers/mock-axios-request';
+import { mockAxiosRequests, type MockHttpTransport } from '../helpers/mock-axios-request';
 
 const PROD_LOAD_PROJECT = 'https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist';
 const DAILY_LOAD_PROJECT = 'https://daily-cloudcode-pa.googleapis.com/v1internal:loadCodeAssist';
@@ -20,6 +21,39 @@ describe('GoogleAPIService project-context fallback policy', () => {
     vi.resetModules();
     vi.useRealTimers();
   });
+
+  it.each(['quota', 'credits'] as const)(
+    'cancels %s without falling back or swallowing cancellation',
+    async (operation) => {
+      const started = Promise.withResolvers<AbortSignal>();
+      const transport = vi.fn<MockHttpTransport>((_url, options) => {
+        if (!(options.signal instanceof AbortSignal)) {
+          throw new Error('Expected a request cancellation signal');
+        }
+        const signal = options.signal;
+        started.resolve(signal);
+        return new Promise<never>((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        });
+      });
+      mockAxiosRequests(transport);
+      const { GoogleAPIService } =
+        await import('@/modules/cloud-account/services/GoogleAPIService');
+      const controller = new AbortController();
+      const reason = new Error('Monitor stopped');
+      const pending =
+        operation === 'quota'
+          ? GoogleAPIService.fetchQuota('fixture-token', undefined, controller.signal)
+          : GoogleAPIService.fetchAICredits('fixture-token', undefined, controller.signal);
+      const result = expect(pending).rejects.toBe(reason);
+      const signal = await started.promise;
+      controller.abort(reason);
+      // The exact owner reason, rather than a timeout or authentication error, survives.
+      await result;
+      expect(signal.aborted).toBe(true);
+      expect(transport).toHaveBeenCalledOnce();
+    },
+  );
 
   it('tries daily-prod before sandbox after the production endpoint is rate limited', async () => {
     const transport = vi

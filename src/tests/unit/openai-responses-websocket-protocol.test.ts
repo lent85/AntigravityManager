@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { once } from 'node:events';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { createServer } from 'node:http';
 import WebSocket from 'ws';
 import { of } from 'rxjs';
@@ -148,6 +150,69 @@ describe('OpenAIResponsesWebSocketProtocol', () => {
 });
 
 describe('OpenAI Responses WebSocket transport', () => {
+  it('cancels upstream setup and drops queued requests when the client closes', async () => {
+    const server = createServer();
+    const accepted = Promise.withResolvers<void>();
+    const started = Promise.withResolvers<AbortSignal>();
+    const cancelled = Promise.withResolvers<void>();
+    let admissions = 0;
+    let upstreamCalls = 0;
+    const detach = attachOpenAIResponsesWebSocketServer(server, {
+      isAuthorized: () => true,
+      validateRequest: () => {
+        admissions += 1;
+        if (admissions === 40) {
+          accepted.resolve();
+        }
+      },
+      streamRequest: async (_request, signal) => {
+        upstreamCalls += 1;
+        started.resolve(signal);
+        return new Promise((_, reject) => {
+          signal.addEventListener(
+            'abort',
+            () => {
+              cancelled.resolve();
+              reject(signal.reason);
+            },
+            { once: true },
+          );
+        });
+      },
+    });
+    let socket: WebSocket | undefined;
+    try {
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Expected a TCP server address');
+      }
+      socket = new WebSocket(`ws://127.0.0.1:${address.port}/v1/responses`);
+      await once(socket, 'open');
+      for (let index = 0; index < 40; index += 1) {
+        socket.send(JSON.stringify({ type: 'response.create', model: 'fixture-model', input: [] }));
+      }
+      const signal = await started.promise;
+      await accepted.promise;
+      expect(signal.aborted).toBe(false);
+      const closed = once(socket, 'close');
+      socket.close();
+      await Promise.all([closed, cancelled.promise]);
+      await nextTurn();
+      expect({ aborted: signal.aborted, admissions, upstreamCalls }).toEqual({
+        aborted: true,
+        admissions: 40,
+        upstreamCalls: 1,
+      });
+    } finally {
+      socket?.terminate();
+      detach();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  });
+
   it('serves prewarm events over GET /v1/responses without calling upstream', async () => {
     const server = createServer();
     const detach = attachOpenAIResponsesWebSocketServer(server, {

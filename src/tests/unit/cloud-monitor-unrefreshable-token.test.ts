@@ -81,11 +81,15 @@ describe('CloudMonitorService unrefreshable tokens', () => {
     vi.mocked(GoogleAPIService.fetchQuota).mockResolvedValue({ models: {} } as never);
 
     const pollPromise = CloudMonitorService.poll();
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3500);
     await pollPromise;
 
     expect(GoogleAPIService.refreshAccessToken).not.toHaveBeenCalled();
-    expect(GoogleAPIService.fetchQuota).toHaveBeenCalledWith('still-valid-access-token', undefined);
+    expect(GoogleAPIService.fetchQuota).toHaveBeenCalledWith(
+      'still-valid-access-token',
+      undefined,
+      expect.any(AbortSignal),
+    );
   });
 
   it('does not mark the account expired after the first confirmed invalid_grant', async () => {

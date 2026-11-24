@@ -64,7 +64,7 @@ describe('CloudMonitorService exhausted quota alerts', () => {
     } as never);
 
     const pollPromise = CloudMonitorService.poll();
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3500);
     await pollPromise;
 
     expect(notificationShowSpy).toHaveBeenCalledTimes(1);

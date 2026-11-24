@@ -203,6 +203,9 @@ export class CloudMonitorService {
   private static DEBOUNCE_TIME = 10000; // 10 seconds
   private static lastFocusTime: number = 0;
   private static activePollPromise: Promise<void> | null = null;
+  private static resumePromise: Promise<void> | null = null;
+  private static suspended = false;
+  private static pollAbortController: AbortController | null = null;
   private static stopped = false;
   private static stopEpoch = 0;
   private static syncingAccountId: string | null = null;
@@ -269,7 +272,13 @@ export class CloudMonitorService {
   }
 
   private static isAutoSwitchEnabled(): boolean {
-    if (CloudAccountSettingsStore.getSetting<boolean>('auto_switch_enabled', false, BooleanSettingSchema)) {
+    if (
+      CloudAccountSettingsStore.getSetting<boolean>(
+        'auto_switch_enabled',
+        false,
+        BooleanSettingSchema,
+      )
+    ) {
       return true;
     }
     for (const target of resolveAutoSwitchTargets()) {
@@ -308,6 +317,9 @@ export class CloudMonitorService {
     WeeklyWarmupService.resetStateForTesting();
     this.lastFocusTime = 0;
     this.activePollPromise = null;
+    this.resumePromise = null;
+    this.suspended = false;
+    this.lastPolledAtByAccountId.clear();
     this.syncingAccountId = null;
     this.syncStatusBroadcaster = null;
     cloudAccountWeeklyWarmupRunner.resetStateForTesting();
@@ -315,10 +327,12 @@ export class CloudMonitorService {
   }
 
   static start() {
-    if (!this.acceptingPolls) {
+    if (!this.acceptingPolls || this.suspended) {
       return;
     }
-    if (this.nextPollTimeout || this.activePollPromise) return;
+    if (this.nextPollTimeout || this.activePollPromise) {
+      return;
+    }
     this.stopped = false;
     logger.info('Starting CloudMonitorService...');
     cloudAccountWeeklyWarmupRunner.start();
@@ -335,6 +349,7 @@ export class CloudMonitorService {
   static stop() {
     this.stopped = true;
     this.stopEpoch++;
+    this.pollAbortController?.abort();
     cloudAccountWeeklyWarmupRunner.cancel();
     if (this.sleepCancelResolver) {
       this.sleepCancelResolver();
@@ -379,6 +394,9 @@ export class CloudMonitorService {
    * Triggers an immediate poll if not rate-limited by debounce.
    */
   static async handleAppFocus() {
+    if (!this.acceptingPolls || this.suspended) {
+      return;
+    }
     const now = Date.now();
 
     // 1. Concurrency Guard: If we are already polling, don't pile up requests
@@ -407,24 +425,39 @@ export class CloudMonitorService {
   /**
    * Called when the system resumes from sleep or the screen is unlocked.
    */
-  static async handleAppResume() {
-    logger.info('Monitor: System resume / screen unlock event received');
-    if (this.sleepCancelResolver) {
-      this.sleepCancelResolver();
-      this.sleepCancelResolver = null;
+  static handleAppResume(): Promise<void> {
+    if (this.resumePromise) {
+      return this.resumePromise;
     }
-    await this.handleAppFocus();
+    this.suspended = false;
+    const epoch = this.stopEpoch;
+    const recovery = (async () => {
+      // An interrupted round must settle before a new round can own its state.
+      await this.activePollPromise?.catch(() => {});
+      if (!this.acceptingPolls || this.suspended || epoch !== this.stopEpoch) {
+        return;
+      }
+      await this.handleAppFocus();
+    })();
+    this.resumePromise = recovery;
+    void recovery
+      .finally(() => {
+        if (this.resumePromise === recovery) {
+          this.resumePromise = null;
+        }
+      })
+      .catch((error) => logger.error('Monitor: Resume failed', error));
+    return recovery;
   }
 
   /**
    * Called when the system enters sleep or screen is locked.
    */
   static handleAppSuspend() {
-    logger.info('Monitor: System suspend / screen lock event received; pausing scheduled poll timer');
-    if (this.nextPollTimeout) {
-      clearTimeout(this.nextPollTimeout);
-      this.nextPollTimeout = null;
-    }
+    this.suspended = true;
+    this.resumePromise = null;
+    this.lastFocusTime = 0;
+    this.stop();
   }
 
   private static scheduleNextPoll(delayMs: number): void {
@@ -432,16 +465,19 @@ export class CloudMonitorService {
       clearTimeout(this.nextPollTimeout);
       this.nextPollTimeout = null;
     }
-    if (this.stopped || !this.isContinuousPollingEnabled()) {
+    if (this.stopped || this.suspended || !this.isContinuousPollingEnabled()) {
       return;
     }
-    this.nextPollTimeout = setTimeout(() => {
-      this.nextPollTimeout = null;
-      if (!this.isContinuousPollingEnabled() || this.stopped) {
-        return;
-      }
-      this.poll().catch((e) => logger.error('Scheduled poll failed', e));
-    }, Math.max(0, delayMs));
+    this.nextPollTimeout = setTimeout(
+      () => {
+        this.nextPollTimeout = null;
+        if (!this.isContinuousPollingEnabled() || this.stopped) {
+          return;
+        }
+        this.poll().catch((e) => logger.error('Scheduled poll failed', e));
+      },
+      Math.max(0, delayMs),
+    );
   }
 
   private static startInterval() {
@@ -458,6 +494,12 @@ export class CloudMonitorService {
     if (!this.acceptingPolls) {
       throw new Error('Cloud monitor is shutting down');
     }
+    if (this.suspended) {
+      return;
+    }
+    if (this.activePollPromise) {
+      return this.activePollPromise;
+    }
     this.stopped = false;
     cloudAccountWeeklyWarmupRunner.start();
     if (this.nextPollTimeout) {
@@ -465,11 +507,9 @@ export class CloudMonitorService {
       this.nextPollTimeout = null;
     }
 
-    if (this.activePollPromise) {
-      return this.activePollPromise;
-    }
-
-    const pollPromise = this.executePoll();
+    const abortController = new AbortController();
+    this.pollAbortController = abortController;
+    const pollPromise = this.executePoll(abortController.signal);
     this.activePollPromise = pollPromise;
 
     try {
@@ -477,11 +517,12 @@ export class CloudMonitorService {
     } finally {
       if (this.activePollPromise === pollPromise) {
         this.activePollPromise = null;
+        this.pollAbortController = null;
       }
     }
   }
 
-  private static async executePoll(): Promise<void> {
+  private static async executePoll(signal: AbortSignal): Promise<void> {
     const epoch = this.stopEpoch;
     const roundStartTime = Date.now();
     const intervalMs = Math.max(1, this.getPollIntervalMinutes()) * 60 * 1000;
@@ -489,123 +530,86 @@ export class CloudMonitorService {
       const refreshedAccounts: CloudAccount[] = [];
       logger.info('CloudMonitor: Polling quotas...');
       const accounts = await CloudAccountRepo.getAccounts();
+      const accountIds = new Set(accounts.map((account) => account.id));
+      for (const id of this.lastPolledAtByAccountId.keys()) {
+        if (!accountIds.has(id)) {
+          this.lastPolledAtByAccountId.delete(id);
+        }
+      }
       const familyGroups = FamilyGroupStore.getFamilyGroups();
       const polledFamilyGroupIds = new Set<string>();
       let now = Math.floor(Date.now() / 1000);
 
       for (let i = 0; i < accounts.length; i++) {
         const account = accounts[i];
-      if (this.stopped || epoch !== this.stopEpoch) {
-        break;
-      }
-
-      const familyGroup = familyGroups.find((g) => g.accountIds.includes(account.id));
-      if (familyGroup && polledFamilyGroupIds.has(familyGroup.id)) {
-        logger.info(
-          `Monitor: Skipping quota fetch for ${account.email}, already refreshed via family group "${familyGroup.name}"`,
-        );
-        refreshedAccounts.push(account);
-        continue;
-      }
-
-      const lastPolledAt = this.lastPolledAtByAccountId.get(account.id);
-      if (
-        lastPolledAt &&
-        Date.now() - lastPolledAt < this.ACCOUNT_FRESHNESS_WINDOW_MS &&
-        account.quota
-      ) {
-        logger.info(
-          `Monitor: Skipping quota fetch for ${account.email}, refreshed recently within freshness window`,
-        );
-        refreshedAccounts.push(account);
-        continue;
-      }
-
-      this.setSyncingAccountId(account.id);
-      try {
-        if (account.status === 'paused') {
-          continue;
-        }
-        if (account.health?.oauth?.refresh_blocked) {
-          continue;
-        }
-        if (account.health?.service_disabled || isAccountOAuthRecoveryBlocked(account.id)) {
-          continue;
-        }
-        if (account.health?.validation && Date.now() < account.health.validation.next_probe_at_ms) {
-          continue;
-        }
-        now = Math.floor(Date.now() / 1000);
-        // 1. Check/Refresh Token if needed (give it a 10 min buffer here for safety)
-        let accessToken = account.token.access_token;
-        if (account.token.expiry_timestamp < now + 600) {
-          if (!account.token.refresh_token) {
-            if (account.token.expiry_timestamp <= now) {
-              logger.warn(`Monitor: Token expired without refresh token for ${account.email}`);
-              await CloudAccountRepo.setAccountStatus(
-                account.id,
-                'expired',
-                'Access token expired and no refresh token is available',
-              );
-              continue;
-            }
-
-            logger.info(
-              `Monitor: Token for ${account.email} is nearing expiry without a refresh token; using it until expiry`,
-            );
-          } else {
-            logger.info(`Monitor: Refreshing token for ${account.email}`);
-            try {
-              const newToken = await CloudAccountRefreshService.refreshAccessToken(
-                createCloudAccountRefreshRequest(account),
-              );
-              const updated = mergeRefreshedToken(account.token, newToken, now);
-              if (
-                !(await CloudAccountRepo.compareAndUpdateToken(account.id, account.token, updated))
-              ) {
-                throw new MonitorTokenConflictError();
-              }
-              account.token = updated;
-              accessToken = newToken.access_token;
-            } catch (refreshError) {
-              logger.error(`Monitor: Token refresh failed for ${account.email}`, refreshError);
-              await persistMonitorAccountStatusFromError(account.id, refreshError);
-              continue;
-            }
-          }
-        }
-
-        const pollJitterMs = Math.floor(Math.random() * 2000) + 1500;
-        await this.abortableSleep(pollJitterMs, epoch);
         if (this.stopped || epoch !== this.stopEpoch) {
           break;
         }
 
-        let quota: QuotaData;
-        const previousAICredits = account.quota?.ai_credits;
+        const familyGroup = familyGroups.find((g) => g.accountIds.includes(account.id));
+        if (familyGroup && polledFamilyGroupIds.has(familyGroup.id)) {
+          logger.info(
+            `Monitor: Skipping quota fetch for ${account.email}, already refreshed via family group "${familyGroup.name}"`,
+          );
+          refreshedAccounts.push(account);
+          continue;
+        }
 
+        const lastPolledAt = this.lastPolledAtByAccountId.get(account.id);
+        if (
+          lastPolledAt &&
+          Date.now() - lastPolledAt < this.ACCOUNT_FRESHNESS_WINDOW_MS &&
+          account.quota
+        ) {
+          logger.info(
+            `Monitor: Skipping quota fetch for ${account.email}, refreshed recently within freshness window`,
+          );
+          refreshedAccounts.push(account);
+          continue;
+        }
+
+        this.setSyncingAccountId(account.id);
         try {
-          const fetchedQuota = await GoogleAPIService.fetchQuota(accessToken, account.proxy_url);
-          quota = { ...fetchedQuota };
+          if (account.status === 'paused') {
+            continue;
+          }
+          if (account.health?.oauth?.refresh_blocked) {
+            continue;
+          }
+          if (account.health?.service_disabled || isAccountOAuthRecoveryBlocked(account.id)) {
+            continue;
+          }
+          if (
+            account.health?.validation &&
+            Date.now() < account.health.validation.next_probe_at_ms
+          ) {
+            continue;
+          }
+          now = Math.floor(Date.now() / 1000);
+          // 1. Check/Refresh Token if needed (give it a 10 min buffer here for safety)
+          let accessToken = account.token.access_token;
+          if (account.token.expiry_timestamp < now + 600) {
+            if (!account.token.refresh_token) {
+              if (account.token.expiry_timestamp <= now) {
+                logger.warn(`Monitor: Token expired without refresh token for ${account.email}`);
+                await CloudAccountRepo.setAccountStatus(
+                  account.id,
+                  'expired',
+                  'Access token expired and no refresh token is available',
+                );
+                continue;
+              }
 
-          try {
-            const aiCredits = await GoogleAPIService.fetchAICredits(accessToken, account.proxy_url);
-            if (aiCredits) {
-              quota.ai_credits = aiCredits;
-            } else if (previousAICredits) {
-              quota.ai_credits = previousAICredits;
-            }
-          } catch (creditError) {
-            if (isUnauthorizedError(creditError) && account.token.refresh_token) {
-              logger.warn(
-                `Monitor: Received 401 Unauthorized while fetching credits for ${account.email}; forcing token refresh and retry`,
+              logger.info(
+                `Monitor: Token for ${account.email} is nearing expiry without a refresh token; using it until expiry`,
               );
+            } else {
+              logger.info(`Monitor: Refreshing token for ${account.email}`);
               try {
-                const refreshedToken = await CloudAccountRefreshService.refreshAccessToken(
+                const newToken = await CloudAccountRefreshService.refreshAccessToken(
                   createCloudAccountRefreshRequest(account),
                 );
-                now = Math.floor(Date.now() / 1000);
-                const updated = mergeRefreshedToken(account.token, refreshedToken, now);
+                const updated = mergeRefreshedToken(account.token, newToken, now);
                 if (
                   !(await CloudAccountRepo.compareAndUpdateToken(
                     account.id,
@@ -616,62 +620,37 @@ export class CloudMonitorService {
                   throw new MonitorTokenConflictError();
                 }
                 account.token = updated;
-                accessToken = refreshedToken.access_token;
-
-                const retriedAICredits = await GoogleAPIService.fetchAICredits(
-                  accessToken,
-                  account.proxy_url,
-                );
-                if (retriedAICredits) {
-                  quota.ai_credits = retriedAICredits;
-                } else if (previousAICredits) {
-                  quota.ai_credits = previousAICredits;
-                }
-              } catch (retryError) {
-                if (retryError instanceof MonitorTokenConflictError) {
-                  throw retryError;
-                }
-                logger.warn(
-                  `Monitor: Failed to fetch credits for ${account.email} after token refresh`,
-                  retryError,
-                );
-                await persistMonitorAccountStatusFromError(account.id, retryError);
-                if (previousAICredits) {
-                  quota.ai_credits = previousAICredits;
-                }
-              }
-            } else {
-              logger.warn(`Monitor: Failed to fetch credits for ${account.email}`, creditError);
-              if (previousAICredits) {
-                quota.ai_credits = previousAICredits;
+                accessToken = newToken.access_token;
+              } catch (refreshError) {
+                logger.error(`Monitor: Token refresh failed for ${account.email}`, refreshError);
+                await persistMonitorAccountStatusFromError(account.id, refreshError);
+                continue;
               }
             }
           }
-        } catch (fetchError: unknown) {
-          if (isUnauthorizedError(fetchError) && account.token.refresh_token) {
-            logger.warn(
-              `Monitor: Received 401 Unauthorized for ${account.email}; forcing token refresh and retry`,
-            );
-            const refreshedToken = await CloudAccountRefreshService.refreshAccessToken(
-              createCloudAccountRefreshRequest(account),
-            );
-            now = Math.floor(Date.now() / 1000);
-            const updated = mergeRefreshedToken(account.token, refreshedToken, now);
-            if (
-              !(await CloudAccountRepo.compareAndUpdateToken(account.id, account.token, updated))
-            ) {
-              throw new MonitorTokenConflictError();
-            }
-            account.token = updated;
-            accessToken = refreshedToken.access_token;
 
-            const retriedQuota = await GoogleAPIService.fetchQuota(accessToken, account.proxy_url);
-            quota = { ...retriedQuota };
+          const pollJitterMs = Math.floor(Math.random() * 2000) + 1500;
+          await this.abortableSleep(pollJitterMs, epoch);
+          if (this.stopped || epoch !== this.stopEpoch) {
+            break;
+          }
+
+          let quota: QuotaData;
+          const previousAICredits = account.quota?.ai_credits;
+
+          try {
+            const fetchedQuota = await GoogleAPIService.fetchQuota(
+              accessToken,
+              account.proxy_url,
+              signal,
+            );
+            quota = { ...fetchedQuota };
 
             try {
               const aiCredits = await GoogleAPIService.fetchAICredits(
                 accessToken,
                 account.proxy_url,
+                signal,
               );
               if (aiCredits) {
                 quota.ai_credits = aiCredits;
@@ -679,130 +658,233 @@ export class CloudMonitorService {
                 quota.ai_credits = previousAICredits;
               }
             } catch (creditError) {
-              logger.warn(
-                `Monitor: Failed to fetch credits for ${account.email} after token refresh`,
-                creditError,
-              );
-              if (previousAICredits) {
-                quota.ai_credits = previousAICredits;
+              signal.throwIfAborted();
+              if (isUnauthorizedError(creditError) && account.token.refresh_token) {
+                logger.warn(
+                  `Monitor: Received 401 Unauthorized while fetching credits for ${account.email}; forcing token refresh and retry`,
+                );
+                try {
+                  const refreshedToken = await CloudAccountRefreshService.refreshAccessToken(
+                    createCloudAccountRefreshRequest(account),
+                  );
+                  now = Math.floor(Date.now() / 1000);
+                  const updated = mergeRefreshedToken(account.token, refreshedToken, now);
+                  if (
+                    !(await CloudAccountRepo.compareAndUpdateToken(
+                      account.id,
+                      account.token,
+                      updated,
+                    ))
+                  ) {
+                    throw new MonitorTokenConflictError();
+                  }
+                  account.token = updated;
+                  accessToken = refreshedToken.access_token;
+
+                  const retriedAICredits = await GoogleAPIService.fetchAICredits(
+                    accessToken,
+                    account.proxy_url,
+                    signal,
+                  );
+                  if (retriedAICredits) {
+                    quota.ai_credits = retriedAICredits;
+                  } else if (previousAICredits) {
+                    quota.ai_credits = previousAICredits;
+                  }
+                } catch (retryError) {
+                  signal.throwIfAborted();
+                  if (retryError instanceof MonitorTokenConflictError) {
+                    throw retryError;
+                  }
+                  logger.warn(
+                    `Monitor: Failed to fetch credits for ${account.email} after token refresh`,
+                    retryError,
+                  );
+                  await persistMonitorAccountStatusFromError(account.id, retryError);
+                  if (previousAICredits) {
+                    quota.ai_credits = previousAICredits;
+                  }
+                }
+              } else {
+                logger.warn(`Monitor: Failed to fetch credits for ${account.email}`, creditError);
+                if (previousAICredits) {
+                  quota.ai_credits = previousAICredits;
+                }
               }
             }
-          } else {
-            throw fetchError;
+          } catch (fetchError: unknown) {
+            signal.throwIfAborted();
+            if (isUnauthorizedError(fetchError) && account.token.refresh_token) {
+              logger.warn(
+                `Monitor: Received 401 Unauthorized for ${account.email}; forcing token refresh and retry`,
+              );
+              const refreshedToken = await CloudAccountRefreshService.refreshAccessToken(
+                createCloudAccountRefreshRequest(account),
+              );
+              now = Math.floor(Date.now() / 1000);
+              const updated = mergeRefreshedToken(account.token, refreshedToken, now);
+              if (
+                !(await CloudAccountRepo.compareAndUpdateToken(account.id, account.token, updated))
+              ) {
+                throw new MonitorTokenConflictError();
+              }
+              account.token = updated;
+              accessToken = refreshedToken.access_token;
+
+              const retriedQuota = await GoogleAPIService.fetchQuota(
+                accessToken,
+                account.proxy_url,
+                signal,
+              );
+              quota = { ...retriedQuota };
+
+              try {
+                const aiCredits = await GoogleAPIService.fetchAICredits(
+                  accessToken,
+                  account.proxy_url,
+                  signal,
+                );
+                if (aiCredits) {
+                  quota.ai_credits = aiCredits;
+                } else if (previousAICredits) {
+                  quota.ai_credits = previousAICredits;
+                }
+              } catch (creditError) {
+                signal.throwIfAborted();
+                logger.warn(
+                  `Monitor: Failed to fetch credits for ${account.email} after token refresh`,
+                  creditError,
+                );
+                if (previousAICredits) {
+                  quota.ai_credits = previousAICredits;
+                }
+              }
+            } else {
+              throw fetchError;
+            }
           }
+
+          if (this.stopped || epoch !== this.stopEpoch) {
+            break;
+          }
+
+          // 3. Update DB & clear failures
+          await CloudAccountRepo.updateQuota(account.id, quota);
+          account.quota = quota;
+          this.lastPolledAtByAccountId.set(account.id, Date.now());
+
+          if (quota.is_forbidden || quota.isForbidden) {
+            logger.warn(
+              `Monitor: Account ${account.email} is forbidden / ineligible for quota summary; auto-pausing account.`,
+            );
+            const pauseReason =
+              'Google account forbidden or ineligible for Cloud Code Assist (no weekly quota)';
+            await CloudAccountRepo.setAccountStatus(account.id, 'paused', pauseReason);
+            account.status = 'paused';
+            account.status_reason = pauseReason;
+            const { evictAccountFromActiveLeaseCache } =
+              await import('./CloudAccountHealthService');
+            await evictAccountFromActiveLeaseCache(account.id);
+            continue;
+          }
+
+          await CloudAccountRepo.setAccountStatus(account.id, 'active', null);
+          await clearValidationHealthAfterSuccessfulProbe(account);
+          account.status = 'active';
+          account.status_reason = undefined;
+          refreshedAccounts.push(account);
+          proxyModelAvailabilityStore.clearCapabilityFailures(account.id);
+
+          if (familyGroup) {
+            polledFamilyGroupIds.add(familyGroup.id);
+            const siblingIds = familyGroup.accountIds.filter((id) => id !== account.id);
+            for (const siblingId of siblingIds) {
+              try {
+                await CloudAccountRepo.updateQuota(siblingId, quota);
+                await CloudAccountRepo.setAccountStatus(siblingId, 'active', null);
+                proxyModelAvailabilityStore.clearCapabilityFailures(siblingId);
+                const siblingAccount = accounts.find((a) => a.id === siblingId);
+                if (siblingAccount) {
+                  siblingAccount.quota = quota;
+                  siblingAccount.status = 'active';
+                  siblingAccount.status_reason = undefined;
+                }
+                logger.info(
+                  `Monitor: Synchronized family quota to sibling account ${siblingId} from ${account.email}`,
+                );
+              } catch (syncError) {
+                logger.warn(
+                  `Monitor: Failed to sync family quota to sibling ${siblingId}`,
+                  syncError,
+                );
+              }
+            }
+          }
+        } catch (error) {
+          if (signal.aborted || epoch !== this.stopEpoch) {
+            break;
+          }
+          if (error instanceof MonitorTokenConflictError) {
+            logger.warn('Monitor: Account token changed during refresh; skipping stale result');
+            continue;
+          }
+          logger.error(`Monitor: Failed to update ${account.email}`, error);
+          await persistMonitorAccountStatusFromError(account.id, error);
+          const classified = isRetryableInvalidGrantRefreshError(error)
+            ? null
+            : classifyAccountStatusFromError(error);
+          if (classified) {
+            if (classified.status === 'rate_limited' && hasReusableCachedQuota(account)) {
+              logger.warn(
+                `Monitor: Quota request rate-limited for ${account.email}, keeping cached quota as fallback.`,
+              );
+            }
+          }
+        } finally {
+          this.setSyncingAccountId(null);
         }
 
+        if (i < accounts.length - 1 && !this.stopped && epoch === this.stopEpoch) {
+          const rawMin = this.getDelayMinSeconds();
+          const rawMax = this.getDelayMaxSeconds();
+          const minSec = Math.max(0, Math.min(rawMin, rawMax));
+          const maxSec = Math.max(0, Math.max(rawMin, rawMax));
+          const delaySec =
+            minSec === maxSec ? minSec : Math.floor(Math.random() * (maxSec - minSec + 1)) + minSec;
+          const delayMs = delaySec * 1000;
+          logger.info(
+            `CloudMonitor: Waiting ${delaySec}s before updating next account (${i + 2}/${accounts.length})...`,
+          );
+          await this.abortableSleep(delayMs, epoch);
+        }
+      }
+
+      if (this.stopped || epoch !== this.stopEpoch) {
+        return;
+      }
+      try {
+        this.effects.onQuotaUpdated(accounts);
+      } catch {
+        logger.warn('Cloud monitor presentation effect failed');
+      }
+
+      // 5. Check for Auto-Switch
+      for (const target of resolveAutoSwitchTargets()) {
         if (this.stopped || epoch !== this.stopEpoch) {
           break;
         }
-
-        // 3. Update DB & clear failures
-        await CloudAccountRepo.updateQuota(account.id, quota);
-        account.quota = quota;
-        this.lastPolledAtByAccountId.set(account.id, Date.now());
-
-        if (quota.is_forbidden || quota.isForbidden) {
-          logger.warn(
-            `Monitor: Account ${account.email} is forbidden / ineligible for quota summary; auto-pausing account.`,
-          );
-          const pauseReason =
-            'Google account forbidden or ineligible for Cloud Code Assist (no weekly quota)';
-          await CloudAccountRepo.setAccountStatus(account.id, 'paused', pauseReason);
-          account.status = 'paused';
-          account.status_reason = pauseReason;
-          const { evictAccountFromActiveLeaseCache } = await import('./CloudAccountHealthService');
-          await evictAccountFromActiveLeaseCache(account.id);
-          continue;
-        }
-
-        await CloudAccountRepo.setAccountStatus(account.id, 'active', null);
-        await clearValidationHealthAfterSuccessfulProbe(account);
-        account.status = 'active';
-        account.status_reason = undefined;
-        refreshedAccounts.push(account);
-        proxyModelAvailabilityStore.clearCapabilityFailures(account.id);
-
-        if (familyGroup) {
-          polledFamilyGroupIds.add(familyGroup.id);
-          const siblingIds = familyGroup.accountIds.filter((id) => id !== account.id);
-          for (const siblingId of siblingIds) {
-            try {
-              await CloudAccountRepo.updateQuota(siblingId, quota);
-              await CloudAccountRepo.setAccountStatus(siblingId, 'active', null);
-              proxyModelAvailabilityStore.clearCapabilityFailures(siblingId);
-              const siblingAccount = accounts.find((a) => a.id === siblingId);
-              if (siblingAccount) {
-                siblingAccount.quota = quota;
-                siblingAccount.status = 'active';
-                siblingAccount.status_reason = undefined;
-              }
-              logger.info(
-                `Monitor: Synchronized family quota to sibling account ${siblingId} from ${account.email}`,
-              );
-            } catch (syncError) {
-              logger.warn(`Monitor: Failed to sync family quota to sibling ${siblingId}`, syncError);
-            }
+        if (AutoSwitchService.isAutoSwitchEnabledForTarget(target)) {
+          try {
+            await AutoSwitchService.checkAndSwitchIfNeeded(target);
+          } catch (switchError) {
+            logger.error(`AutoSwitch: Failed to switch target ${target}`, switchError);
           }
         }
-      } catch (error) {
-        if (error instanceof MonitorTokenConflictError) {
-          logger.warn('Monitor: Account token changed during refresh; skipping stale result');
-          continue;
-        }
-        logger.error(`Monitor: Failed to update ${account.email}`, error);
-        await persistMonitorAccountStatusFromError(account.id, error);
-        const classified = isRetryableInvalidGrantRefreshError(error)
-          ? null
-          : classifyAccountStatusFromError(error);
-        if (classified) {
-          if (classified.status === 'rate_limited' && hasReusableCachedQuota(account)) {
-            logger.warn(
-              `Monitor: Quota request rate-limited for ${account.email}, keeping cached quota as fallback.`,
-            );
-          }
-        }
-      } finally {
-        this.setSyncingAccountId(null);
       }
 
-      if (i < accounts.length - 1 && !this.stopped && epoch === this.stopEpoch) {
-        const rawMin = this.getDelayMinSeconds();
-        const rawMax = this.getDelayMaxSeconds();
-        const minSec = Math.max(0, Math.min(rawMin, rawMax));
-        const maxSec = Math.max(0, Math.max(rawMin, rawMax));
-        const delaySec =
-          minSec === maxSec
-            ? minSec
-            : Math.floor(Math.random() * (maxSec - minSec + 1)) + minSec;
-        const delayMs = delaySec * 1000;
-        logger.info(
-          `CloudMonitor: Waiting ${delaySec}s before updating next account (${i + 2}/${accounts.length})...`,
-        );
-        await this.abortableSleep(delayMs, epoch);
+      if (epoch === this.stopEpoch) {
+        await this.runWeeklyWarmups(refreshedAccounts);
       }
-    }
-
-    try {
-      this.effects.onQuotaUpdated(accounts);
-    } catch {
-      logger.warn('Cloud monitor presentation effect failed');
-    }
-
-    // 5. Check for Auto-Switch
-    for (const target of resolveAutoSwitchTargets()) {
-      if (AutoSwitchService.isAutoSwitchEnabledForTarget(target)) {
-        try {
-          await AutoSwitchService.checkAndSwitchIfNeeded(target);
-        } catch (switchError) {
-          logger.error(`AutoSwitch: Failed to switch target ${target}`, switchError);
-        }
-      }
-    }
-
-    if (epoch === this.stopEpoch) {
-      await this.runWeeklyWarmups(refreshedAccounts);
-    }
-
     } finally {
       const roundDuration = Date.now() - roundStartTime;
       logger.info(`CloudMonitor: Poll round completed in ${Math.round(roundDuration / 1000)}s`);

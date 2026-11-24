@@ -88,36 +88,17 @@ export const MAX_RESPONSES_HISTORY_ITEMS = 500;
 export const MAX_RESPONSES_HISTORY_BYTES = 4 * 1024 * 1024;
 const COMPACTION_THRESHOLD_DEPTH = 20;
 
-function estimateItemBytes(item: unknown): number {
-  if (typeof item === 'string') {
-    return item.length;
-  }
-  try {
-    return JSON.stringify(item).length;
-  } catch {
-    return 1024;
-  }
-}
-
 function estimateNodeChain(node: OpenAIResponsesSessionNode | null): {
   depth: number;
   items: number;
-  bytes: number;
 } {
   let depth = 0;
   let items = 0;
-  let bytes = 0;
   for (let current = node; current; current = current.parent) {
     depth += 1;
     items += current.inputDelta.length + current.responseOutput.length;
-    for (const item of current.inputDelta) {
-      bytes += estimateItemBytes(item);
-    }
-    for (const item of current.responseOutput) {
-      bytes += estimateItemBytes(item);
-    }
   }
-  return { depth, items, bytes };
+  return { depth, items };
 }
 
 function compactAncestorChain(node: OpenAIResponsesSessionNode): OpenAIResponsesSessionNode {
@@ -206,7 +187,7 @@ export class OpenAIResponsesSessionStoreImpl implements OpenAIResponsesSessionSt
         `Responses session exceeds maximum history items limit (${MAX_RESPONSES_HISTORY_ITEMS})`,
       );
     }
-    this.sessions.set(responseId, {
+    this.publishSession(responseId, {
       node: createOpenAIResponsesSessionNode({
         inputDelta: boundedInputItems,
         instructions: session.instructions,
@@ -235,12 +216,10 @@ export class OpenAIResponsesSessionStoreImpl implements OpenAIResponsesSessionSt
     const toolCallItems = boundResponsesInputItems(delta.toolCallItems ?? []);
 
     const deltaItems = inputDelta.length + responseOutput.length;
-    let deltaBytes = 0;
-    for (const item of inputDelta) {
-      deltaBytes += estimateItemBytes(item);
-    }
-    for (const item of responseOutput) {
-      deltaBytes += estimateItemBytes(item);
+    if (deltaItems > MAX_RESPONSES_HISTORY_ITEMS) {
+      throw new Error(
+        `Responses conversation history exceeds maximum item limit (${MAX_RESPONSES_HISTORY_ITEMS})`,
+      );
     }
 
     if (parentNode) {
@@ -255,16 +234,11 @@ export class OpenAIResponsesSessionStoreImpl implements OpenAIResponsesSessionSt
           `Responses conversation history exceeds maximum item limit (${MAX_RESPONSES_HISTORY_ITEMS})`,
         );
       }
-      if (stats.bytes + deltaBytes > MAX_RESPONSES_HISTORY_BYTES) {
-        throw new Error(
-          `Responses conversation history exceeds maximum byte limit (${MAX_RESPONSES_HISTORY_BYTES} bytes)`,
-        );
-      }
     }
 
     const effectiveParent = parentNode ? compactAncestorChain(parentNode) : null;
 
-    this.sessions.set(responseId, {
+    this.publishSession(responseId, {
       node: createOpenAIResponsesSessionNode({
         inputDelta,
         instructions: delta.instructions,
@@ -286,6 +260,21 @@ export class OpenAIResponsesSessionStoreImpl implements OpenAIResponsesSessionSt
 
   public delete(responseId: string): boolean {
     return this.sessions.delete(responseId);
+  }
+
+  private publishSession(responseId: string, value: StoredOpenAIResponsesSession): void {
+    const now = Date.now();
+    // Include duplicated ancestor/tool state and response metadata exactly as retained on disk.
+    const bytes = Buffer.byteLength(
+      JSON.stringify({ key: responseId, updatedAt: now, value }),
+      'utf8',
+    );
+    if (bytes > MAX_RESPONSES_HISTORY_BYTES) {
+      throw new Error(
+        `Responses conversation history exceeds maximum byte limit (${MAX_RESPONSES_HISTORY_BYTES} bytes)`,
+      );
+    }
+    this.sessions.set(responseId, value, now);
   }
 
   public clear(): void {

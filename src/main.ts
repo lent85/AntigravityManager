@@ -99,10 +99,7 @@ import { waitForViteDevServer } from '@/modules/app-shell/utils/wait-for-vite-de
 import { isTrustedExternalUrl } from '@/modules/app-shell/utils/externalUrlPolicy';
 
 if (!app.isPackaged) {
-  const devUserData = path.join(
-    app.getPath('appData'),
-    `${app.name || 'antigravity-manager'}-dev`,
-  );
+  const devUserData = path.join(app.getPath('appData'), `${app.name || 'antigravity-manager'}-dev`);
   if (!fs.existsSync(devUserData)) {
     fs.mkdirSync(devUserData, { recursive: true });
   }
@@ -216,6 +213,7 @@ const auditPresentationStops = new Set<() => void>();
 // let tray: Tray | null = null; // Moved to tray/handler.ts
 let isQuitting = false;
 let startupConfig: AppConfig | null = null;
+let gatewayAutoStartPromise: ReturnType<typeof bootstrapNestServer> | null = null;
 const desktopProfileLease = new ProfileLease('desktop');
 let desktopOwner: Awaited<ReturnType<typeof bootstrapDesktopOwner>> | undefined;
 let ownerMode: 'desktop-embedded' | 'standalone-core' = 'desktop-embedded';
@@ -683,6 +681,7 @@ const desktopShutdown = createDesktopShutdownCoordinator({
       await desktopOwner?.close();
       return;
     }
+    await gatewayAutoStartPromise;
     const stopped = await stopNestServer();
     await shutdownDiagnosticStores();
     if (!stopped) {
@@ -914,6 +913,9 @@ app
   .then(async () => {
     logger.info('Step: createWindow');
     await createWindow({ startHidden: shouldStartHidden });
+    if (globalMainWindow) {
+      initTray(globalMainWindow, requestTrayShutdown);
+    }
   })
   .then(() => {
     logger.info('Step: installExtensions (SKIPPED)');
@@ -926,7 +928,7 @@ app
   .then(async () => {
     // Initialize Cloud Monitor if enabled
     try {
-      if (!isDesktopEmbeddedCloudAccountOwner()) {
+      if (isQuitting || !isDesktopEmbeddedCloudAccountOwner()) {
         return;
       }
       if (isDesktopEmbeddedCloudAccountOwner()) {
@@ -942,7 +944,8 @@ app
         let proxyStarted = false;
         // Default to a valid ProxyConfig object if null, although loadConfig ensures defaults
         if (config.proxy) {
-          const result = await bootstrapNestServer(config.proxy);
+          gatewayAutoStartPromise = bootstrapNestServer(config.proxy);
+          const result = await gatewayAutoStartPromise;
           proxyStarted = result.success;
           if (result.success) {
             logger.info(`NestJS Proxy: Auto-started on port ${result.port}`);
@@ -955,7 +958,7 @@ app
         }
       }
 
-      if (!isDesktopEmbeddedCloudAccountOwner()) {
+      if (isQuitting || !isDesktopEmbeddedCloudAccountOwner()) {
         return;
       }
       if (CloudMonitorService.isContinuousPollingEnabled()) {
@@ -973,8 +976,8 @@ app
   })
   .then(async () => {
     logger.info('Step: Startup Complete');
-    if (globalMainWindow) {
-      initTray(globalMainWindow, requestTrayShutdown);
+    if (isQuitting) {
+      return;
     }
     await startAccountOwnerPresentation();
   })

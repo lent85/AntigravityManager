@@ -14,7 +14,10 @@ import {
 export interface OpenAIResponsesWebSocketServerDependencies {
   validateRequest?: (request: Record<string, unknown>, mode: 'prewarm' | 'generate') => void;
   isAuthorized: (request: IncomingMessage) => boolean;
-  streamRequest: (request: Record<string, unknown>) => Promise<Observable<unknown>>;
+  streamRequest: (
+    request: Record<string, unknown>,
+    signal: AbortSignal,
+  ) => Promise<Observable<unknown>>;
 }
 
 /**
@@ -115,10 +118,7 @@ function handleConnection(
     }
 
     const payloadBytes = rawDataToByteLength(rawData);
-    if (
-      queuedMessages >= MAX_QUEUED_MESSAGES ||
-      queuedBytes + payloadBytes > MAX_QUEUED_BYTES
-    ) {
+    if (queuedMessages >= MAX_QUEUED_MESSAGES || queuedBytes + payloadBytes > MAX_QUEUED_BYTES) {
       sendWebSocketError(
         socket,
         new Error('WebSocket message queue limit exceeded: connection overloaded.'),
@@ -170,7 +170,7 @@ function handleConnection(
           if (isClosed || abortController.signal.aborted) {
             return;
           }
-          const stream = await dependencies.streamRequest(action.request);
+          const stream = await dependencies.streamRequest(action.request, abortController.signal);
           if (isClosed || abortController.signal.aborted) {
             return;
           }
@@ -249,25 +249,25 @@ function createConcurrencyGate(
     }
     if (active >= limit) {
       await new Promise<void>((resolve, reject) => {
-        const waiter = { resolve, reject };
+        const waiter = {
+          resolve: () => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve();
+          },
+          reject: (err: unknown) => {
+            signal?.removeEventListener('abort', onAbort);
+            reject(err);
+          },
+        };
         const onAbort = () => {
           const idx = waiting.indexOf(waiter);
           if (idx !== -1) {
             waiting.splice(idx, 1);
           }
-          reject(new Error('Operation aborted'));
+          waiter.reject(new Error('Operation aborted'));
         };
         signal?.addEventListener('abort', onAbort, { once: true });
-        waiting.push({
-          resolve: () => {
-            signal?.removeEventListener('abort', onAbort);
-            resolve();
-          },
-          reject: (err) => {
-            signal?.removeEventListener('abort', onAbort);
-            reject(err);
-          },
-        });
+        waiting.push(waiter);
       });
     }
     if (signal?.aborted) {

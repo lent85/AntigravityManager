@@ -8,7 +8,7 @@ This document describes the resource lifecycle, bounded queues, power event reco
 
 **Owner**: [Responses WebSocket server](../src/modules/proxy-gateway/server/modules/openai/responses/openai-responses-websocket.server.ts)
 
-- **Cancellation Ownership**: Each connection creates an `AbortController`. Socket close or error triggers cancellation, unsubscribing all active streams and rejecting in-flight upstream setup immediately.
+- **Cancellation Ownership**: Each connection creates an `AbortController`. Socket close or error triggers cancellation, unsubscribing active streams and forwarding the same cancellation signal through the execution adapter to upstream setup. Queued waiters are removed on cancellation; AI requests are never replayed automatically.
 - **Queue Limits**: Enforces a maximum of 64 queued messages and 4 MB total queued payload bytes per connection. Overloaded requests fail fast with a descriptive error.
 - **Backpressure**: Outgoing message delivery checks `socket.bufferedAmount`. If buffered data exceeds 2 MB, the socket closes with a buffer overflow policy.
 - **Heartbeat**: A server-side ping/pong timer (30-second interval) detects broken connections and terminates dead sockets.
@@ -17,9 +17,9 @@ This document describes the resource lifecycle, bounded queues, power event reco
 
 **Owners**: [Responses session store](../src/modules/proxy-gateway/server/modules/openai/responses/openai-responses-session.store.ts), [inline-media handling](../src/modules/proxy-gateway/server/modules/openai/responses/openai-responses-inline-media.ts)
 
-- **History Budgets**: Continuation history is constrained by `MAX_RESPONSES_CHAIN_DEPTH = 100`, `MAX_RESPONSES_HISTORY_ITEMS = 500`, and `MAX_RESPONSES_HISTORY_BYTES = 4 MB`. Over-budget continuations reject with explicit errors rather than silently corrupting or truncating conversation history.
-- **Chain Compaction**: When ancestor depth reaches 20 nodes, older ancestors are collapsed into a single consolidated base root node. This eliminates deep parent pointer chains and prevents recursive $O(N^2)$ object graph nesting in durable JSON snapshots.
-- **Media and Text Caps**: Historical media payloads are omitted, and historical text/tool outputs are bounded to 128 KB per item to prevent oversized historical entries from bloating memory.
+- **History Budgets**: New history writes are constrained by `MAX_RESPONSES_CHAIN_DEPTH = 100`, `MAX_RESPONSES_HISTORY_ITEMS = 500`, and `MAX_RESPONSES_HISTORY_BYTES = 4 MB`. Over-budget continuations reject with explicit errors rather than silently corrupting or truncating conversation history.
+- **Chain Compaction**: When ancestor depth reaches 20 nodes, older ancestors are collapsed into a single consolidated base root node. This bounds parent nesting in each record. Retained records still carry their own history and require an aggregate memory profile; compaction alone is not a process-wide byte ceiling.
+- **Complete Record Budget**: The 4 MiB ceiling measures UTF-8 bytes of the complete retained record, including ancestors, instructions, tools, stored response, key and timestamp. Root saves and root deltas are checked before publication. Text and tool arguments are preserved without silent truncation. Existing files keep their decoder and are not retroactively migrated or byte-limited on hydration. This is a per-record bound, not a process-wide memory ceiling. See the [upgrade guide](upgrade-guides/next/responses-history-budget.md).
 
 ### SQLite Worker Lifecycle and Shutdown Deadlines
 
@@ -34,16 +34,16 @@ This document describes the resource lifecycle, bounded queues, power event reco
 **Owners**: [main process](../src/main.ts), [cloud monitor](../src/modules/cloud-account/services/CloudMonitorService.ts)
 
 - **PowerMonitor Integration**: Electron `powerMonitor` events (`resume`, `unlock-screen`, `suspend`, `lock-screen`) are handled in `main.ts` and forwarded to `CloudMonitorService`.
-- **Resume & Unlock**: Wakes cancelled delay timers and coalesces an immediate poll if not rate-limited by debounce.
-- **Suspend & Lock**: Cancels scheduled poll timers while the system is asleep or screen-locked.
-- **Cancellable Sleep**: The 1-second pre-fetch delay uses `abortableSleep`, stopping immediately when monitoring is stopped or refreshed.
+- **Resume & Unlock**: Coalesces wake events, waits for the interrupted round to settle, rechecks shutdown admission and triggers a debounced refresh. Shutdown or a newer suspend cancels pending recovery.
+- **Suspend & Lock**: Retains paused state, invalidates the interrupted round, cancels scheduled timers and aborts quota/credit requests. Focus and explicit polls cannot restart monitoring while suspended. The gateway remains available. Shared OAuth refresh and already dispatched writes/switches retain their owning completion semantics; cancellation does not roll back or replay them. These events are wired for the desktop-embedded account owner; standalone core forwarding is not implemented here.
+- **Cancellable Sleep**: The randomized pre-fetch delay (1.5–3.5 seconds) uses `abortableSleep`, stopping immediately when monitoring is stopped or refreshed.
 
 ### Immediate Tray Readiness
 
 **Owner**: [main startup chain](../src/main.ts)
 
 - `initTray()` initializes immediately after `createWindow()` completes, ensuring the system tray icon exists even when the application starts minimized.
-- Initial cloud monitoring and background sync run asynchronously without blocking the startup sequence.
+- Initial cloud monitoring and background sync run asynchronously without delaying tray readiness. Shutdown waits for admitted gateway auto-start within its existing deadline, and the startup tail does not reopen monitoring or presentation after quitting starts.
 
 ### Monitor Cadence and Freshness Caching
 
@@ -72,23 +72,27 @@ This document describes the resource lifecycle, bounded queues, power event reco
 
 ## 2. Resource Ceilings Reference Matrix
 
-| Subsystem | Metric / Setting | Bound / Limit | Eviction / Policy |
-| --- | --- | --- | --- |
-| Responses WebSocket | Max queued messages | 64 messages | Reject with overload error |
-| Responses WebSocket | Max queued bytes | 4 MB | Reject with overload error |
-| Responses WebSocket | Max buffered output | 2 MB | Close socket (1008 Buffer overflow) |
-| Responses WebSocket | Heartbeat interval | 30 seconds | Terminate on missed pong |
-| Responses History | Max chain depth | 100 turns | Reject over-depth continuation |
-| Responses History | Max history items | 500 items | Reject over-size continuation |
-| Responses History | Max history bytes | 4 MB | Reject over-size continuation |
-| Responses History | Compaction depth | 20 turns | Collapse ancestors to single base root |
-| Responses History | Historical text length | 128 KB / string | Truncate oversized historical text |
-| SQLite Worker | Shutdown deadline | Configured `timeoutMs` (default 2s) | Force `worker.terminate()` |
-| SQLite Worker | Control command timeout | 10 seconds | Reject caller promise |
-| Cloud Monitor | Minimum round cooldown | 30 seconds | Enforced pause between poll rounds |
-| Cloud Monitor | Account freshness window | 60 seconds | Skip re-fetch if recently refreshed |
-| Rate Limit Tracker | Failure count capacity | 1,000 entries | Evict expired and oldest entries |
-| Account Lease Policy | Session bindings capacity | 2,000 entries | Evict expired and oldest entries |
-| Context Cache | Failed cooldown capacity | 500 entries | Evict expired and oldest entries |
-| Context Cache | Concurrent pending tasks | 64 tasks | Fail fast on lookup |
-| Durable Record Store | Read touch persistence | Off by default | Persist only on mutation or eviction |
+| Subsystem            | Metric / Setting                 | Bound / Limit                       | Eviction / Policy                      |
+| -------------------- | -------------------------------- | ----------------------------------- | -------------------------------------- |
+| Responses WebSocket  | Max queued messages              | 64 messages                         | Reject with overload error             |
+| Responses WebSocket  | Max queued bytes                 | 4 MB                                | Reject with overload error             |
+| Responses WebSocket  | Max buffered output              | 2 MB                                | Close socket (1008 Buffer overflow)    |
+| Responses WebSocket  | Heartbeat interval               | 30 seconds                          | Terminate on missed pong               |
+| Responses History    | Max chain depth                  | 100 turns                           | Reject over-depth continuation         |
+| Responses History    | Max history items                | 500 items                           | Reject over-size continuation          |
+| Responses History    | Max history bytes                | 4 MB                                | Reject over-size continuation          |
+| Responses History    | Compaction depth                 | 20 turns                            | Collapse ancestors to single base root |
+| Responses History    | Text and tool argument integrity | Complete record budget              | Preserve exactly or reject the write   |
+| SQLite Worker        | Shutdown deadline                | Configured `timeoutMs` (default 2s) | Force `worker.terminate()`             |
+| SQLite Worker        | Control command timeout          | 10 seconds                          | Reject caller promise                  |
+| Cloud Monitor        | Minimum round cooldown           | 30 seconds                          | Enforced pause between poll rounds     |
+| Cloud Monitor        | Account freshness window         | 60 seconds                          | Skip re-fetch if recently refreshed    |
+| Rate Limit Tracker   | Failure count capacity           | 1,000 entries                       | Evict expired and oldest entries       |
+| Account Lease Policy | Session bindings capacity        | 2,000 entries                       | Evict expired and oldest entries       |
+| Context Cache        | Failed cooldown capacity         | 500 entries                         | Evict expired and oldest entries       |
+| Context Cache        | Concurrent pending tasks         | 64 tasks                            | Fail fast on lookup                    |
+| Durable Record Store | Read touch persistence           | Off by default                      | Persist only on mutation or eviction   |
+
+## Acceptance limits
+
+Focused automated evidence is separate from Windows lock/sleep, renderer/GPU recovery, startup timing, long-running RSS/CPU profiling and live-provider acceptance. Those native and measured checks remain required before claiming lower memory use or seamless physical wake recovery. See the [decision](../.agents/notes/implemented/bug-fix/2026-11-18-resource-cancellation-and-history-budgets.md).

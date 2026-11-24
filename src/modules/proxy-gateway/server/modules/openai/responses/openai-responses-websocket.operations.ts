@@ -32,7 +32,8 @@ export function createResponsesWebSocketOperations(
         preparedRequests.set(request, { request: prepared, schemas });
       }
     },
-    streamRequest: async (request) => {
+    streamRequest: async (request, signal) => {
+      signal.throwIfAborted();
       const accepted = preparedRequests.get(request);
       if (!accepted) {
         throw new Error('Responses WebSocket request was not admitted');
@@ -42,7 +43,7 @@ export function createResponsesWebSocketOperations(
       const result = await service.handleChatCompletions(
         prepared.request,
         'responses',
-        undefined,
+        signal,
         {
           requestSessionId: prepared.requestSessionId,
           responseId: prepared.responseId,

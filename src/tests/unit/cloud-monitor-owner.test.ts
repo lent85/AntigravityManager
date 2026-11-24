@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import type { z } from 'zod';
 import { createRouterClient } from '@orpc/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CoreRpcClient } from '@/core/rpc/client';
@@ -20,7 +21,6 @@ import { configureCoreOwnerPresentation } from '@/modules/cloud-account/services
 import { accountOwnerEvents } from '@/modules/cloud-account/services/account-owner-events.service';
 
 const settings = vi.hoisted(() => new Map<string, unknown>());
-vi.mock('@/modules/cloud-account/ipc/handler', () => ({}));
 vi.mock('@/modules/cloud-account/persistence/cloudHandler', () => ({
   CloudAccountRepo: {
     getAccounts: vi.fn(async () => []),
@@ -29,16 +29,26 @@ vi.mock('@/modules/cloud-account/persistence/cloudHandler', () => ({
     setAccountStatus: vi.fn(),
   },
 }));
-vi.mock('@/modules/cloud-account/persistence/cloud-account-settings-store', () => ({
-  CloudAccountSettingsStore: {
-    getSetting: (key: string, fallback: unknown) => settings.get(key) ?? fallback,
-    readSetting: (key: string) => settings.get(key),
-    setSetting: (key: string, value: unknown) => {
-      settings.set(key, value);
+vi.mock('@/modules/cloud-account/persistence/cloud-account-settings-store', async (original) => {
+  const actual =
+    await original<
+      typeof import('@/modules/cloud-account/persistence/cloud-account-settings-store')
+    >();
+  return {
+    CloudAccountSettingsStore: class extends actual.CloudAccountSettingsStore {
+      static override getSetting<T>(key: string, fallback: T, schema: z.ZodType<T>): T {
+        return schema.parse(settings.get(key) ?? fallback);
+      }
+      static override readSetting(key: string): unknown {
+        return settings.get(key);
+      }
+      static override setSetting(key: string, value: unknown): void {
+        settings.set(key, value);
+      }
+      static override getActiveAccountIdForTarget = vi.fn(() => 'current');
     },
-    getActiveAccountIdForTarget: vi.fn(() => 'current'),
-  },
-}));
+  };
+});
 vi.mock('@/modules/cloud-account/services/cloud-account-switch.service', () => ({
   switchCloudAccountCore: vi.fn(async () => {}),
 }));
@@ -83,6 +93,7 @@ function account(id: string, percentage: number): CloudAccount {
 beforeEach(async () => {
   vi.clearAllMocks();
   settings.clear();
+  settings.set('metrics_poll_interval_minutes', 0);
   vi.mocked(CloudAccountRepo.getAccounts).mockResolvedValue([]);
   CloudMonitorService.resetStateForTesting();
   CloudMonitorService.configureEffects({ onQuotaUpdated: () => {} });

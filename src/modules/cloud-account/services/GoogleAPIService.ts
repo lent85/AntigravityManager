@@ -985,6 +985,7 @@ export class GoogleAPIService {
   public static async fetchProjectContext(
     accessToken: string,
     proxyUrl?: string,
+    requestSignal?: AbortSignal,
   ): Promise<ProjectContext> {
     const body = {
       metadata: { ideType: 'ANTIGRAVITY' },
@@ -1009,10 +1010,11 @@ export class GoogleAPIService {
           data: JSON.stringify(body),
           headers: buildInternalApiHeaders(accessToken),
           method: 'POST',
-          signal: createGoogleApiRequestSignal(REQUEST_TIMEOUT_MS).signal,
+          signal: createGoogleApiRequestSignal(REQUEST_TIMEOUT_MS, requestSignal).signal,
           ...axiosOptions,
         });
       } catch (error) {
+        requestSignal?.throwIfAborted();
         lastError = error;
         if (hasNextEndpoint) {
           logger.warn(
@@ -1064,6 +1066,7 @@ export class GoogleAPIService {
   static async fetchAICredits(
     accessToken: string,
     proxyUrl?: string,
+    requestSignal?: AbortSignal,
   ): Promise<{ credits: number; expiryDate: string } | null> {
     try {
       const axiosOptions = this.getAxiosOptions(proxyUrl);
@@ -1078,7 +1081,7 @@ export class GoogleAPIService {
         }),
         headers: buildInternalApiHeaders(accessToken),
         method: 'POST',
-        signal: createGoogleApiRequestSignal(REQUEST_TIMEOUT_MS).signal,
+        signal: createGoogleApiRequestSignal(REQUEST_TIMEOUT_MS, requestSignal).signal,
         ...axiosOptions,
       });
 
@@ -1092,6 +1095,7 @@ export class GoogleAPIService {
       const fallbackData = parseLoadProjectResponse(fallbackResponse.data);
       return extractAiCreditsFromProjectContext(fallbackData);
     } catch (error) {
+      requestSignal?.throwIfAborted();
       if (error instanceof Error && error.message === 'UNAUTHORIZED') {
         throw error;
       }
@@ -1137,11 +1141,16 @@ export class GoogleAPIService {
   /**
    * Core logic: Fetches detailed model quota information.
    */
-  static async fetchQuota(accessToken: string, proxyUrl?: string): Promise<QuotaData> {
+  static async fetchQuota(
+    accessToken: string,
+    proxyUrl?: string,
+    requestSignal?: AbortSignal,
+  ): Promise<QuotaData> {
     let projectContext: ProjectContext = {};
     try {
-      projectContext = await this.fetchProjectContext(accessToken, proxyUrl);
+      projectContext = await this.fetchProjectContext(accessToken, proxyUrl, requestSignal);
     } catch (error) {
+      requestSignal?.throwIfAborted();
       logger.warn(
         '[GoogleAPIService] Project context unavailable; continuing quota lookup without project',
         error instanceof Error ? error.message : String(error),
@@ -1166,7 +1175,7 @@ export class GoogleAPIService {
             data: JSON.stringify(currentPayload),
             headers: buildInternalApiHeaders(accessToken),
             method: 'POST',
-            signal: createGoogleApiRequestSignal(REQUEST_TIMEOUT_MS).signal,
+            signal: createGoogleApiRequestSignal(REQUEST_TIMEOUT_MS, requestSignal).signal,
             ...axiosOptions,
           });
 
@@ -1201,7 +1210,7 @@ export class GoogleAPIService {
               );
               lastError = new Error(errorMsg);
 
-              await delay(1000);
+              await waitForAbortableDelay(1000, requestSignal);
               break;
             }
 
@@ -1210,7 +1219,12 @@ export class GoogleAPIService {
 
           const data = parseFetchModelsResponse(response.data);
           const result = this.toQuotaData(data, subscriptionTier);
-          const quotaSummary = await this.fetchQuotaSummary(accessToken, projectId, axiosOptions);
+          const quotaSummary = await this.fetchQuotaSummary(
+            accessToken,
+            projectId,
+            axiosOptions,
+            requestSignal,
+          );
           if (quotaSummary?.quotaGroups) {
             result.quota_groups = quotaSummary.quotaGroups;
             populateSyntheticArgonModels(result.models, quotaSummary.quotaGroups);
@@ -1228,6 +1242,7 @@ export class GoogleAPIService {
 
           return result;
         } catch (error: unknown) {
+          requestSignal?.throwIfAborted();
           const errorMsg = error instanceof Error ? error.message : String(error);
           lastError = error instanceof Error ? error : new Error(String(error));
 
@@ -1244,7 +1259,7 @@ export class GoogleAPIService {
             logger.warn(
               `[GoogleAPIService] Quota API request failed at ${endpoint}: ${errorMsg}. Falling back to next endpoint`,
             );
-            await delay(1000);
+            await waitForAbortableDelay(1000, requestSignal);
             break;
           }
 
@@ -1260,6 +1275,7 @@ export class GoogleAPIService {
     accessToken: string,
     projectId: string | undefined,
     axiosOptions: GoogleApiProxyOptions,
+    requestSignal?: AbortSignal,
   ): Promise<{ quotaGroups?: QuotaGroup[]; isForbidden?: boolean } | undefined> {
     const payload: { project?: string } = projectId ? { project: projectId } : {};
     // Model-specific groups such as Gemini 4 Argon are not returned to the bare client identity.
@@ -1280,7 +1296,7 @@ export class GoogleAPIService {
             data: JSON.stringify(currentPayload),
             headers,
             method: 'POST',
-            signal: createGoogleApiRequestSignal(REQUEST_TIMEOUT_MS).signal,
+            signal: createGoogleApiRequestSignal(REQUEST_TIMEOUT_MS, requestSignal).signal,
             ...axiosOptions,
           });
 
@@ -1309,6 +1325,7 @@ export class GoogleAPIService {
 
           return { quotaGroups: toQuotaGroups(parseQuotaSummaryResponse(response.data)) };
         } catch (error) {
+          requestSignal?.throwIfAborted();
           logger.warn(`[GoogleAPIService] Quota summary API request failed at ${endpoint}`, error);
           break;
         }
